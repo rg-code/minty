@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Household Ledger</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --ink: #16181d;
+    --muted: #6b7280;
+    --hairline: #e7e9ee;
+    --owner-me: #4c6ef5;      /* indigo */
+    --owner-spouse: #0ca678;  /* teal   */
+    --out: #e03131;
+    --in: #2f9e44;
+    --radius: 10px;
+    --pad: clamp(14px, 3vw, 28px);
+    font-synthesis: none;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px; line-height: 1.45;
+  }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+  header {
+    padding: var(--pad); border-bottom: 1px solid var(--hairline);
+    background: var(--surface); position: sticky; top: 0; z-index: 10;
+  }
+  .title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .addlink { margin-left: auto; font-size: 13px; font-weight: 550; color: var(--owner-me); text-decoration: none; }
+  .addlink:hover { text-decoration: underline; }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+  .seg { display: inline-flex; background: var(--bg); border: 1px solid var(--hairline);
+         border-radius: var(--radius); padding: 3px; gap: 3px; }
+  .seg button {
+    border: 0; background: transparent; cursor: pointer; font: inherit;
+    padding: 7px 14px; border-radius: 7px; color: var(--muted); font-weight: 550;
+    display: inline-flex; align-items: center; gap: 7px; transition: background .12s, color .12s;
+  }
+  .seg button .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+  .dot.me { background: var(--owner-me); }
+  .dot.spouse { background: var(--owner-spouse); }
+  .dot.all { background: linear-gradient(90deg, var(--owner-me) 50%, var(--owner-spouse) 50%); }
+
+  input[type="search"], input[type="date"], select {
+    font: inherit; padding: 8px 11px; border: 1px solid var(--hairline);
+    border-radius: var(--radius); background: var(--surface); color: var(--ink);
+  }
+  input[type="search"] { flex: 1 1 180px; min-width: 140px; }
+  :focus-visible { outline: 2px solid var(--owner-me); outline-offset: 1px; }
+
+  .totals { display: flex; gap: var(--pad); flex-wrap: wrap; padding: var(--pad); padding-bottom: 0; }
+  .stat { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius);
+          padding: 14px 16px; flex: 1 1 160px; }
+  .stat .k { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .stat .v { font-size: 22px; font-weight: 650; margin-top: 3px; letter-spacing: -0.02em; }
+
+  main { padding: var(--pad); }
+  .daygroup + .daygroup { margin-top: 22px; }
+  .daylabel { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+              letter-spacing: .04em; margin: 0 2px 8px; }
+
+  .rows { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); overflow: hidden; }
+  .txn { border-top: 1px solid var(--hairline); }
+  .txn:first-child { border-top: 0; }
+  .row {
+    display: grid; grid-template-columns: 3px 1fr auto; align-items: center; gap: 12px;
+    padding: 12px 16px 12px 0; cursor: pointer; transition: background .1s;
+  }
+  .row:hover { background: #fafbfc; }
+  .txn.open .row { background: #f4f6fa; }
+  .stripe { align-self: stretch; }
+  .stripe.me { background: var(--owner-me); }
+  .stripe.spouse { background: var(--owner-spouse); }
+  .desc { min-width: 0; }
+  .desc .name { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .desc .meta { font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .chip { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--hairline); }
+  .chip.pending { color: #b08900; border-color: #f0e2b0; background: #fdf9ec; }
+  .amt { font-weight: 600; text-align: right; white-space: nowrap; padding-right: 4px; }
+  .amt.out { color: var(--out); }
+  .amt.in  { color: var(--in); }
+
+  /* tag chips */
+  .tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #eef1f6; color: #3a4256; cursor: pointer; }
+  .tag:hover { background: #e3e8f0; }
+
+  /* expandable detail */
+  .detail { display: none; padding: 4px 16px 16px 15px; background: #fbfcfd; }
+  .txn.open .detail { display: block; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 6px 0 14px; font-size: 13px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); word-break: break-all; }
+  .tagedit { display: flex; flex-direction: column; gap: 8px; }
+  .tagchips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tag.editable { display: inline-flex; align-items: center; gap: 4px; cursor: default; }
+  .tag .x { border: 0; background: transparent; cursor: pointer; font-size: 14px; line-height: 1; color: #8a93a6; padding: 0; }
+  .tag .x:hover { color: var(--out); }
+  .notags { color: var(--muted); font-size: 12.5px; }
+  .taginput { font: inherit; padding: 7px 10px; border: 1px solid var(--hairline); border-radius: 8px; max-width: 280px; }
+
+  .empty, .banner { padding: 40px var(--pad); text-align: center; color: var(--muted); }
+  .banner { padding: 10px var(--pad); background: #fff8e6; color: #7a5c00; border-bottom: 1px solid #f0e2b0; font-size: 13px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="title-row">
+    <h1>Household Ledger</h1>
+    <span class="sub" id="count">—</span>
+    <a class="addlink" href="/connect">+ Add account</a>
+  </div>
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Filter by owner">
+      <button data-owner="all"    aria-pressed="true"><span class="dot all"></span>Combined</button>
+      <button data-owner="me"     aria-pressed="false"><span class="dot me"></span>Me</button>
+      <button data-owner="spouse" aria-pressed="false"><span class="dot spouse"></span>Spouse</button>
+    </div>
+    <input type="search" id="q" placeholder="Search description or merchant…" />
+    <select id="tagFilter" aria-label="Filter by tag"><option value="">All tags</option></select>
+    <input type="date" id="start" aria-label="From date" />
+    <input type="date" id="end" aria-label="To date" />
+  </div>
+</header>
+
+<div id="banner" hidden class="banner"></div>
+<div class="totals" id="totals"></div>
+<main id="feed"><div class="empty">Loading…</div></main>
+
+<script>
+const OWNER_LABEL = { me: "Me", spouse: "Spouse" };
+let state = { owner: "all", q: "", start: "", end: "", tag: "" };
+let openRows = new Set();          // plaid_txn_id of expanded rows (survives re-render)
+let current = new Map();           // plaid_txn_id -> txn object (for tag edits)
+let allTags = [];
+let offline = false;
+
+const fmt = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" });
+// Plaid: POSITIVE amount = money OUT. Flip for display (spending negative/red, income positive/green).
+function displayAmount(a) { return -Number(a ?? 0); }
+
+async function load() {
+  const p = new URLSearchParams();
+  if (state.owner !== "all") p.set("owner", state.owner);
+  if (state.q) p.set("q", state.q);
+  if (state.start) p.set("start", state.start);
+  if (state.end) p.set("end", state.end);
+  if (state.tag) p.set("tag", state.tag);
+  p.set("limit", "500");
+
+  let txns;
+  try {
+    const res = await fetch("/transactions?" + p.toString());
+    if (!res.ok) throw new Error(res.status);
+    txns = await res.json();
+    offline = false; banner(false);
+    refreshTags();
+  } catch (e) {
+    offline = true; banner(true);
+    txns = SAMPLE.filter(t =>
+      (state.owner === "all" || t.owner === state.owner) &&
+      (!state.tag || (t.tags || []).includes(state.tag)));
+    allTags = [...new Set(SAMPLE.flatMap(t => t.tags || []))].sort();
+    populateTagFilter();
+  }
+  render(txns);
+}
+
+async function refreshTags() {
+  try {
+    const r = await fetch("/tags");
+    if (r.ok) { allTags = await r.json(); populateTagFilter(); }
+  } catch {}
+}
+
+function populateTagFilter() {
+  const sel = document.getElementById("tagFilter");
+  sel.innerHTML = `<option value="">All tags</option>` +
+    allTags.map(t => `<option value="${escapeAttr(t)}">${escapeHtml(t)}</option>`).join("");
+  sel.value = state.tag;
+}
+
+function banner(show) {
+  const b = document.getElementById("banner");
+  b.hidden = !show;
+  if (show) b.textContent = "Showing sample data — couldn't reach the API. Deploy this file behind the aggregator to see live transactions.";
+}
+
+function render(txns) {
+  current = new Map(txns.map(t => [t.plaid_txn_id, t]));
+  document.getElementById("count").textContent =
+    txns.length ? `${txns.length} transaction${txns.length === 1 ? "" : "s"}` : "no transactions";
+  renderTotals(txns);
+
+  const feed = document.getElementById("feed");
+  if (!txns.length) { feed.innerHTML = `<div class="empty">Nothing here yet. Link an account, or widen your filters.</div>`; return; }
+
+  const groups = {};
+  for (const t of txns) (groups[t.date] ??= []).push(t);
+  feed.innerHTML = Object.entries(groups).map(([date, items]) => `
+    <section class="daygroup">
+      <div class="daylabel">${prettyDate(date)}</div>
+      <div class="rows">${items.map(txnHTML).join("")}</div>
+    </section>`).join("");
+}
+
+function txnHTML(t) {
+  const amt = displayAmount(t.amount);
+  const cls = amt < 0 ? "out" : "in";
+  const merchant = t.merchant_name || t.name || "—";
+  const isOpen = openRows.has(t.plaid_txn_id);
+  const tagChips = (t.tags || []).map(tg =>
+    `<span class="tag" data-tag="${escapeAttr(tg)}">${escapeHtml(tg)}</span>`).join("");
+  const meta = [`<span>${escapeHtml(OWNER_LABEL[t.owner] ?? t.owner)}</span>`];
+  if (t.category) meta.push(`<span>${escapeHtml(titleCase(t.category))}</span>`);
+  if (t.pending) meta.push(`<span class="chip pending">Pending</span>`);
+  return `
+    <div class="txn ${isOpen ? "open" : ""}" data-txnid="${escapeAttr(t.plaid_txn_id)}">
+      <div class="row" role="button" tabindex="0" aria-expanded="${isOpen}">
+        <div class="stripe ${t.owner}"></div>
+        <div class="desc">
+          <div class="name">${escapeHtml(merchant)}</div>
+          <div class="meta">${meta.join("")} ${tagChips}</div>
+        </div>
+        <div class="amt ${cls} num">${amt < 0 ? "−" : "+"}${fmt.format(Math.abs(amt))}</div>
+      </div>
+      <div class="detail">${detailHTML(t)}</div>
+    </div>`;
+}
+
+function detailHTML(t) {
+  const acct = t.account_name
+    ? `${escapeHtml(t.account_name)}${t.account_mask ? ` ····${escapeHtml(t.account_mask)}` : ""}${t.account_subtype ? ` · ${escapeHtml(titleCase(t.account_subtype))}` : ""}`
+    : "—";
+  const when = t.datetime ? new Date(t.datetime).toLocaleString() : prettyDate(t.date);
+  const chips = (t.tags || []).map(tg =>
+    `<span class="tag editable">${escapeHtml(tg)}<button class="x" data-removetag="${escapeAttr(tg)}" aria-label="Remove tag ${escapeAttr(tg)}">×</button></span>`
+  ).join("") || `<span class="notags">No tags yet</span>`;
+  return `
+    <dl class="kv">
+      <dt>Account</dt><dd>${acct}</dd>
+      <dt>When</dt><dd>${escapeHtml(when)}</dd>
+      <dt>Amount</dt><dd class="num">${fmt.format(Math.abs(displayAmount(t.amount)))} ${displayAmount(t.amount) < 0 ? "out" : "in"}</dd>
+      <dt>Plaid ID</dt><dd class="mono">${escapeHtml(t.plaid_txn_id)}</dd>
+    </dl>
+    <div class="tagedit">
+      <div class="tagchips">${chips}</div>
+      <input class="taginput" type="text" placeholder="Add a tag, press Enter" />
+    </div>`;
+}
+
+function renderTotals(txns) {
+  const by = {};
+  for (const t of txns) by[t.owner] = (by[t.owner] ?? 0) + displayAmount(t.amount);
+  const owners = state.owner === "all" ? ["me", "spouse"] : [state.owner];
+  document.getElementById("totals").innerHTML = owners.map(o => {
+    const v = by[o] ?? 0;
+    return `<div class="stat">
+      <div class="k"><span class="dot ${o}" style="width:8px;height:8px;border-radius:50%;display:inline-block"></span>${OWNER_LABEL[o] ?? o} · net</div>
+      <div class="v num" style="color:${v < 0 ? "var(--out)" : "var(--in)"}">${v < 0 ? "−" : "+"}${fmt.format(Math.abs(v))}</div>
+    </div>`;
+  }).join("");
+}
+
+// --- interaction (event delegation on the feed) ------------------------------
+const feed = document.getElementById("feed");
+
+feed.addEventListener("click", (e) => {
+  const filterTag = e.target.closest(".tag[data-tag]");
+  if (filterTag && !e.target.closest(".detail")) {         // row tag chip → filter by it
+    e.stopPropagation();
+    state.tag = filterTag.dataset.tag;
+    document.getElementById("tagFilter").value = state.tag;
+    load(); return;
+  }
+  const removeBtn = e.target.closest("[data-removetag]");
+  if (removeBtn) {                                          // remove a tag
+    const txn = txnFromEl(removeBtn);
+    saveTags(txn, (txn.tags || []).filter(x => x !== removeBtn.dataset.removetag));
+    return;
+  }
+  const row = e.target.closest(".row");
+  if (row) toggle(row.closest(".txn"));
+});
+
+feed.addEventListener("keydown", (e) => {
+  if (e.target.classList.contains("taginput") && e.key === "Enter") {
+    e.preventDefault();
+    const txn = txnFromEl(e.target);
+    const val = e.target.value.trim();
+    if (val) {
+      const tags = [...(txn.tags || [])];
+      if (!tags.some(x => x.toLowerCase() === val.toLowerCase())) tags.push(val);
+      saveTags(txn, tags);
+    }
+    e.target.value = "";
+  }
+  if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("row")) {
+    e.preventDefault();
+    toggle(e.target.closest(".txn"));
+  }
+});
+
+function txnFromEl(el) { return current.get(el.closest(".txn").dataset.txnid); }
+
+function toggle(txnEl) {
+  const id = txnEl.dataset.txnid;
+  if (openRows.has(id)) openRows.delete(id); else openRows.add(id);
+  txnEl.classList.toggle("open");
+  txnEl.querySelector(".row").setAttribute("aria-expanded", openRows.has(id));
+}
+
+async function saveTags(txn, tags) {
+  txn.tags = tags;                                          // optimistic
+  render([...current.values()]);
+  if (offline || txn.id == null) return;                    // preview mode: local only
+  try {
+    const res = await fetch(`/transactions/${txn.id}/tags`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    txn.tags = data.tags;
+    refreshTags();
+    render([...current.values()]);
+  } catch (e) {
+    load();                                                 // revert to server truth on failure
+  }
+}
+
+// helpers
+function prettyDate(d) {
+  const dt = new Date(d + "T00:00:00");
+  return isNaN(dt) ? d : dt.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+}
+function titleCase(s) { return String(s).toLowerCase().replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()); }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function escapeAttr(s) { return String(s).replace(/[&"']/g, c => ({ "&": "&amp;", '"': "&quot;", "'": "&#39;" }[c])); }
+
+// wiring
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", "false"));
+  b.setAttribute("aria-pressed", "true");
+  state.owner = b.dataset.owner; load();
+}));
+let deb;
+document.getElementById("q").addEventListener("input", e => { clearTimeout(deb); deb = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250); });
+document.getElementById("tagFilter").addEventListener("change", e => { state.tag = e.target.value; load(); });
+document.getElementById("start").addEventListener("change", e => { state.start = e.target.value; load(); });
+document.getElementById("end").addEventListener("change", e => { state.end = e.target.value; load(); });
+
+// sample data for offline preview only (includes account fields + tags)
+const SAMPLE = [
+  { id: 1, owner:"me",     plaid_txn_id:"s1", date:"2026-07-20", name:"Whole Foods", merchant_name:"Whole Foods Market", amount:84.12, category:"GROCERIES", pending:false, account_name:"Chase Sapphire", account_mask:"4021", account_subtype:"credit card", datetime:null, tags:["groceries"] },
+  { id: 2, owner:"spouse", plaid_txn_id:"s2", date:"2026-07-20", name:"Shell", merchant_name:"Shell", amount:52.40, category:"TRANSPORTATION", pending:true, account_name:"Amex Blue Cash", account_mask:"1007", account_subtype:"credit card", datetime:null, tags:["car"] },
+  { id: 3, owner:"me",     plaid_txn_id:"s3", date:"2026-07-19", name:"Payroll", merchant_name:"ACME Corp", amount:-2450.00, category:"INCOME", pending:false, account_name:"Ally Checking", account_mask:"8890", account_subtype:"checking", datetime:null, tags:[] },
+  { id: 4, owner:"spouse", plaid_txn_id:"s4", date:"2026-07-19", name:"Netflix", merchant_name:"Netflix", amount:15.49, category:"ENTERTAINMENT", pending:false, account_name:"Amex Blue Cash", account_mask:"1007", account_subtype:"credit card", datetime:null, tags:["subscription"] },
+  { id: 5, owner:"me",     plaid_txn_id:"s5", date:"2026-07-18", name:"Delta Air", merchant_name:"Delta Airlines", amount:312.00, category:"TRAVEL", pending:false, account_name:"Chase Sapphire", account_mask:"4021", account_subtype:"credit card", datetime:null, tags:["travel","reimbursable"] },
+  { id: 6, owner:"spouse", plaid_txn_id:"s6", date:"2026-07-18", name:"Transfer", merchant_name:"From Savings", amount:-500.00, category:"TRANSFER_IN", pending:false, account_name:"Ally Checking", account_mask:"3312", account_subtype:"checking", datetime:null, tags:[] },
+];
+
+load();
+</script>
+</body>
+</html>

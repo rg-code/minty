@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Connect an account</title>
+<script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+<style>
+  :root { --ink:#16181d; --muted:#6b7280; --hairline:#e7e9ee; --me:#4c6ef5; --spouse:#0ca678; --radius:10px; }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:#f6f7f9;
+         color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .card { background:#fff; border:1px solid var(--hairline); border-radius:14px; padding:28px;
+          width:min(440px,92vw); box-shadow:0 1px 3px rgba(0,0,0,.05); }
+  h1 { font-size:19px; margin:0 0 4px; letter-spacing:-0.01em; }
+  p.sub { color:var(--muted); font-size:13.5px; margin:0 0 22px; }
+  .who { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px; }
+  .owners { display:flex; gap:10px; margin-bottom:14px; }
+  .owner { flex:1; cursor:pointer; border:1px solid var(--hairline); border-radius:var(--radius);
+           padding:12px; background:#fff; font:inherit; font-weight:550; display:flex; align-items:center;
+           justify-content:center; gap:8px; transition:border-color .12s, background .12s; }
+  .owner .dot { width:9px; height:9px; border-radius:50%; }
+  .owner[data-owner="me"] .dot { background:var(--me); }
+  .owner[data-owner="spouse"] .dot { background:var(--spouse); }
+  .owner[aria-pressed="true"] { border-color:var(--ink); background:#f0f2f7; }
+
+  .cap { font-size:12.5px; color:var(--muted); background:#f6f7f9; border:1px solid var(--hairline);
+         border-radius:var(--radius); padding:10px 12px; margin-bottom:18px; }
+  .cap .line { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .cap .line + .line { margin-top:6px; }
+  .cap .bar { flex:1; height:6px; border-radius:3px; background:#e7e9ee; overflow:hidden; }
+  .cap .fill { height:100%; background:var(--me); }
+  .cap.spouse .fill { background:var(--spouse); }
+  .cap b { color:var(--ink); font-variant-numeric:tabular-nums; }
+  .cap .active { color:var(--ink); font-weight:600; }
+
+  button.connect { width:100%; padding:13px; border:0; border-radius:var(--radius); cursor:pointer;
+    font:inherit; font-weight:600; color:#fff; background:var(--ink); }
+  button.connect:disabled { opacity:.45; cursor:not-allowed; }
+  :focus-visible { outline:2px solid var(--me); outline-offset:2px; }
+  .status { margin-top:16px; font-size:13.5px; color:var(--muted); min-height:1.2em; text-align:center; }
+  .status.ok { color:var(--spouse); } .status.err { color:#e03131; }
+  a.back { display:block; text-align:center; margin-top:18px; font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Connect an account</h1>
+  <p class="sub">Link a bank or card. You log in through the bank directly — credentials never touch this server.</p>
+
+  <div class="who">Whose account?</div>
+  <div class="owners" role="group" aria-label="Account owner">
+    <button class="owner" data-owner="me" aria-pressed="true"><span class="dot"></span>Me</button>
+    <button class="owner" data-owner="spouse" aria-pressed="false"><span class="dot"></span>Spouse</button>
+  </div>
+
+  <div class="cap" id="cap" hidden></div>
+
+  <button class="connect" id="connect">Connect with Plaid</button>
+  <div class="status" id="status"></div>
+  <a class="back" href="/">← Back to ledger</a>
+</div>
+
+<script>
+let owner = "me";
+let capacity = null;
+const statusEl = document.getElementById("status");
+const connectBtn = document.getElementById("connect");
+
+function setStatus(msg, kind="") { statusEl.textContent = msg; statusEl.className = "status " + kind; }
+
+document.querySelectorAll(".owner").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll(".owner").forEach(x => x.setAttribute("aria-pressed", "false"));
+  b.setAttribute("aria-pressed", "true");
+  owner = b.dataset.owner;
+  renderCapacity();
+}));
+
+async function loadCapacity() {
+  try {
+    const r = await fetch("/capacity");
+    if (r.ok) { capacity = await r.json(); renderCapacity(); }
+  } catch {}
+}
+
+function renderCapacity() {
+  const box = document.getElementById("cap");
+  if (!capacity || !capacity[owner]) { box.hidden = true; return; }
+  const slots = capacity[owner];
+  // the "active" account is the first one under cap (matches server overflow logic)
+  const active = slots.find(s => s.used < s.cap);
+  box.hidden = false;
+  box.className = "cap" + (owner === "spouse" ? " spouse" : "");
+  box.innerHTML = slots.map(s => {
+    const pct = Math.min(100, Math.round((s.used / s.cap) * 100));
+    const isActive = active && s.account === active.account;
+    return `<div class="line">
+      <span class="${isActive ? "active" : ""}">${s.slot}${isActive ? " · next link" : ""}</span>
+      <span class="bar"><span class="fill" style="width:${pct}%"></span></span>
+      <b>${s.used}/${s.cap}</b>
+    </div>`;
+  }).join("") + (active ? "" : `<div class="line" style="color:#e03131;margin-top:8px">Both trials full — add an overflow account or upgrade Plaid.</div>`);
+}
+
+// OAuth return: resume with the SAME link_token + plaid_account saved pre-redirect.
+const params = new URLSearchParams(window.location.search);
+if (params.get("oauth_state_id")) {
+  const savedToken = localStorage.getItem("plaid_link_token");
+  const savedOwner = localStorage.getItem("plaid_link_owner") || "me";
+  const savedAccount = localStorage.getItem("plaid_link_account");
+  if (savedToken && savedAccount) {
+    openLink(savedToken, savedOwner, savedAccount, window.location.href);
+  } else {
+    setStatus("Could not resume the connection. Please start again.", "err");
+  }
+}
+
+connectBtn.addEventListener("click", async () => {
+  connectBtn.disabled = true;
+  setStatus("Preparing…");
+  try {
+    const res = await fetch("/link/token", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const { link_token, plaid_account } = await res.json();
+
+    // persist across a possible OAuth redirect
+    localStorage.setItem("plaid_link_token", link_token);
+    localStorage.setItem("plaid_link_owner", owner);
+    localStorage.setItem("plaid_link_account", plaid_account);
+
+    openLink(link_token, owner, plaid_account, null);
+  } catch (e) {
+    setStatus("Couldn't start Link: " + e.message, "err");
+    connectBtn.disabled = false;
+  }
+});
+
+function openLink(token, forOwner, plaidAccount, receivedRedirectUri) {
+  const handler = Plaid.create({
+    token,
+    receivedRedirectUri,
+    onSuccess: async (public_token) => {
+      setStatus("Linking and pulling transactions…");
+      try {
+        const res = await fetch("/link/exchange", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner: forOwner, plaid_account: plaidAccount, public_token }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        ["plaid_link_token","plaid_link_owner","plaid_link_account"].forEach(k => localStorage.removeItem(k));
+        setStatus(data.status === "good"
+          ? "Connected. Transactions are syncing." : "Connected (status: " + data.status + ").", "ok");
+        loadCapacity();
+        connectBtn.disabled = false;
+      } catch (e) {
+        setStatus("Exchange failed: " + e.message, "err");
+        connectBtn.disabled = false;
+      }
+    },
+    onExit: (err) => {
+      if (err) setStatus("Link closed: " + (err.error_message || err.error_code || "cancelled"), "err");
+      else setStatus("");
+      connectBtn.disabled = false;
+    },
+  });
+  handler.open();
+}
+
+loadCapacity();
+</script>
+</body>
+</html>
