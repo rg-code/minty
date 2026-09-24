@@ -64,6 +64,14 @@ with `TOKEN_ENC_KEY`; keep `.env` at `chmod 600` and back up the `agg-db` volume
 Manual sync anytime (no HTTP surface):
    `docker compose exec api python -m app.sync_cli`
 
+## Tests
+Unit tests use dummy credentials and fakes for Plaid and Postgres — no network, no `.env`.
+```
+uv venv .venv && uv pip install -p .venv/bin/python -r requirements-dev.txt
+.venv/bin/python -m pytest                                   # whole suite
+.venv/bin/python -m pytest tests/test_link.py -k overflow    # a single test
+```
+
 ## Endpoints
     GET  /                       dashboard
     GET  /connect                link a bank/card

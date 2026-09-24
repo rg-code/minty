@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from app.crypto import decrypt
+from app.crypto import decrypt, encrypt
 from app.routes import link
 from tests.conftest import FakeResp
 
@@ -55,14 +55,22 @@ def test_token_unknown_owner(client, plaid):
     assert plaid.calls == []
 
 
-@pytest.mark.xfail(strict=True, raises=Exception,
-                   reason="BUG: blank PLAID_REDIRECT_URI passes redirect_uri=None, which plaid-python rejects")
 def test_token_uses_chosen_account_and_reports_it(client, plaid, monkeypatch):
     _counts(monkeypatch, {"me_primary": 10})
     r = client.post("/link/token", json={"owner": "me"})
     assert r.status_code == 200, r.text
     assert r.json() == {"link_token": "link-sandbox-abc", "plaid_account": "me_backup"}
     assert plaid.used == ["me_backup"]
+    (_, req), = plaid.calls
+    assert "redirect_uri" not in req                         # blank setting -> field omitted
+
+
+def test_token_passes_redirect_uri_when_configured(client, plaid, monkeypatch):
+    _counts(monkeypatch, {})
+    monkeypatch.setattr(link.settings, "plaid_redirect_uri", "https://minty.example.ts.net/connect")
+    assert client.post("/link/token", json={"owner": "spouse"}).status_code == 200
+    (_, req), = plaid.calls
+    assert req["redirect_uri"] == "https://minty.example.ts.net/connect"
 
 
 @pytest.mark.parametrize("body", [
@@ -99,3 +107,16 @@ def test_exchange_stores_token_encrypted_then_backfills(client, plaid, fake_pool
 def test_update_mode_unknown_item(client, plaid, monkeypatch):
     monkeypatch.setattr(link, "query", lambda sql, params=(): [])
     assert client.post("/link/token/update", json={"item_id": 42}).status_code == 404
+
+
+def test_update_mode_uses_items_own_account_and_token(client, plaid, monkeypatch):
+    item = {"id": 3, "owner": "me", "plaid_account": "me_backup",
+            "access_token_enc": encrypt("access-sandbox-secret")}
+    monkeypatch.setattr(link, "query", lambda sql, params=(): [item])
+    r = client.post("/link/token/update", json={"item_id": 3})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"link_token": "link-sandbox-abc", "plaid_account": "me_backup"}
+    assert plaid.used == ["me_backup"]
+    (_, req), = plaid.calls
+    assert req["access_token"] == "access-sandbox-secret" and "products" not in req
+    assert "access-sandbox-secret" not in r.text

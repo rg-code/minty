@@ -34,6 +34,11 @@ def _base_user(owner: str):
     return LinkTokenCreateRequestUser(client_user_id=owner)
 
 
+def _redirect() -> dict:
+    # plaid-python rejects redirect_uri=None, so omit the field when it isn't configured.
+    return {"redirect_uri": settings.plaid_redirect_uri} if settings.plaid_redirect_uri else {}
+
+
 def _count(plaid_account: str) -> int:
     return query("SELECT count(*) AS n FROM items WHERE plaid_account=%s", (plaid_account,))[0]["n"]
 
@@ -61,7 +66,7 @@ def create_link_token(body: TokenReq):
         products=[Products("transactions")],
         country_codes=[CountryCode("US")],
         language="en",
-        redirect_uri=settings.plaid_redirect_uri or None,
+        **_redirect(),
     )
     resp = client_for(account).link_token_create(req).to_dict()
     # Return which account was used so /exchange uses the SAME credentials.
@@ -105,7 +110,7 @@ def update_mode(body: UpdateReq):
         country_codes=[CountryCode("US")],
         language="en",
         access_token=decrypt(item["access_token_enc"]),   # update mode; no products
-        redirect_uri=settings.plaid_redirect_uri or None,
+        **_redirect(),
     )
     resp = client_for(item["plaid_account"]).link_token_create(req).to_dict()
     return {"link_token": resp["link_token"], "plaid_account": item["plaid_account"]}

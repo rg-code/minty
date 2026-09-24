@@ -1,7 +1,8 @@
-fastapi
-uvicorn[standard]
-plaid-python
-psycopg[binary,pool]
-cryptography
-pydantic
-pydantic-settings
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+plaid-python==44.0.0
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.3
+cryptography==50.0.1
+pydantic==2.13.5
+pydantic-settings==2.15.0
