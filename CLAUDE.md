@@ -1,4 +1,4 @@
-# Finance Aggregator — Project Context
+# Minty — Project Context
 
 Self-hosted personal finance aggregator that consolidates bank and credit card
 transactions for two people (me + spouse) into one private dashboard.

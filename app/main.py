@@ -31,7 +31,7 @@ async def lifespan(app: FastAPI):
     pool.close()
 
 
-app = FastAPI(title="Household Aggregator", lifespan=lifespan)
+app = FastAPI(title="Minty", lifespan=lifespan)
 
 
 @app.middleware("http")

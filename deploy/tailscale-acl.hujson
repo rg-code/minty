@@ -3,27 +3,27 @@
 //
 // This is defense-in-depth ON TOP OF the app's identity gate (ALLOWED_LOGINS).
 // The app gate alone already blocks unknown tailnet identities; this ACL also
-// prevents other devices from even reaching port 443 on the ledger host.
+// prevents other devices from even reaching port 443 on the Minty host.
 //
 // ⚠️  Your tailnet policy is GLOBAL. Do NOT paste this wholesale — it would
 //     replace your existing rules and could cut off access to Immich and other
 //     services. MERGE these pieces into your current policy at
 //     https://login.tailscale.com/admin/acls, then test before saving.
 //
-// Assumes you reach the ledger over Tailscale Serve on 443 and that the Immich
+// Assumes you reach Minty over Tailscale Serve on 443 and that the Immich
 // host is reachable by its MagicDNS name. Replace the emails/host to match yours.
 // ─────────────────────────────────────────────────────────────────────────────
 {
-  // Give the ledger host a friendly alias so grants can target it by name.
+  // Give the Minty host a friendly alias so grants can target it by name.
   "hosts": {
-    "ledger-host": "100.x.y.z"          // the Immich/ledger machine's Tailscale IP
+    "minty-host": "100.x.y.z"          // the Immich/Minty machine's Tailscale IP
   },
 
   "grants": [
-    // Only these two people may reach the ledger host on 443 (the Serve port).
+    // Only these two people may reach the Minty host on 443 (the Serve port).
     {
       "src": ["you@example.com", "spouse@example.com"],
-      "dst": ["ledger-host"],
+      "dst": ["minty-host"],
       "ip":  ["tcp:443"]
     }
 

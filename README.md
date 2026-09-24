@@ -1,4 +1,4 @@
-# Household Ledger — a personal transaction aggregator
+# Minty — a personal transaction aggregator
 
 A tiny self-hosted service that pulls transactions from your (and your spouse's) banks
 and cards via Plaid into one Postgres database, and shows them in a single web dashboard.

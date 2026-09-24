@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Household Ledger</title>
+<title>Minty</title>
 <style>
   :root {
     --bg: #f6f7f9;
@@ -118,7 +118,7 @@
 <body>
 <header>
   <div class="title-row">
-    <h1>Household Ledger</h1>
+    <h1>Minty</h1>
     <span class="sub" id="count">—</span>
     <a class="addlink" href="/connect">+ Add account</a>
   </div>
@@ -195,7 +195,7 @@ function populateTagFilter() {
 function banner(show) {
   const b = document.getElementById("banner");
   b.hidden = !show;
-  if (show) b.textContent = "Showing sample data — couldn't reach the API. Deploy this file behind the aggregator to see live transactions.";
+  if (show) b.textContent = "Showing sample data — couldn't reach the API. Deploy this file behind the Minty API to see live transactions.";
 }
 
 function render(txns) {

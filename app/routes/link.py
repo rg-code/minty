@@ -57,7 +57,7 @@ def create_link_token(body: TokenReq):
     account = choose_account_for(body.owner)           # <- overflow decision happens here
     req = LinkTokenCreateRequest(
         user=_base_user(body.owner),
-        client_name="Household Aggregator",
+        client_name="Minty",
         products=[Products("transactions")],
         country_codes=[CountryCode("US")],
         language="en",
@@ -101,7 +101,7 @@ def update_mode(body: UpdateReq):
     item = rows[0]
     req = LinkTokenCreateRequest(
         user=_base_user(item["owner"]),
-        client_name="Household Aggregator",
+        client_name="Minty",
         country_codes=[CountryCode("US")],
         language="en",
         access_token=decrypt(item["access_token_enc"]),   # update mode; no products
