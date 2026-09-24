@@ -1,0 +1,25 @@
+{
+  "name": "minty",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minty on Cloudflare Workers: one Worker + D1 per household (see docs/serverless-plan.md)",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:seed:local": "node scripts/seed.mjs > .wrangler/seed.sql && wrangler d1 execute DB --local --file .wrangler/seed.sql",
+    "test": "vitest run",
+    "typecheck": "wrangler types >/dev/null && tsc --noEmit",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "typescript": "^5.9.3",
+    "vitest": "~4.1.11",
+    "wrangler": "4.124.0"
+  }
+}

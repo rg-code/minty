@@ -1,0 +1,52 @@
+// Minty on Cloudflare Workers — one deployment per household (docs/serverless-plan.md).
+// Secrets (Plaid keys, TOKEN_ENC_KEY) are NOT here: set them with `wrangler secret put`
+// (deployed) or in .dev.vars (local, gitignored). See .dev.vars.example.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "minty",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-15",
+
+  // The existing dashboard pages, served as-is. API paths run the Worker first; everything
+  // else is a static file. Cloudflare Access protects both at the edge.
+  "assets": {
+    "directory": "./app/static",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/healthz",
+      "/users",
+      "/items",
+      "/accounts",
+      "/capacity",
+      "/transactions",
+      "/transactions/*",
+      "/tags",
+      "/link/*"
+    ]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "minty",
+      "database_id": "00000000-0000-0000-0000-000000000000", // placeholder; real id set up in P3
+      "migrations_dir": "d1/migrations"
+    }
+  ],
+
+  "vars": {
+    // People, in display order: "key:Label,...". Each gets <key>_primary / <key>_backup
+    // Plaid credential sets from secrets PLAID_CLIENT_ID_<KEY>_<SLOT> / PLAID_SECRET_<KEY>_<SLOT>.
+    "MINTY_USERS": "me:Me,spouse:Spouse",
+    "PLAID_ENV": "sandbox",
+    "TRIAL_ITEM_CAP": "10",
+    // Cloudflare Access. Both must be set or every API call is refused (fail closed).
+    // ACCESS_TEAM_DOMAIN: "<team>.cloudflareaccess.com"; ACCESS_AUD: the app's AUD tag.
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    // Optional extra allow-list of Access emails (comma-separated). Empty = any Access user.
+    "ALLOWED_LOGINS": ""
+  },
+
+  "observability": { "enabled": true }
+}
