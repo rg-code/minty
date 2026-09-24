@@ -4,7 +4,13 @@
       "Read(./.env)",
       "Edit(./.env)",
       "Read(./secrets/**)",
-      "Edit(./secrets/**)"
+      "Edit(./secrets/**)",
+      "Bash(* .env)",
+      "Bash(* .env *)",
+      "Bash(*/.env)",
+      "Bash(*/.env *)",
+      "Bash(* secrets/*)",
+      "Bash(*/secrets/*)"
     ]
   }
 }
