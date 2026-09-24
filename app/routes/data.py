@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 
@@ -56,7 +58,8 @@ def transactions(
     start: str | None = Query(None),
     end: str | None = Query(None),
     q: str | None = Query(None),
-    tag: str | None = Query(None),
+    tag: list[str] | None = Query(None),            # repeatable: ?tag=a&tag=b
+    tag_mode: Literal["any", "all"] = Query("any"),  # any = has at least one; all = has every one
     limit: int = Query(500, le=1000),
 ):
     base = """
@@ -73,7 +76,10 @@ def transactions(
     if account_id: clauses.append("t.account_id = %s");   params.append(account_id)
     if start:      clauses.append("t.date >= %s");        params.append(start)
     if end:        clauses.append("t.date <= %s");        params.append(end)
-    if tag:        clauses.append("%s = ANY(t.tags)");    params.append(tag)
+    tags = [t.strip() for t in (tag or []) if t.strip()]
+    if tags:       # && / @> are GIN-indexed (idx_txn_tags)
+        clauses.append("t.tags && %s::text[]" if tag_mode == "any" else "t.tags @> %s::text[]")
+        params.append(tags)
     if q:
         clauses.append("(t.name ILIKE %s OR t.merchant_name ILIKE %s)")
         params += [f"%{q}%", f"%{q}%"]

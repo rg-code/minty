@@ -87,7 +87,7 @@ uv venv .venv && uv pip install -p .venv/bin/python -r requirements-dev.txt
     POST /link/token/update      {item_id}  (re-auth an item)
     GET  /items                  linked institutions + status
     GET  /accounts               accounts + balances   (?owner=)
-    GET  /transactions           unified feed   (?owner= &tag= &q= &start= &end= &account_id=)
+    GET  /transactions           unified feed   (?owner= &tag= [repeatable] &tag_mode=any|all &q= &start= &end= &account_id=)
     GET  /tags                   distinct tags in use
     PUT  /transactions/{id}/tags {tags:[...]}  replace a transaction's tags
     GET  /capacity               per-person trial usage (used/cap)

@@ -26,8 +26,33 @@ def test_transactions_filters_are_parameterised(client, captured):
                                         "start": "2026-01-01", "end": "2026-01-31", "limit": 10})
     (sql, params), = captured
     assert "50%" not in sql                                   # user input never inlined
-    assert "t.owner = %s" in sql and "%s = ANY(t.tags)" in sql and "ILIKE %s" in sql
-    assert params == ("spouse", "2026-01-01", "2026-01-31", "travel", "%50%'; --%", "%50%'; --%", 10)
+    assert "t.owner = %s" in sql and "t.tags && %s::text[]" in sql and "ILIKE %s" in sql
+    assert params == ("spouse", "2026-01-01", "2026-01-31", ["travel"], "%50%'; --%", "%50%'; --%", 10)
+
+
+def test_transactions_multiple_tags_match_any_by_default(client, captured):
+    client.get("/transactions", params=[("tag", "travel"), ("tag", " food "), ("tag", " ")])
+    (sql, params), = captured
+    assert "t.tags && %s::text[]" in sql
+    assert params == (["travel", "food"], 500)                # trimmed, blanks dropped
+
+
+def test_transactions_tag_mode_all(client, captured):
+    client.get("/transactions", params=[("tag", "travel"), ("tag", "food"), ("tag_mode", "all")])
+    (sql, params), = captured
+    assert "t.tags @> %s::text[]" in sql and "&&" not in sql
+    assert params == (["travel", "food"], 500)
+
+
+def test_transactions_blank_tags_add_no_filter(client, captured):
+    client.get("/transactions", params=[("tag", ""), ("tag_mode", "all")])
+    (sql, params), = captured
+    assert "WHERE" not in sql and params == (500,)
+
+
+def test_transactions_bad_tag_mode(client, captured):
+    assert client.get("/transactions", params={"tag": "x", "tag_mode": "some"}).status_code == 422
+    assert captured == []
 
 
 def test_transactions_limit_is_capped(client, captured):
