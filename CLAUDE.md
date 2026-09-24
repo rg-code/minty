@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Minty — Project Context
 
 Self-hosted personal finance aggregator that consolidates bank and credit card
@@ -9,6 +13,8 @@ Goals: full data ownership, no subscription fees, no public endpoints.
 - Financial data: Plaid (Trial plan)
 - Runtime: Docker Compose on an always-on Linux box (also hosts Immich)
 - Access: Tailscale Serve (private HTTPS). NEVER Tailscale Funnel.
+- Development happens on a separate machine (WSL) with no Docker or Tailscale;
+  `docker compose` / `tailscale` commands run only on the Immich box.
 
 ## Architecture invariants (do not change without asking)
 - `owner` (me | spouse) and `plaid_account` (which Plaid credential set) are
@@ -25,14 +31,33 @@ Goals: full data ownership, no subscription fees, no public endpoints.
   scheduler or manually via the CLI. Do not add one.
 - Auth is the Tailscale identity gate middleware: reads `Tailscale-User-Login`
   and checks it against `ALLOWED_LOGINS`. Every route must stay behind it.
-- Migrations are idempotent and tracked in `schema_migrations`. New schema
-  changes go in a new migration, never by editing an applied one.
+  `/healthz` is the only ungated path (`OPEN_PATHS`). An empty `ALLOWED_LOGINS`
+  disables the gate entirely, so it must be set in production.
+- Migrations are applied manually, in order, via psql (see Commands). They are
+  NOT idempotent and NOT tracked yet (no `schema_migrations` table), so
+  re-running one errors. New schema changes go in a new numbered file in
+  `migrations/`, never by editing an applied one.
+
+## Data conventions
+- Plaid amount sign: POSITIVE = money out. The dashboard flips it for display.
+- Tags live in `transactions.tags` (`text[]`). The sync upsert never writes that
+  column, so user labels survive re-syncs. Keep it that way.
 
 ## Commands
-- Start: `docker compose up -d`
+Local (dev machine):
+- Test env: `uv venv .venv && uv pip install -p .venv/bin/python -r requirements-dev.txt`
+- All tests: `.venv/bin/python -m pytest`
+- Single test: `.venv/bin/python -m pytest tests/test_link.py -k overflow`
+  (tests use dummy creds and fakes for Plaid/Postgres; no network, no `.env`)
+
+Deploy host (Immich box):
+- Start / rebuild: `docker compose up -d --build`
+- Migrations, once each, in order:
+  `docker compose exec -T db psql -U aggregator -d aggregator < migrations/00N_name.sql`
+- Expose on the tailnet: `tailscale serve --bg 8080`
 - Manual sync: `docker compose exec api python -m app.sync_cli`
-- Setup / validation / health checks: `./setup.sh`
-  (keep it in sync when adding services, env vars, or migration steps)
+- `./setup.sh` (setup / validation / health checks) is planned, not yet written.
+  Once it exists, keep it in sync when adding services, env vars, or migration steps.
 
 ## Safety
 - The Linux box is production and holds real financial data. Prefer a separate
