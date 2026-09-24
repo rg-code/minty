@@ -3,14 +3,17 @@ import { checkAccess } from "./access";
 import { ConfigError, loadConfig, type Config } from "./config";
 import { HttpError, json, unprocessable } from "./http";
 import * as data from "./routes/data";
+import * as link from "./routes/link";
+import { PlaidError } from "./plaid";
+import { runSyncAll } from "./sync";
 
 /** Minty Worker. API paths are listed in wrangler.jsonc assets.run_worker_first; everything
- * else is served straight from app/static. /healthz is the only path outside the Access check. */
+ * else is served straight from app/static. /healthz is the only path outside the Access check.
+ * Sync runs only from the cron trigger (scheduled below); there is deliberately no HTTP sync endpoint. */
 
-type Handler = (ctx: { env: Env; config: Config; request: Request; url: URL; params: string[] }) => Promise<Response>;
-
-const notYet: Handler = async () =>
-  json({ detail: "Linking banks isn't available on the Workers backend yet (plan phase P2)." }, 501);
+type Handler = (c: {
+  env: Env; config: Config; request: Request; url: URL; params: string[]; ctx: ExecutionContext;
+}) => Promise<Response>;
 
 const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["GET", /^\/users$/, ({ env, config }) => data.users(env, config)],
@@ -23,13 +26,13 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
     if (!/^\d+$/.test(params[0])) throw unprocessable("transaction id must be an integer");
     return data.setTags(env, request, Number(params[0]));
   }],
-  ["POST", /^\/link\/token$/, notYet],
-  ["POST", /^\/link\/exchange$/, notYet],
-  ["POST", /^\/link\/token\/update$/, notYet],
+  ["POST", /^\/link\/token$/, ({ env, config, request }) => link.createLinkToken(env, config, request)],
+  ["POST", /^\/link\/exchange$/, ({ env, config, request, ctx }) => link.exchange(env, config, request, ctx)],
+  ["POST", /^\/link\/token\/update$/, ({ env, config, request }) => link.updateMode(env, config, request)],
 ];
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/healthz") return json({ ok: true });
 
@@ -46,12 +49,21 @@ export default {
 
     try {
       const config = loadConfig(env);
-      return await hit[2]({ env, config, request, url, params: hit[1]!.slice(1) });
+      return await hit[2]({ env, config, request, url, params: hit[1]!.slice(1), ctx });
     } catch (e) {
       if (e instanceof HttpError) return json({ detail: e.detail }, e.status);
       if (e instanceof ConfigError) return json({ detail: e.message }, 500);
+      if (e instanceof PlaidError) {
+        console.error(`plaid error ${e.errorCode} (request ${e.requestId ?? "?"})`);
+        return json({ detail: `Plaid error: ${e.errorCode}` }, 502);
+      }
       console.error("unhandled error", e instanceof Error ? e.message : e);   // never log request bodies
       return json({ detail: "internal error" }, 500);
     }
+  },
+
+  async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    const results = await runSyncAll(env);
+    console.log("scheduled sync complete", JSON.stringify(results));   // item id -> result; no data
   },
 } satisfies ExportedHandler<Env>;

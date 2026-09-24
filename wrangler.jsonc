@@ -39,7 +39,12 @@
     // Plaid credential sets from secrets PLAID_CLIENT_ID_<KEY>_<SLOT> / PLAID_SECRET_<KEY>_<SLOT>.
     "MINTY_USERS": "me:Me,spouse:Spouse",
     "PLAID_ENV": "sandbox",
+    // Only needed for OAuth banks in mobile webviews; web Link works without it. Must be HTTPS.
+    "PLAID_REDIRECT_URI": "",
     "TRIAL_ITEM_CAP": "10",
+    // Plaid pages synced per cron run (1 Plaid call + 1 D1 batch each; 250 transactions/page).
+    // 10 stays well inside the free plan's per-invocation limits. Raise on Workers Paid.
+    "SYNC_MAX_PAGES_PER_RUN": "10",
     // Cloudflare Access. Both must be set or every API call is refused (fail closed).
     // ACCESS_TEAM_DOMAIN: "<team>.cloudflareaccess.com"; ACCESS_AUD: the app's AUD tag.
     "ACCESS_TEAM_DOMAIN": "",
@@ -47,6 +52,9 @@
     // Optional extra allow-list of Access emails (comma-separated). Empty = any Access user.
     "ALLOWED_LOGINS": ""
   },
+
+  // Hourly sync (UTC), off the top of the hour. The only way sync runs: no HTTP endpoint.
+  "triggers": { "crons": ["17 * * * *"] },
 
   "observability": { "enabled": true }
 }

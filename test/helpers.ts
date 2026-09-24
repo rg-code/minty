@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type CryptoKey } from "jose";
 import worker from "../src/index";
 import { primeJwks } from "../src/access";
@@ -36,7 +37,10 @@ export async function call(
   const jwt = token === undefined ? await accessToken() : token;
   if (jwt) headers.set("cf-access-jwt-assertion", jwt);
   const request = new Request(`${host ?? HOST}${path}`, { ...rest, headers });
-  return worker.fetch(request, { ...(env as unknown as Env), ...envOverrides });
+  const ctx = createExecutionContext();
+  const response = await worker.fetch(request, { ...(env as unknown as Env), ...envOverrides }, ctx);
+  await waitOnExecutionContext(ctx);        // e.g. the first sync after /link/exchange
+  return response;
 }
 
 export const getJson = async <T = any>(path: string, init?: Parameters<typeof call>[1]) => {

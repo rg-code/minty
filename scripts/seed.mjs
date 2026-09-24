@@ -62,9 +62,9 @@ let nItems = 0, nAccts = 0, nTxns = 0, txnId = 900000, acctId = 900000;
 ITEMS.forEach(([owner, plaidAccount, inst, accts], i) => {
   const itemId = 900000 + i;
   nItems++;
-  // Not a real Fernet token: P1 never decrypts. (P2's seed will encrypt with TOKEN_ENC_KEY.)
+  // Not a real token, so status 'demo': the cron sync only picks up 'good' / 'login_required' Items.
   out.push(`INSERT INTO items (id, owner, plaid_account, plaid_item_id, access_token_enc, institution_name, txn_cursor, status)
-            VALUES (${itemId}, ${q(owner)}, ${q(plaidAccount)}, ${q(`local-seed-item-${i}`)}, 'seed-placeholder', ${q(inst)}, 'seed-cursor', 'good');`);
+            VALUES (${itemId}, ${q(owner)}, ${q(plaidAccount)}, ${q(`local-seed-item-${i}`)}, 'seed-placeholder', ${q(inst)}, 'seed-cursor', 'demo');`);
   accts.forEach(([name, mask, type, subtype, bal], j) => {
     const aId = acctId++;
     nAccts++;
