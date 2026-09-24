@@ -101,3 +101,7 @@ uv venv .venv && uv pip install -p .venv/bin/python -r requirements-dev.txt
 - Tags live in a `text[]` column; the sync upsert never touches it, so labels survive re-syncs.
 - Verified for syntax; not run against a live Plaid/Postgres. Sanity-check the `plaid-python`
   model imports against your installed version on first boot.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

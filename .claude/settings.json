@@ -10,7 +10,13 @@
       "Bash(*/.env)",
       "Bash(*/.env *)",
       "Bash(* secrets/*)",
-      "Bash(*/secrets/*)"
+      "Bash(*/secrets/*)",
+      "Read(./.dev.vars)",
+      "Edit(./.dev.vars)",
+      "Bash(* .dev.vars)",
+      "Bash(* .dev.vars *)",
+      "Bash(*/.dev.vars)",
+      "Bash(*/.dev.vars *)"
     ]
   }
 }
