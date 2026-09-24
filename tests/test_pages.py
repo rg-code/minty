@@ -3,7 +3,13 @@ import re
 import pytest
 
 
-@pytest.mark.parametrize("path", ["/", "/connect"])
+def test_dashboard_links_add_account_and_add_user(client):
+    html = client.get("/").text
+    assert 'href="/connect">+ Add account' in html and 'href="/add-user">+ Add user' in html
+    assert 'data-owner="spouse"' not in html            # person buttons now come from /users
+
+
+@pytest.mark.parametrize("path", ["/", "/connect", "/add-user"])
 def test_page_has_theme_toggle_and_dark_palette(client, path):
     html = client.get(path).text
     assert 'id="themeToggle"' in html

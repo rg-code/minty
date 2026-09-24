@@ -17,11 +17,14 @@ Goals: full data ownership, no subscription fees, no public endpoints.
   `docker compose` / `tailscale` commands run only on the Immich box.
 
 ## Architecture invariants (do not change without asking)
-- `owner` (me | spouse) and `plaid_account` (which Plaid credential set) are
-  DISTINCT concepts. Never collapse or infer one from the other.
-- Four Plaid credential sets: `me_primary`, `me_backup`, `spouse_primary`,
-  `spouse_backup`. Routing of new institutions goes through
-  `choose_account_for()`.
+- `owner` (a `MINTY_USERS` key; default me | spouse) and `plaid_account` (which
+  Plaid credential set) are DISTINCT concepts. Never collapse or infer one from
+  the other.
+- People come from `MINTY_USERS` in `.env`; each has two credential sets,
+  `<key>_primary` and `<key>_backup`, whose keys live only in `.env`. Adding a
+  user is an `.env` edit + restart (the `/add-user` page generates the lines);
+  Plaid secrets never go through the browser or the database. Routing of new
+  institutions goes through `choose_account_for()`.
 - A Plaid Item = one institution login (not one account). The Trial cap is
   10 Items per credential set; routing logic depends on this.
 - Plaid access tokens are stored Fernet-encrypted. Never log, print, or return

@@ -90,6 +90,17 @@ def test_plaid_errors_set_item_status(wire, fake_pool, code, status):
 
 
 def test_run_sync_all_sweeps_items(monkeypatch):
-    monkeypatch.setattr(sync_engine, "query", lambda sql, params=(): [{"id": 1}, {"id": 2}])
+    monkeypatch.setattr(sync_engine, "query", lambda sql, params=(): [
+        {"id": 1, "plaid_account": "me_primary"}, {"id": 2, "plaid_account": "spouse_backup"}])
     monkeypatch.setattr(sync_engine, "sync_item", lambda item: f"good-{item['id']}")
     assert sync_engine.run_sync_all() == {1: "good-1", 2: "good-2"}
+
+
+def test_run_sync_all_skips_items_of_removed_users(monkeypatch):
+    # e.g. "alex" was taken out of MINTY_USERS but their Items are still in the DB
+    monkeypatch.setattr(sync_engine, "query", lambda sql, params=(): [
+        {"id": 1, "plaid_account": "alex_primary"}, {"id": 2, "plaid_account": "me_primary"}])
+    synced = []
+    monkeypatch.setattr(sync_engine, "sync_item", lambda item: synced.append(item["id"]) or "good")
+    assert sync_engine.run_sync_all() == {1: "skipped", 2: "good"}
+    assert synced == [2]

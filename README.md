@@ -13,13 +13,19 @@ Syncing runs **in-process** (a background scheduler thread), so there is no sepa
 container and no `/internal/sync` HTTP endpoint. No public endpoints. No webhooks.
 Polling only. Reach it via Tailscale.
 
-## The four-trial overflow model
-Each person has two Plaid Trial accounts, a **primary** and a **backup**:
+## People and the trial overflow model
+People are listed in `.env` as `MINTY_USERS=me:Me,spouse:Spouse` (the default). Each person
+has two Plaid Trial accounts, a **primary** and a **backup**:
 
     me_primary  → me_backup        (owner: me)
     spouse_primary → spouse_backup (owner: spouse)
 
-`owner` (me / spouse) drives the dashboard's filtering and totals.
+To add someone, open **+ Add user** on the dashboard: it writes the `MINTY_USERS` line and the
+`PLAID_*_<KEY>_PRIMARY/BACKUP` lines to paste into `.env`, then
+`docker compose up -d --force-recreate api`. Keys stay in `.env`; `GET /users` only reports
+whether each person's keys are set.
+
+`owner` (a `MINTY_USERS` key) drives the dashboard's filtering and totals.
 `plaid_account` (me_primary, …) is the credential set an Item is bound to.
 New links land on the person's primary; when it reaches `TRIAL_ITEM_CAP` (10) Items,
 `/link/token` automatically overflows the next link to their backup. The `/capacity`
@@ -75,6 +81,7 @@ uv venv .venv && uv pip install -p .venv/bin/python -r requirements-dev.txt
 ## Endpoints
     GET  /                       dashboard
     GET  /connect                link a bank/card
+    GET  /add-user               generate the .env lines to add a person
     POST /link/token             {owner} -> {link_token, plaid_account}   (overflow chosen here)
     POST /link/exchange          {owner, plaid_account, public_token}
     POST /link/token/update      {item_id}  (re-auth an item)
@@ -84,6 +91,7 @@ uv venv .venv && uv pip install -p .venv/bin/python -r requirements-dev.txt
     GET  /tags                   distinct tags in use
     PUT  /transactions/{id}/tags {tags:[...]}  replace a transaction's tags
     GET  /capacity               per-person trial usage (used/cap)
+    GET  /users                  people from MINTY_USERS + which key slots are set (no secrets)
     GET  /healthz                liveness (ungated)
 (Sync is in-process; there is no sync HTTP endpoint.)
 
