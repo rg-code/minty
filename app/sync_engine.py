@@ -1,16 +1,26 @@
 import json
+import logging
 from plaid.model.transactions_sync_request import TransactionsSyncRequest
 from plaid.exceptions import ApiException
 
+from .config import PLAID_ACCOUNTS
 from .db import pool, query
 from .crypto import decrypt
 from .plaid_client import client_for
+
+log = logging.getLogger("sync")
 
 
 def run_sync_all() -> dict:
     """Sweep every non-errored Item. Called by the in-process scheduler and the CLI."""
     results = {}
     for item in query("SELECT * FROM items WHERE status != 'error' OR status IS NULL"):
+        if item["plaid_account"] not in PLAID_ACCOUNTS:
+            # e.g. the person was removed from MINTY_USERS; don't let it abort everyone's sync
+            log.warning("skipping item %s: plaid_account %r is not configured",
+                        item["id"], item["plaid_account"])
+            results[item["id"]] = "skipped"
+            continue
         results[item["id"]] = sync_item(item)   # creds resolved per item.plaid_account
     return results
 

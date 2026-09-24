@@ -2,10 +2,22 @@ from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 
 from ..db import pool, query
-from ..config import settings, OWNER_ACCOUNTS
+from ..config import settings, OWNER_ACCOUNTS, USERS, is_configured
 
 
 router = APIRouter()
+
+
+@router.get("/users")
+def users():
+    """People from MINTY_USERS, in display order, and which Plaid key slots are filled in.
+    Reports only whether keys are present — never the keys themselves."""
+    return [
+        {"key": key, "label": label,
+         "slots": [{"account": a, "slot": a.split("_", 1)[1], "configured": is_configured(a)}
+                   for a in OWNER_ACCOUNTS[key]]}
+        for key, label in USERS.items()
+    ]
 
 
 @router.get("/items")

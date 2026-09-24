@@ -1,18 +1,16 @@
+import os
+import re
+
+from dotenv import dotenv_values
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Four Plaid Trial credential sets: primary + backup for each person.
-    plaid_client_id_me_primary: str = ""
-    plaid_secret_me_primary: str = ""
-    plaid_client_id_me_backup: str = ""
-    plaid_secret_me_backup: str = ""
-    plaid_client_id_spouse_primary: str = ""
-    plaid_secret_spouse_primary: str = ""
-    plaid_client_id_spouse_backup: str = ""
-    plaid_secret_spouse_backup: str = ""
+    # People, in display order: comma-separated "key:Label". Each gets a primary + backup
+    # Plaid Trial credential set from PLAID_CLIENT_ID_<KEY>_<SLOT> / PLAID_SECRET_<KEY>_<SLOT>.
+    minty_users: str = "me:Me,spouse:Spouse"
 
     plaid_env: str = "production"
     plaid_redirect_uri: str = ""
@@ -34,18 +32,46 @@ settings = Settings()
 # Parsed set of allowed Tailscale identities; empty set means the gate is off.
 ALLOWED_LOGINS = {s.strip().lower() for s in settings.allowed_logins.split(",") if s.strip()}
 
+# Keys end up in env var names and in plaid_account ("<key>_<slot>"), so no underscores.
+_USER_KEY = re.compile(r"[a-z][a-z0-9]{0,23}")
+
+
+def parse_users(raw: str) -> dict[str, str]:
+    """'me:Me,spouse:Spouse' -> {'me': 'Me', 'spouse': 'Spouse'}, preserving order."""
+    users: dict[str, str] = {}
+    for part in raw.split(","):
+        if not part.strip():
+            continue
+        key, _, label = part.partition(":")
+        key, label = key.strip(), label.strip()
+        if not _USER_KEY.fullmatch(key):
+            raise ValueError(f"MINTY_USERS: invalid user key {key!r} "
+                             "(lowercase letters and digits, starting with a letter)")
+        if key in users:
+            raise ValueError(f"MINTY_USERS: duplicate user key {key!r}")
+        users[key] = label or key.capitalize()
+    if not users:
+        raise ValueError("MINTY_USERS is empty")
+    return users
+
+
+# key -> display label, in display order
+USERS: dict[str, str] = parse_users(settings.minty_users)
+
 # Which credential slots each person has, in overflow order (primary first).
-# To add a third overflow account later: add "overflow2" here + the four env vars.
-_LAYOUT: dict[str, list[str]] = {
-    "me": ["primary", "backup"],
-    "spouse": ["primary", "backup"],
-}
+# To add a third overflow account later: add "overflow2" here + the env vars.
+SLOTS = ["primary", "backup"]
+_LAYOUT: dict[str, list[str]] = {owner: list(SLOTS) for owner in USERS}
+
+# Per-user Plaid keys can't be declared Settings fields, so read them the way
+# pydantic-settings does: real environment first, then the .env file.
+_ENV = {**dotenv_values(".env"), **os.environ}
 
 
 def _cred(owner: str, slot: str) -> dict[str, str]:
     return {
-        "client_id": getattr(settings, f"plaid_client_id_{owner}_{slot}"),
-        "secret": getattr(settings, f"plaid_secret_{owner}_{slot}"),
+        "client_id": _ENV.get(f"PLAID_CLIENT_ID_{owner}_{slot}".upper()) or "",
+        "secret": _ENV.get(f"PLAID_SECRET_{owner}_{slot}".upper()) or "",
         "owner": owner,
     }
 
@@ -70,6 +96,11 @@ def creds_for(plaid_account: str) -> dict[str, str]:
         raise ValueError(f"unknown plaid_account: {plaid_account!r}")
     c = PLAID_ACCOUNTS[plaid_account]
     return {"client_id": c["client_id"], "secret": c["secret"]}
+
+
+def is_configured(plaid_account: str) -> bool:
+    """True when both the client_id and secret for this credential set are present."""
+    return all(creds_for(plaid_account).values())
 
 
 def owner_of(plaid_account: str) -> str:

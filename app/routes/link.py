@@ -7,7 +7,7 @@ from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchan
 from plaid.model.products import Products
 from plaid.model.country_code import CountryCode
 
-from ..config import settings, VALID_OWNERS, PLAID_ACCOUNTS, OWNER_ACCOUNTS, owner_of
+from ..config import settings, VALID_OWNERS, PLAID_ACCOUNTS, OWNER_ACCOUNTS, owner_of, is_configured
 from ..plaid_client import client_for
 from ..crypto import encrypt, decrypt
 from ..db import pool, query
@@ -60,6 +60,11 @@ def create_link_token(body: TokenReq):
     if body.owner not in VALID_OWNERS:
         raise HTTPException(400, "unknown owner")
     account = choose_account_for(body.owner)           # <- overflow decision happens here
+    if not is_configured(account):
+        env = account.upper()
+        raise HTTPException(
+            400, f"Plaid keys for '{account}' aren't set. Add PLAID_CLIENT_ID_{env} and "
+                 f"PLAID_SECRET_{env} to .env on the Minty host and restart.")
     req = LinkTokenCreateRequest(
         user=_base_user(body.owner),
         client_name="Minty",

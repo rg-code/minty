@@ -4,20 +4,65 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Minty</title>
+<script>
+  // Set the theme before first paint (no flash). Saved choice wins; otherwise follow the OS.
+  document.documentElement.dataset.theme = localStorage.getItem("minty-theme")
+    || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+</script>
 <style>
   :root {
+    color-scheme: light;
     --bg: #f6f7f9;
     --surface: #ffffff;
     --ink: #16181d;
     --muted: #6b7280;
     --hairline: #e7e9ee;
-    --owner-me: #4c6ef5;      /* indigo */
-    --owner-spouse: #0ca678;  /* teal   */
+    --accent: #4c6ef5;
+    /* per-person colours, assigned in MINTY_USERS order */
+    --u0: #4c6ef5; --u1: #0ca678; --u2: #e8590c; --u3: #ae3ec9; --u4: #1098ad; --u5: #d6336c;
     --out: #e03131;
     --in: #2f9e44;
+    --row-hover: #fafbfc;
+    --row-open: #f4f6fa;
+    --detail-bg: #fbfcfd;
+    --tag-bg: #eef1f6;
+    --tag-hover: #e3e8f0;
+    --tag-ink: #3a4256;
+    --tag-x: #8a93a6;
+    --warn-ink: #7a5c00;
+    --warn-bg: #fff8e6;
+    --warn-line: #f0e2b0;
+    --pending-ink: #b08900;
+    --pending-bg: #fdf9ec;
+    --shadow: rgba(0,0,0,.06);
     --radius: 10px;
     --pad: clamp(14px, 3vw, 28px);
     font-synthesis: none;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0f1115;
+    --surface: #171a21;
+    --ink: #e6e8ee;
+    --muted: #9aa3b2;
+    --hairline: #272c37;
+    --accent: #748ffc;
+    --u0: #748ffc; --u1: #20c997; --u2: #ff922b; --u3: #da77f2; --u4: #3bc9db; --u5: #f06595;
+    --out: #ff6b6b;
+    --in: #51cf66;
+    --row-hover: #1b1f27;
+    --row-open: #1f2430;
+    --detail-bg: #141820;
+    --tag-bg: #242b39;
+    --tag-hover: #2d3547;
+    --tag-ink: #c9d1e3;
+    --tag-x: #7f889c;
+    --warn-ink: #f2d27a;
+    --warn-bg: #2a2412;
+    --warn-line: #5a4a18;
+    --pending-ink: #f2c94c;
+    --pending-bg: #2a2412;
+    --shadow: rgba(0,0,0,.4);
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
@@ -35,8 +80,14 @@
   .title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   h1 { font-size: 20px; font-weight: 650; letter-spacing: -0.01em; margin: 0; }
   .sub { color: var(--muted); font-size: 13px; }
-  .addlink { margin-left: auto; font-size: 13px; font-weight: 550; color: var(--owner-me); text-decoration: none; }
+  .links { margin-left: auto; display: flex; gap: 16px; }
+  .addlink { font-size: 13px; font-weight: 550; color: var(--accent); text-decoration: none; }
   .addlink:hover { text-decoration: underline; }
+  .themetoggle { align-self: center; border: 1px solid var(--hairline); background: var(--surface); color: var(--muted);
+                 border-radius: 8px; width: 32px; height: 32px; display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
+  .themetoggle:hover { color: var(--ink); }
+  .themetoggle svg { width: 16px; height: 16px; }
+  :root[data-theme="dark"] .themetoggle .moon, :root:not([data-theme="dark"]) .themetoggle .sun { display: none; }
 
   .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
   .seg { display: inline-flex; background: var(--bg); border: 1px solid var(--hairline);
@@ -47,17 +98,14 @@
     display: inline-flex; align-items: center; gap: 7px; transition: background .12s, color .12s;
   }
   .seg button .dot { width: 8px; height: 8px; border-radius: 50%; }
-  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0,0,0,.06); }
-  .dot.me { background: var(--owner-me); }
-  .dot.spouse { background: var(--owner-spouse); }
-  .dot.all { background: linear-gradient(90deg, var(--owner-me) 50%, var(--owner-spouse) 50%); }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px var(--shadow); }
 
   input[type="search"], input[type="date"], select {
     font: inherit; padding: 8px 11px; border: 1px solid var(--hairline);
     border-radius: var(--radius); background: var(--surface); color: var(--ink);
   }
   input[type="search"] { flex: 1 1 180px; min-width: 140px; }
-  :focus-visible { outline: 2px solid var(--owner-me); outline-offset: 1px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   .totals { display: flex; gap: var(--pad); flex-wrap: wrap; padding: var(--pad); padding-bottom: 0; }
   .stat { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius);
@@ -77,26 +125,24 @@
     display: grid; grid-template-columns: 3px 1fr auto; align-items: center; gap: 12px;
     padding: 12px 16px 12px 0; cursor: pointer; transition: background .1s;
   }
-  .row:hover { background: #fafbfc; }
-  .txn.open .row { background: #f4f6fa; }
+  .row:hover { background: var(--row-hover); }
+  .txn.open .row { background: var(--row-open); }
   .stripe { align-self: stretch; }
-  .stripe.me { background: var(--owner-me); }
-  .stripe.spouse { background: var(--owner-spouse); }
   .desc { min-width: 0; }
   .desc .name { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .desc .meta { font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .chip { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--hairline); }
-  .chip.pending { color: #b08900; border-color: #f0e2b0; background: #fdf9ec; }
+  .chip.pending { color: var(--pending-ink); border-color: var(--warn-line); background: var(--pending-bg); }
   .amt { font-weight: 600; text-align: right; white-space: nowrap; padding-right: 4px; }
   .amt.out { color: var(--out); }
   .amt.in  { color: var(--in); }
 
   /* tag chips */
-  .tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #eef1f6; color: #3a4256; cursor: pointer; }
-  .tag:hover { background: #e3e8f0; }
+  .tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); cursor: pointer; }
+  .tag:hover { background: var(--tag-hover); }
 
   /* expandable detail */
-  .detail { display: none; padding: 4px 16px 16px 15px; background: #fbfcfd; }
+  .detail { display: none; padding: 4px 16px 16px 15px; background: var(--detail-bg); }
   .txn.open .detail { display: block; }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 6px 0 14px; font-size: 13px; }
   .kv dt { color: var(--muted); }
@@ -105,13 +151,14 @@
   .tagedit { display: flex; flex-direction: column; gap: 8px; }
   .tagchips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .tag.editable { display: inline-flex; align-items: center; gap: 4px; cursor: default; }
-  .tag .x { border: 0; background: transparent; cursor: pointer; font-size: 14px; line-height: 1; color: #8a93a6; padding: 0; }
+  .tag .x { border: 0; background: transparent; cursor: pointer; font-size: 14px; line-height: 1; color: var(--tag-x); padding: 0; }
   .tag .x:hover { color: var(--out); }
   .notags { color: var(--muted); font-size: 12.5px; }
-  .taginput { font: inherit; padding: 7px 10px; border: 1px solid var(--hairline); border-radius: 8px; max-width: 280px; }
+  .taginput { font: inherit; padding: 7px 10px; border: 1px solid var(--hairline); border-radius: 8px; max-width: 280px;
+              background: var(--surface); color: var(--ink); }
 
   .empty, .banner { padding: 40px var(--pad); text-align: center; color: var(--muted); }
-  .banner { padding: 10px var(--pad); background: #fff8e6; color: #7a5c00; border-bottom: 1px solid #f0e2b0; font-size: 13px; }
+  .banner { padding: 10px var(--pad); background: var(--warn-bg); color: var(--warn-ink); border-bottom: 1px solid var(--warn-line); font-size: 13px; }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -120,14 +167,17 @@
   <div class="title-row">
     <h1>Minty</h1>
     <span class="sub" id="count">—</span>
-    <a class="addlink" href="/connect">+ Add account</a>
+    <nav class="links">
+      <a class="addlink" href="/connect">+ Add account</a>
+      <a class="addlink" href="/add-user">+ Add user</a>
+    </nav>
+    <button class="themetoggle" id="themeToggle" type="button">
+      <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    </button>
   </div>
   <div class="controls">
-    <div class="seg" role="group" aria-label="Filter by owner">
-      <button data-owner="all"    aria-pressed="true"><span class="dot all"></span>Combined</button>
-      <button data-owner="me"     aria-pressed="false"><span class="dot me"></span>Me</button>
-      <button data-owner="spouse" aria-pressed="false"><span class="dot spouse"></span>Spouse</button>
-    </div>
+    <div class="seg" id="ownerSeg" role="group" aria-label="Filter by person"></div>
     <input type="search" id="q" placeholder="Search description or merchant…" />
     <select id="tagFilter" aria-label="Filter by tag"><option value="">All tags</option></select>
     <input type="date" id="start" aria-label="From date" />
@@ -140,7 +190,11 @@
 <main id="feed"><div class="empty">Loading…</div></main>
 
 <script>
-const OWNER_LABEL = { me: "Me", spouse: "Spouse" };
+// People come from /users (MINTY_USERS order sets their colour). The offline preview
+// falls back to the two people in SAMPLE.
+let USERS = [{ key: "me", label: "Me" }, { key: "spouse", label: "Spouse" }];
+const colorOf = k => { const i = USERS.findIndex(u => u.key === k); return i < 0 ? "var(--muted)" : `var(--u${i % 6})`; };
+const labelOf = k => USERS.find(u => u.key === k)?.label ?? k;
 let state = { owner: "all", q: "", start: "", end: "", tag: "" };
 let openRows = new Set();          // plaid_txn_id of expanded rows (survives re-render)
 let current = new Map();           // plaid_txn_id -> txn object (for tag edits)
@@ -150,6 +204,20 @@ let offline = false;
 const fmt = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" });
 // Plaid: POSITIVE amount = money OUT. Flip for display (spending negative/red, income positive/green).
 function displayAmount(a) { return -Number(a ?? 0); }
+
+async function loadUsers() {
+  try { const r = await fetch("/users"); if (r.ok) USERS = await r.json(); } catch {}
+  renderOwnerSeg();
+}
+
+function renderOwnerSeg() {
+  const n = USERS.length;
+  const stops = USERS.map((u, i) => `${colorOf(u.key)} ${i * 100 / n}% ${(i + 1) * 100 / n}%`).join(", ");
+  const btn = (key, label, bg) => `<button data-owner="${escapeAttr(key)}" aria-pressed="${state.owner === key}">` +
+    `<span class="dot" style="background:${bg}"></span>${escapeHtml(label)}</button>`;
+  document.getElementById("ownerSeg").innerHTML = btn("all", "Combined", `linear-gradient(90deg, ${stops})`) +
+    USERS.map(u => btn(u.key, u.label, colorOf(u.key))).join("");
+}
 
 async function load() {
   const p = new URLSearchParams();
@@ -223,13 +291,13 @@ function txnHTML(t) {
   const isOpen = openRows.has(t.plaid_txn_id);
   const tagChips = (t.tags || []).map(tg =>
     `<span class="tag" data-tag="${escapeAttr(tg)}">${escapeHtml(tg)}</span>`).join("");
-  const meta = [`<span>${escapeHtml(OWNER_LABEL[t.owner] ?? t.owner)}</span>`];
+  const meta = [`<span>${escapeHtml(labelOf(t.owner))}</span>`];
   if (t.category) meta.push(`<span>${escapeHtml(titleCase(t.category))}</span>`);
   if (t.pending) meta.push(`<span class="chip pending">Pending</span>`);
   return `
     <div class="txn ${isOpen ? "open" : ""}" data-txnid="${escapeAttr(t.plaid_txn_id)}">
       <div class="row" role="button" tabindex="0" aria-expanded="${isOpen}">
-        <div class="stripe ${t.owner}"></div>
+        <div class="stripe" style="background:${colorOf(t.owner)}"></div>
         <div class="desc">
           <div class="name">${escapeHtml(merchant)}</div>
           <div class="meta">${meta.join("")} ${tagChips}</div>
@@ -264,11 +332,14 @@ function detailHTML(t) {
 function renderTotals(txns) {
   const by = {};
   for (const t of txns) by[t.owner] = (by[t.owner] ?? 0) + displayAmount(t.amount);
-  const owners = state.owner === "all" ? ["me", "spouse"] : [state.owner];
+  // everyone configured, plus anyone with rows who has since been removed from MINTY_USERS
+  const owners = state.owner === "all"
+    ? [...USERS.map(u => u.key), ...Object.keys(by).filter(k => !USERS.some(u => u.key === k))]
+    : [state.owner];
   document.getElementById("totals").innerHTML = owners.map(o => {
     const v = by[o] ?? 0;
     return `<div class="stat">
-      <div class="k"><span class="dot ${o}" style="width:8px;height:8px;border-radius:50%;display:inline-block"></span>${OWNER_LABEL[o] ?? o} · net</div>
+      <div class="k"><span class="dot" style="width:8px;height:8px;border-radius:50%;display:inline-block;background:${colorOf(o)}"></span>${escapeHtml(labelOf(o))} · net</div>
       <div class="v num" style="color:${v < 0 ? "var(--out)" : "var(--in)"}">${v < 0 ? "−" : "+"}${fmt.format(Math.abs(v))}</div>
     </div>`;
   }).join("");
@@ -351,11 +422,11 @@ function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp
 function escapeAttr(s) { return String(s).replace(/[&"']/g, c => ({ "&": "&amp;", '"': "&quot;", "'": "&#39;" }[c])); }
 
 // wiring
-document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
-  document.querySelectorAll(".seg button").forEach(x => x.setAttribute("aria-pressed", "false"));
-  b.setAttribute("aria-pressed", "true");
-  state.owner = b.dataset.owner; load();
-}));
+document.getElementById("ownerSeg").addEventListener("click", e => {
+  const b = e.target.closest("button[data-owner]");
+  if (!b) return;
+  state.owner = b.dataset.owner; renderOwnerSeg(); load();
+});
 let deb;
 document.getElementById("q").addEventListener("input", e => { clearTimeout(deb); deb = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250); });
 document.getElementById("tagFilter").addEventListener("change", e => { state.tag = e.target.value; load(); });
@@ -372,7 +443,26 @@ const SAMPLE = [
   { id: 6, owner:"spouse", plaid_txn_id:"s6", date:"2026-07-18", name:"Transfer", merchant_name:"From Savings", amount:-500.00, category:"TRANSFER_IN", pending:false, account_name:"Ally Checking", account_mask:"3312", account_subtype:"checking", datetime:null, tags:[] },
 ];
 
-load();
+// Light/dark toggle. The <head> script already applied the initial theme.
+(function themeToggle() {
+  const root = document.documentElement, btn = document.getElementById("themeToggle");
+  const apply = t => {
+    root.dataset.theme = t;
+    const label = t === "dark" ? "Switch to light mode" : "Switch to dark mode";
+    btn.setAttribute("aria-label", label); btn.title = label;
+  };
+  apply(root.dataset.theme);
+  btn.addEventListener("click", () => {
+    const t = root.dataset.theme === "dark" ? "light" : "dark";
+    localStorage.setItem("minty-theme", t); apply(t);
+  });
+  // Until the user picks, keep following the OS setting live.
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", e => {
+    if (!localStorage.getItem("minty-theme")) apply(e.matches ? "dark" : "light");
+  });
+})();
+
+loadUsers().then(load);
 </script>
 </body>
 </html>

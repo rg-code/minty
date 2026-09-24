@@ -60,6 +60,11 @@ def connect():
     return FileResponse(STATIC / "connect.html")
 
 
+@app.get("/add-user")
+def add_user():
+    return FileResponse(STATIC / "add-user.html")
+
+
 @app.get("/healthz")
 def health():
     return {"ok": True}
