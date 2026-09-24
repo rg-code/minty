@@ -1,0 +1,9 @@
+# The Docker image only needs app/ and migrations/ (see Dockerfile); keep the Workers
+# toolchain and local state out of the build context.
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+secrets/
+.venv/

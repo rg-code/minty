@@ -53,6 +53,16 @@ Local (dev machine):
 - Single test: `.venv/bin/python -m pytest tests/test_link.py -k overflow`
   (tests use dummy creds and fakes for Plaid/Postgres; no network, no `.env`)
 
+Workers port (in progress, `docs/serverless-plan.md`; `src/`, `d1/migrations/`, `test/`):
+- Install: `npm ci` (Node 22+)
+- Tests: `npm test` (vitest inside workerd, real local D1; Plaid never called)
+- Types: `npm run typecheck`
+- Local DB: `npm run db:migrate:local && npm run db:seed:local`
+- Run locally: `npx wrangler dev --var MINTY_DEV_NO_AUTH:1` then http://localhost:8787
+  (the flag skips Cloudflare Access and is only honoured for localhost requests)
+- The Python app and the Worker share `app/static` and the same API paths/shapes. Keep them
+  in step until the P4 cutover. Schema changes for the Worker go in a new `d1/migrations/NNNN_*.sql`.
+
 Deploy host (Immich box):
 - Start / rebuild: `docker compose up -d --build`
 - Migrations, once each, in order:

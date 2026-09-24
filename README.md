@@ -102,6 +102,18 @@ uv venv .venv && uv pip install -p .venv/bin/python -r requirements-dev.txt
 - Verified for syntax; not run against a live Plaid/Postgres. Sanity-check the `plaid-python`
   model imports against your installed version on first boot.
 
+## Cloudflare Workers version (in progress)
+
+Minty is being ported to one Cloudflare Worker plus a D1 database per household. It needs no
+Docker, no always-on machine and no Tailscale. See [docs/serverless-plan.md](docs/serverless-plan.md).
+Phase P1 is in place: the dashboard, the read API and tag editing run on the Worker, behind
+Cloudflare Access. Bank linking and sync come in P2, deploy tooling in P3.
+
+    npm ci
+    npm test                                            # workerd + local D1, no network
+    npm run db:migrate:local && npm run db:seed:local   # demo data
+    npx wrangler dev --var MINTY_DEV_NO_AUTH:1          # http://localhost:8787
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

@@ -10,3 +10,4 @@ __pycache__/
 !.dev.vars.example
 .wrangler/
 node_modules/
+worker-configuration.d.ts

@@ -1,0 +1,20 @@
+# Local development settings for `wrangler dev`. Copy to .dev.vars (gitignored, never deployed).
+# Deployed Workers get secrets from `wrangler secret put <NAME>` instead.
+
+# Skip Cloudflare Access locally. Only honoured for localhost requests; never set this on a
+# deployed Worker.
+MINTY_DEV_NO_AUTH=1
+
+# Plaid SANDBOX keys (dashboard.plaid.com -> Developers -> Keys). Not needed to browse seed data.
+PLAID_CLIENT_ID_ME_PRIMARY=
+PLAID_SECRET_ME_PRIMARY=
+PLAID_CLIENT_ID_ME_BACKUP=
+PLAID_SECRET_ME_BACKUP=
+PLAID_CLIENT_ID_SPOUSE_PRIMARY=
+PLAID_SECRET_SPOUSE_PRIMARY=
+PLAID_CLIENT_ID_SPOUSE_BACKUP=
+PLAID_SECRET_SPOUSE_BACKUP=
+
+# Fernet key for Plaid access tokens (used from P2). Generate once:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+TOKEN_ENC_KEY=
