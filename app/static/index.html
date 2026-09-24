@@ -140,6 +140,30 @@
   /* tag chips */
   .tag { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink); cursor: pointer; }
   .tag:hover { background: var(--tag-hover); }
+  .tag.sel { box-shadow: inset 0 0 0 1px var(--accent); }
+  .tag.addtag { border: 1px dashed var(--hairline); background: transparent; color: var(--muted); font: inherit; font-size: 11px; }
+  .tag.addtag:hover { color: var(--ink); border-color: var(--muted); }
+
+  /* multi-tag filter dropdown */
+  .tagpick { position: relative; }
+  .tagbtn { font: inherit; padding: 8px 30px 8px 11px; border: 1px solid var(--hairline); border-radius: var(--radius);
+            background: var(--surface); color: var(--ink); cursor: pointer; max-width: 220px; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; position: relative; }
+  .tagbtn::after { content: ""; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px; margin-top: -5px;
+                   border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+  .tagbtn.active { border-color: var(--accent); }
+  .tagmenu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 220px; max-width: 300px;
+             background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius);
+             box-shadow: 0 8px 24px var(--shadow); padding: 8px; }
+  .tagmenu .menuhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .tagmenu .seg button { padding: 4px 10px; font-size: 12.5px; }
+  .tagclear { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 12.5px; cursor: pointer; padding: 4px; }
+  .tagclear:disabled { color: var(--muted); cursor: default; }
+  .tagopts { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; }
+  .tagopts label { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 6px; cursor: pointer; font-size: 14px; }
+  .tagopts label:hover { background: var(--row-hover); }
+  .tagopts input { accent-color: var(--accent); margin: 0; }
+  .tagopts .none { color: var(--muted); font-size: 13px; padding: 6px; }
 
   /* expandable detail */
   .detail { display: none; padding: 4px 16px 16px 15px; background: var(--detail-bg); }
@@ -179,7 +203,19 @@
   <div class="controls">
     <div class="seg" id="ownerSeg" role="group" aria-label="Filter by person"></div>
     <input type="search" id="q" placeholder="Search description or merchant…" />
-    <select id="tagFilter" aria-label="Filter by tag"><option value="">All tags</option></select>
+    <div class="tagpick" id="tagPick">
+      <button type="button" class="tagbtn" id="tagBtn" aria-haspopup="true" aria-expanded="false" aria-controls="tagMenu">All tags</button>
+      <div class="tagmenu" id="tagMenu" hidden>
+        <div class="menuhead">
+          <div class="seg" id="tagMode" role="group" aria-label="Match transactions with">
+            <button type="button" data-mode="any" aria-pressed="true" title="Has at least one selected tag">Any</button>
+            <button type="button" data-mode="all" aria-pressed="false" title="Has every selected tag">All</button>
+          </div>
+          <button type="button" class="tagclear" id="tagClear">Clear</button>
+        </div>
+        <div class="tagopts" id="tagOpts" role="group" aria-label="Tags"></div>
+      </div>
+    </div>
     <input type="date" id="start" aria-label="From date" />
     <input type="date" id="end" aria-label="To date" />
   </div>
@@ -195,7 +231,7 @@
 let USERS = [{ key: "me", label: "Me" }, { key: "spouse", label: "Spouse" }];
 const colorOf = k => { const i = USERS.findIndex(u => u.key === k); return i < 0 ? "var(--muted)" : `var(--u${i % 6})`; };
 const labelOf = k => USERS.find(u => u.key === k)?.label ?? k;
-let state = { owner: "all", q: "", start: "", end: "", tag: "" };
+let state = { owner: "all", q: "", start: "", end: "", tags: [], tagMode: "any" };
 let openRows = new Set();          // plaid_txn_id of expanded rows (survives re-render)
 let current = new Map();           // plaid_txn_id -> txn object (for tag edits)
 let allTags = [];
@@ -225,7 +261,8 @@ async function load() {
   if (state.q) p.set("q", state.q);
   if (state.start) p.set("start", state.start);
   if (state.end) p.set("end", state.end);
-  if (state.tag) p.set("tag", state.tag);
+  for (const t of state.tags) p.append("tag", t);
+  if (state.tags.length > 1 && state.tagMode === "all") p.set("tag_mode", "all");
   p.set("limit", "500");
 
   let txns;
@@ -239,7 +276,7 @@ async function load() {
     offline = true; banner(true);
     txns = SAMPLE.filter(t =>
       (state.owner === "all" || t.owner === state.owner) &&
-      (!state.tag || (t.tags || []).includes(state.tag)));
+      matchesTags(t.tags || []));
     allTags = [...new Set(SAMPLE.flatMap(t => t.tags || []))].sort();
     populateTagFilter();
   }
@@ -253,11 +290,36 @@ async function refreshTags() {
   } catch {}
 }
 
+function matchesTags(tags) {
+  if (!state.tags.length) return true;
+  return state.tagMode === "all" ? state.tags.every(t => tags.includes(t)) : state.tags.some(t => tags.includes(t));
+}
+
 function populateTagFilter() {
-  const sel = document.getElementById("tagFilter");
-  sel.innerHTML = `<option value="">All tags</option>` +
-    allTags.map(t => `<option value="${escapeAttr(t)}">${escapeHtml(t)}</option>`).join("");
-  sel.value = state.tag;
+  // Keep selected tags listed even if no transaction carries them any more, so they can be unticked.
+  const names = [...new Set([...allTags, ...state.tags])].sort((a, b) => a.localeCompare(b));
+  const html = names.length
+    ? names.map(t => `<label><input type="checkbox" value="${escapeAttr(t)}" ${state.tags.includes(t) ? "checked" : ""} />${escapeHtml(t)}</label>`).join("")
+    : `<div class="none">No tags yet — use “+ tag” on a transaction.</div>`;
+  const opts = document.getElementById("tagOpts");
+  if (opts.dataset.html !== html) { opts.innerHTML = html; opts.dataset.html = html; }   // don't steal focus mid-menu
+  renderTagControls();
+}
+
+function renderTagControls() {
+  const n = state.tags.length;
+  const btn = document.getElementById("tagBtn");
+  btn.textContent = !n ? "All tags" : n === 1 ? state.tags[0] : `${n} tags · ${state.tagMode}`;
+  btn.title = n ? `Tags (${state.tagMode}): ${state.tags.join(", ")}` : "";
+  btn.classList.toggle("active", n > 0);
+  for (const b of document.querySelectorAll("#tagMode button")) b.setAttribute("aria-pressed", b.dataset.mode === state.tagMode);
+  document.getElementById("tagClear").disabled = !n;
+}
+
+function setTags(tags) {
+  state.tags = tags;
+  populateTagFilter();
+  load();
 }
 
 function banner(show) {
@@ -290,7 +352,8 @@ function txnHTML(t) {
   const merchant = t.merchant_name || t.name || "—";
   const isOpen = openRows.has(t.plaid_txn_id);
   const tagChips = (t.tags || []).map(tg =>
-    `<span class="tag" data-tag="${escapeAttr(tg)}">${escapeHtml(tg)}</span>`).join("");
+    `<span class="tag${state.tags.includes(tg) ? " sel" : ""}" data-tag="${escapeAttr(tg)}" title="Filter by ${escapeAttr(tg)}">${escapeHtml(tg)}</span>`).join("") +
+    `<button type="button" class="tag addtag" data-addtag aria-label="Add a tag to ${escapeAttr(merchant)}">+ tag</button>`;
   const meta = [`<span>${escapeHtml(labelOf(t.owner))}</span>`];
   if (t.category) meta.push(`<span>${escapeHtml(titleCase(t.category))}</span>`);
   if (t.pending) meta.push(`<span class="chip pending">Pending</span>`);
@@ -351,10 +414,17 @@ const feed = document.getElementById("feed");
 feed.addEventListener("click", (e) => {
   const filterTag = e.target.closest(".tag[data-tag]");
   if (filterTag && !e.target.closest(".detail")) {         // row tag chip → filter by it
-    e.stopPropagation();
-    state.tag = filterTag.dataset.tag;
-    document.getElementById("tagFilter").value = state.tag;
-    load(); return;
+    e.stopPropagation();                                    // add it to the tag filter
+    const tg = filterTag.dataset.tag;
+    if (!state.tags.includes(tg)) setTags([...state.tags, tg]);
+    return;
+  }
+  const addTag = e.target.closest("[data-addtag]");
+  if (addTag) {                                             // "+ tag": open the row, focus its input
+    const txnEl = addTag.closest(".txn");
+    if (!openRows.has(txnEl.dataset.txnid)) toggle(txnEl);
+    txnEl.querySelector(".taginput").focus();
+    return;
   }
   const removeBtn = e.target.closest("[data-removetag]");
   if (removeBtn) {                                          // remove a tag
@@ -374,7 +444,7 @@ feed.addEventListener("keydown", (e) => {
     if (val) {
       const tags = [...(txn.tags || [])];
       if (!tags.some(x => x.toLowerCase() === val.toLowerCase())) tags.push(val);
-      saveTags(txn, tags);
+      saveTags(txn, tags, { refocus: true });
     }
     e.target.value = "";
   }
@@ -393,10 +463,18 @@ function toggle(txnEl) {
   txnEl.querySelector(".row").setAttribute("aria-expanded", openRows.has(id));
 }
 
-async function saveTags(txn, tags) {
+function focusTagInput(txnId) {
+  const el = [...feed.querySelectorAll(".txn")].find(x => x.dataset.txnid === txnId);
+  el?.querySelector(".taginput")?.focus();
+}
+
+async function saveTags(txn, tags, { refocus = false } = {}) {
+  const rerender = () => { render([...current.values()]); if (refocus) focusTagInput(txn.plaid_txn_id); };
   txn.tags = tags;                                          // optimistic
-  render([...current.values()]);
-  if (offline || txn.id == null) return;                    // preview mode: local only
+  rerender();
+  if (offline || txn.id == null) {                          // preview mode: local only
+    allTags = [...new Set([...allTags, ...tags])].sort(); populateTagFilter(); return;
+  }
   try {
     const res = await fetch(`/transactions/${txn.id}/tags`, {
       method: "PUT", headers: { "Content-Type": "application/json" },
@@ -406,7 +484,7 @@ async function saveTags(txn, tags) {
     const data = await res.json();
     txn.tags = data.tags;
     refreshTags();
-    render([...current.values()]);
+    rerender();
   } catch (e) {
     load();                                                 // revert to server truth on failure
   }
@@ -429,7 +507,23 @@ document.getElementById("ownerSeg").addEventListener("click", e => {
 });
 let deb;
 document.getElementById("q").addEventListener("input", e => { clearTimeout(deb); deb = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250); });
-document.getElementById("tagFilter").addEventListener("change", e => { state.tag = e.target.value; load(); });
+// tag filter dropdown
+const tagBtn = document.getElementById("tagBtn"), tagMenu = document.getElementById("tagMenu");
+function setMenu(open) { tagMenu.hidden = !open; tagBtn.setAttribute("aria-expanded", open); }
+tagBtn.addEventListener("click", () => setMenu(tagMenu.hidden));
+document.addEventListener("click", e => { if (!e.target.closest("#tagPick")) setMenu(false); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !tagMenu.hidden) { setMenu(false); tagBtn.focus(); } });
+document.getElementById("tagOpts").addEventListener("change", e => {
+  const boxes = [...document.querySelectorAll("#tagOpts input:checked")].map(b => b.value);
+  state.tags = boxes; renderTagControls(); load();
+});
+document.getElementById("tagMode").addEventListener("click", e => {
+  const b = e.target.closest("button[data-mode]");
+  if (!b || b.dataset.mode === state.tagMode) return;
+  state.tagMode = b.dataset.mode; renderTagControls();
+  if (state.tags.length > 1) load();
+});
+document.getElementById("tagClear").addEventListener("click", () => setTags([]));
 document.getElementById("start").addEventListener("change", e => { state.start = e.target.value; load(); });
 document.getElementById("end").addEventListener("change", e => { state.end = e.target.value; load(); });
 
