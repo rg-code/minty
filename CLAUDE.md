@@ -53,6 +53,8 @@ Local (dev machine):
 - Single test: `.venv/bin/python -m pytest tests/test_link.py -k overflow`
   (tests use dummy creds and fakes for Plaid/Postgres; no network, no `.env`)
 
+**Current status and to-do: `docs/STATUS.md`. Read it first when resuming work.**
+
 Workers port (in progress, `docs/serverless-plan.md`; `src/`, `d1/migrations/`, `test/`):
 - Install: `npm ci` (Node 22+)
 - Tests: `npm test` (vitest inside workerd, real local D1; Plaid never called)

@@ -112,7 +112,7 @@ Docker, no always-on machine and no Tailscale. See [docs/serverless-plan.md](doc
 Phases P1–P3 are in place: the dashboard, tags, bank linking (Plaid Link, including Reconnect
 for banks that need a new login) and the hourly cron sync all run on the Worker, behind
 Cloudflare Access. Each household deploys its own fork via Cloudflare Workers Builds
-(`npm run deploy`). See [SETUP.md](SETUP.md).
+(`npm run deploy`). See [SETUP.md](SETUP.md). Progress and next steps: [docs/STATUS.md](docs/STATUS.md).
 
     npm ci
     npm test                                            # workerd + local D1, no network
