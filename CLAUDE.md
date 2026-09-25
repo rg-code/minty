@@ -60,8 +60,17 @@ Workers port (in progress, `docs/serverless-plan.md`; `src/`, `d1/migrations/`, 
 - Local DB: `npm run db:migrate:local && npm run db:seed:local`
 - Run locally: `npx wrangler dev --var MINTY_DEV_NO_AUTH:1` then http://localhost:8787
   (the flag skips Cloudflare Access and is only honoured for localhost requests)
+- Local cron sync: start with `--test-scheduled`, then
+  `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=17+*+*+*+*"`
+- Plaid Sandbox end-to-end: `node scripts/sandbox-e2e.ts`. It reads `.dev.vars`, so the user
+  runs it, not Claude.
+- Fernet vectors shared by both test suites: `scripts/make-fernet-vectors*.{py,ts}` →
+  `test/fixtures/fernet-vectors.json` (test key only).
 - The Python app and the Worker share `app/static` and the same API paths/shapes. Keep them
   in step until the P4 cutover. Schema changes for the Worker go in a new `d1/migrations/NNNN_*.sql`.
+- Worker sync (`src/sync.ts`): one D1 batch per Plaid page (cursor advances with its page);
+  a page budget per run (`SYNC_MAX_PAGES_PER_RUN`). Transient Plaid errors retry next run;
+  only item-level errors change `items.status`. Sync runs only from the cron trigger.
 
 Deploy host (Immich box):
 - Start / rebuild: `docker compose up -d --build`

@@ -148,9 +148,4 @@ describe("routing", () => {
   it("405s a wrong method on an API path", async () => {
     expect((await call("/transactions", { method: "DELETE" })).status).toBe(405);
   });
-
-  it("answers bank linking with a clear 501 until P2", async () => {
-    const r = await call("/link/token", { method: "POST", body: "{}" });
-    expect(r.status).toBe(501);
-  });
 });

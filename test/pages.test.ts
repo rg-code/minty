@@ -31,6 +31,13 @@ describe("static pages", () => {
     expect(head).toMatch(/<script>[^<]*minty-theme[^<]*<\/script>\s*<style>/);   // no light flash
   });
 
+  it("connect page sends the institution name and can reconnect login_required banks", async () => {
+    const { html } = await page("/connect");
+    expect(html).toContain('id="reconnect"');
+    expect(html).toContain('"/link/token/update"');
+    expect(html).toContain("institution_name: metadata?.institution?.name");
+  });
+
   it("routes API paths to the Worker (Access check applies)", async () => {
     const r = await SELF.fetch("https://minty.example.workers.dev/transactions");
     expect(r.status).toBe(403);

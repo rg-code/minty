@@ -106,13 +106,18 @@ uv venv .venv && uv pip install -p .venv/bin/python -r requirements-dev.txt
 
 Minty is being ported to one Cloudflare Worker plus a D1 database per household. It needs no
 Docker, no always-on machine and no Tailscale. See [docs/serverless-plan.md](docs/serverless-plan.md).
-Phase P1 is in place: the dashboard, the read API and tag editing run on the Worker, behind
-Cloudflare Access. Bank linking and sync come in P2, deploy tooling in P3.
+Phases P1 and P2 are in place: the dashboard, tags, bank linking (Plaid Link, including
+Reconnect for banks that need a new login) and the hourly cron sync all run on the Worker, behind
+Cloudflare Access. Deploy tooling comes in P3.
 
     npm ci
     npm test                                            # workerd + local D1, no network
     npm run db:migrate:local && npm run db:seed:local   # demo data
     npx wrangler dev --var MINTY_DEV_NO_AUTH:1          # http://localhost:8787
+
+Against Plaid Sandbox: put Sandbox keys and a `TOKEN_ENC_KEY` in `.dev.vars` (see
+`.dev.vars.example`), start `npx wrangler dev --test-scheduled`, then run `node scripts/sandbox-e2e.ts`.
+To run the cron sync by hand locally: `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=17+*+*+*+*"`.
 
 ## License
 

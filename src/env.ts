@@ -7,7 +7,10 @@ export interface Env {
 
   MINTY_USERS?: string;
   PLAID_ENV?: string;
+  PLAID_REDIRECT_URI?: string;
   TRIAL_ITEM_CAP?: string;
+  /** Plaid pages synced per cron run (each = 1 Plaid call + 1 D1 batch). Default 10. */
+  SYNC_MAX_PAGES_PER_RUN?: string;
 
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;

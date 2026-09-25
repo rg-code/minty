@@ -56,6 +56,13 @@
   .status { margin-top:16px; font-size:13.5px; color:var(--muted); min-height:1.2em; text-align:center; }
   .status.ok { color:var(--ok); } .status.err { color:var(--err); }
   .status a { color:inherit; }
+  .reconnect { border:1px solid var(--err); border-radius:var(--radius); padding:10px 12px; margin-bottom:18px; font-size:13px; }
+  .reconnect .title { font-weight:600; color:var(--err); margin-bottom:6px; }
+  .reconnect .line { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .reconnect .line + .line { margin-top:6px; }
+  .reconnect button { font:inherit; font-size:12.5px; font-weight:600; padding:5px 10px; border-radius:8px; cursor:pointer;
+                      border:1px solid var(--hairline); background:var(--surface); color:var(--ink); }
+  .reconnect button:disabled { opacity:.45; cursor:not-allowed; }
   a.back { display:block; text-align:center; margin-top:18px; font-size:13px; color:var(--muted); }
 </style>
 </head>
@@ -72,6 +79,7 @@
   <div class="owners" id="owners" role="group" aria-label="Account owner"></div>
 
   <div class="cap" id="cap" hidden></div>
+  <div class="reconnect" id="reconnect" hidden></div>
 
   <button class="connect" id="connect">Connect with Plaid</button>
   <div class="status" id="status"></div>
@@ -118,6 +126,42 @@ document.getElementById("owners").addEventListener("click", e => {
   renderOwners(); renderCapacity();
 });
 
+// Banks that need you to sign in again (status login_required): repair them with Link update mode.
+async function loadReconnect() {
+  const box = document.getElementById("reconnect");
+  let items = [];
+  try { const r = await fetch("/items"); if (r.ok) items = (await r.json()).filter(i => i.status === "login_required"); } catch {}
+  box.hidden = !items.length;
+  const label = k => USERS.find(u => u.key === k)?.label ?? k;
+  box.innerHTML = items.length ? `<div class="title">Needs you to sign in again</div>` + items.map(i =>
+    `<div class="line"><span>${esc(i.institution_name || "Bank")} · ${esc(label(i.owner))}</span>` +
+    `<button type="button" data-reconnect="${i.id}">Reconnect</button></div>`).join("") : "";
+}
+
+document.getElementById("reconnect").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-reconnect]");
+  if (!b) return;
+  b.disabled = true;
+  setStatus("Preparing…");
+  try {
+    const itemId = Number(b.dataset.reconnect);
+    const res = await fetch("/link/token/update", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item_id: itemId }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const { link_token, plaid_account } = await res.json();
+    localStorage.setItem("plaid_link_token", link_token);
+    localStorage.setItem("plaid_link_account", plaid_account);
+    localStorage.setItem("plaid_link_update_item", String(itemId));
+    localStorage.removeItem("plaid_link_owner");
+    openLink(link_token, null, plaid_account, null, itemId);
+  } catch (err) {
+    setStatus("Couldn't start reconnect: " + err.message, "err");
+    b.disabled = false;
+  }
+});
+
 async function loadCapacity() {
   try {
     const r = await fetch("/capacity");
@@ -150,7 +194,10 @@ if (params.get("oauth_state_id")) {
   const savedToken = localStorage.getItem("plaid_link_token");
   const savedOwner = localStorage.getItem("plaid_link_owner");
   const savedAccount = localStorage.getItem("plaid_link_account");
-  if (savedToken && savedOwner && savedAccount) {
+  const savedUpdateItem = localStorage.getItem("plaid_link_update_item");
+  if (savedToken && savedAccount && savedUpdateItem) {
+    openLink(savedToken, null, savedAccount, window.location.href, Number(savedUpdateItem));
+  } else if (savedToken && savedOwner && savedAccount) {
     openLink(savedToken, savedOwner, savedAccount, window.location.href);
   } else {
     setStatus("Could not resume the connection. Please start again.", "err");
@@ -172,6 +219,7 @@ connectBtn.addEventListener("click", async () => {
     localStorage.setItem("plaid_link_token", link_token);
     localStorage.setItem("plaid_link_owner", owner);
     localStorage.setItem("plaid_link_account", plaid_account);
+    localStorage.removeItem("plaid_link_update_item");
 
     openLink(link_token, owner, plaid_account, null);
   } catch (e) {
@@ -180,20 +228,30 @@ connectBtn.addEventListener("click", async () => {
   }
 });
 
-function openLink(token, forOwner, plaidAccount, receivedRedirectUri) {
+const LINK_KEYS = ["plaid_link_token", "plaid_link_owner", "plaid_link_account", "plaid_link_update_item"];
+
+// updateItemId set = update mode (reconnect): Plaid repairs the existing Item; nothing to exchange.
+function openLink(token, forOwner, plaidAccount, receivedRedirectUri, updateItemId = null) {
   const handler = Plaid.create({
     token,
     receivedRedirectUri,
-    onSuccess: async (public_token) => {
+    onSuccess: async (public_token, metadata) => {
+      if (updateItemId !== null) {
+        LINK_KEYS.forEach(k => localStorage.removeItem(k));
+        setStatus("Reconnected. It will refresh on the next hourly sync.", "ok");
+        loadReconnect();
+        return;
+      }
       setStatus("Linking and pulling transactions…");
       try {
         const res = await fetch("/link/exchange", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ owner: forOwner, plaid_account: plaidAccount, public_token }),
+          body: JSON.stringify({ owner: forOwner, plaid_account: plaidAccount, public_token,
+                                 institution_name: metadata?.institution?.name ?? null }),
         });
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
-        ["plaid_link_token","plaid_link_owner","plaid_link_account"].forEach(k => localStorage.removeItem(k));
+        LINK_KEYS.forEach(k => localStorage.removeItem(k));
         setStatus(data.status === "good"
           ? "Connected. Transactions are syncing." : "Connected (status: " + data.status + ").", "ok");
         loadCapacity();
@@ -207,6 +265,7 @@ function openLink(token, forOwner, plaidAccount, receivedRedirectUri) {
       if (err) setStatus("Link closed: " + (err.error_message || err.error_code || "cancelled"), "err");
       else setStatus("");
       connectBtn.disabled = false;
+      loadReconnect();
     },
   });
   handler.open();
@@ -230,7 +289,7 @@ function openLink(token, forOwner, plaidAccount, receivedRedirectUri) {
   });
 })();
 
-loadUsers().then(loadCapacity);
+loadUsers().then(() => { loadCapacity(); loadReconnect(); });
 </script>
 </body>
 </html>

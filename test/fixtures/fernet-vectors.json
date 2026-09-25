@@ -1,0 +1,49 @@
+{
+  "_comment": "Fernet cross-compatibility vectors. TEST KEY AND FAKE TOKENS ONLY.",
+  "key": "uJ2Cr7n5n8QXZd8r6l0eH8tq3aK4bmFvK4H2Q9F3Wn8=",
+  "other_key": "dGhpcy1pcy1hbm90aGVyLXRlc3Qta2V5LTMyYnl0ZXM=",
+  "python_tokens": [
+    {
+      "plaintext": "access-sandbox-8ab976e6-64bc-4b38-98f7-731e7a349970",
+      "token": "gAAAAABqtbCX55Go5xo3n-eM7EuRla89kl7wiM72NubSpadO9xHZuUBa3YWI7WsQlFV79bDLmM67iRGqAjLhWPuztVeqTH-3XoP-INJ0lv3ILKqBrrqj1XFOJHgvbSv_LS0H81l9ouBzEaa7zyRZ0IF11dLcMo2yog=="
+    },
+    {
+      "plaintext": "access-production-00000000-1111-2222-3333-444444444444",
+      "token": "gAAAAABqtbCXfXXbgFzamlxP6avwQm3adEGUL120cwqUz0NdR-2GXmWSmx8pKxl-5nR4EjvoFHw2-GFVXCXuWC-yrVZkro58C2nTgRG1u4XC3oFzsUmINLkRqxojrApccVhRnmOSwzydS7l5ZPEwOAx430tT5q_vEw=="
+    },
+    {
+      "plaintext": "",
+      "token": "gAAAAABqtbCX1md5QIIwjWEkhdZeuTfw9EBF0iElvxUiRPHOBWlhDvLIIpI4bDE8a48Mr94mQycK5rvsALkTR2xrg2uAHkf2Dw=="
+    },
+    {
+      "plaintext": "xxxxxxxxxxxxxxxx",
+      "token": "gAAAAABqtbCXZaJFvl5ueibc1m_m2U39BXOOTmhSU2hVFmX2toovBp2yV99d7W9k1ukMJGPN6UOgYxTT0ojtsB2Hs-eqobDoeAp2BU2TNk6MEaDAOhwQ1eA="
+    },
+    {
+      "plaintext": "unicode ✓ café",
+      "token": "gAAAAABqtbCXK0dG4GWYk-5JAhsNmkJ403pA0sOaZTf3PPqwt2DKIm1FEA3b6ozqEy_B3xCDTsziucU2iTYl0wdEagHbwefPQ_ffY7npXgLeV_39DybNcAk="
+    }
+  ],
+  "worker_tokens": [
+    {
+      "plaintext": "access-sandbox-8ab976e6-64bc-4b38-98f7-731e7a349970",
+      "token": "gAAAAABqtbChauspOrjYzL3mdQyqtMNdM3Q-ikG_q5T-lhQaP3qRusbliPiLIfo9XcRJfCUe8fALkL34u7mQL6m04bbCTmEF6XFlfNCiiqajobfm4rf-sgu2ZCiN5WtJo0VjN7NDcsa5XvH1QOu1hpxHjfV9x3YPmw=="
+    },
+    {
+      "plaintext": "access-production-00000000-1111-2222-3333-444444444444",
+      "token": "gAAAAABqtbChBMI13X56-zQYPE7svipDNILxRdQUI-OnjaQQZBDeObO0QHSBFYcay2xIygbeIPVq-efUweKxAdyR_emaUvP2Wi-C97AqL8CCHH0JlrhUp9GR_5SSC80sXOWyKMDBgMPgVemMExdhkpMbiPMzwBQ7og=="
+    },
+    {
+      "plaintext": "",
+      "token": "gAAAAABqtbChHcOjuk3LPhImblZld8nTppQuCZ_q_gQNbya2YyWT30OjtZfsneJkCUr5-kcgiDXaggyGjIkScXs8Y-55DVO47w=="
+    },
+    {
+      "plaintext": "xxxxxxxxxxxxxxxx",
+      "token": "gAAAAABqtbChA0rrjrkDy0a5Cdr4Cdzm-5HhLi2mDOEmvUWUZa3h4JpLIqJ6Ym8a6w9iG-0XSi_T-KJWtuqAtvWW3T-I3EONpNui6dFgIyXRkib7Qqy4nxo="
+    },
+    {
+      "plaintext": "unicode ✓ café",
+      "token": "gAAAAABqtbChN-w8pgXD4W4YftmvSyHSORE9o-yjP5uIkV-b74-bBJQvf3BohC4FDE4_QNTOja77q3VrFqzNPP-9BD6nod3O6xKnSxbtbhhWcmQ2BMcV_-Y="
+    }
+  ]
+}
