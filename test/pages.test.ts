@@ -38,6 +38,13 @@ describe("static pages", () => {
     expect(html).toContain("institution_name: metadata?.institution?.name");
   });
 
+  it("add-user page switches to Cloudflare instructions when /status answers", async () => {
+    const { html } = await page("/add-user");
+    expect(html).toContain('fetch("/status")');
+    expect(html).toContain("npx wrangler secret put PLAID_CLIENT_ID_");
+    expect(html).toContain("docker compose up -d --force-recreate api");       // Python app instructions kept
+  });
+
   it("routes API paths to the Worker (Access check applies)", async () => {
     const r = await SELF.fetch("https://minty.example.workers.dev/transactions");
     expect(r.status).toBe(403);

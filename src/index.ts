@@ -4,6 +4,7 @@ import { ConfigError, loadConfig, type Config } from "./config";
 import { HttpError, json, unprocessable } from "./http";
 import * as data from "./routes/data";
 import * as link from "./routes/link";
+import * as setup from "./routes/status";
 import { PlaidError } from "./plaid";
 import { runSyncAll } from "./sync";
 
@@ -12,10 +13,11 @@ import { runSyncAll } from "./sync";
  * Sync runs only from the cron trigger (scheduled below); there is deliberately no HTTP sync endpoint. */
 
 type Handler = (c: {
-  env: Env; config: Config; request: Request; url: URL; params: string[]; ctx: ExecutionContext;
+  env: Env; config: Config; request: Request; url: URL; params: string[]; ctx: ExecutionContext; email: string;
 }) => Promise<Response>;
 
 const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
+  ["GET", /^\/status$/, ({ env, config, email }) => setup.status(env, config, email)],
   ["GET", /^\/users$/, ({ env, config }) => data.users(env, config)],
   ["GET", /^\/items$/, ({ env }) => data.items(env)],
   ["GET", /^\/accounts$/, ({ env, url }) => data.accounts(env, url)],
@@ -49,7 +51,7 @@ export default {
 
     try {
       const config = loadConfig(env);
-      return await hit[2]({ env, config, request, url, params: hit[1]!.slice(1), ctx });
+      return await hit[2]({ env, config, request, url, params: hit[1]!.slice(1), ctx, email: auth.email });
     } catch (e) {
       if (e instanceof HttpError) return json({ detail: e.detail }, e.status);
       if (e instanceof ConfigError) return json({ detail: e.message }, 500);
