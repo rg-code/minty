@@ -1,0 +1,45 @@
+# Tests only. Deploys happen on Cloudflare (Workers Builds), never from GitHub Actions.
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  worker:
+    name: Worker (vitest in workerd + typecheck)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Deployable secret templates never weaken auth
+        run: "! grep -n MINTY_DEV_NO_AUTH .dev.vars.example"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  python:
+    name: Python app (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q

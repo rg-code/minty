@@ -6,7 +6,8 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --test-scheduled --var MINTY_DEV_NO_AUTH:1",
+    "deploy": "node scripts/deploy.mjs",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:seed:local": "node scripts/seed.mjs > .wrangler/seed.sql && wrangler d1 execute DB --local --file .wrangler/seed.sql",
     "test": "vitest run",

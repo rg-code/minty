@@ -135,3 +135,21 @@ GitHub Actions runs **only tests** on pull requests. That's a normal CI use, all
 3. **Default cron frequency.** Suggest hourly.
 4. **Amounts as whole cents in D1** (API shape unchanged). OK?
 5. **When to make the repo public:** now in P0 (suggested; the history scan is clean) or later, at P3.
+
+## 8. Decisions made during implementation
+
+- **P2: transient Plaid errors retry.** 5xx errors, rate limits, `PRODUCT_NOT_READY` and network
+  failures keep the item's status and retry on the next run. Only item-level errors set
+  `login_required` or `error`. (The Python app marked every failure `error`, which stopped
+  that item syncing for good.)
+- **P3: fork + Cloudflare "Import a repository", not the Deploy button.** The button *clones*
+  instead of forking, commits each household's choices (like the database id) into
+  `wrangler.jsonc`, and has no update path. It also turns `.dev.vars.example` into pre-filled
+  secret prompts, which could deploy a dev-only auth bypass. With a fork, "Sync fork" plus
+  Workers Builds is the update path.
+- **P3: no per-household values in `wrangler.jsonc`.** D1 is found by `database_name` (created
+  by the first deploy, with no id in the file). Household settings are dashboard variables,
+  kept across deploys by `keep_vars`, or secrets. Unset settings use code defaults, and Access
+  fails closed.
+- **P3: setup checks in the app instead of a CLI doctor.** `GET /status` (behind Access) is shown
+  on `/add-user`, so a household can see what's missing without a terminal.

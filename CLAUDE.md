@@ -58,10 +58,18 @@ Workers port (in progress, `docs/serverless-plan.md`; `src/`, `d1/migrations/`, 
 - Tests: `npm test` (vitest inside workerd, real local D1; Plaid never called)
 - Types: `npm run typecheck`
 - Local DB: `npm run db:migrate:local && npm run db:seed:local`
-- Run locally: `npx wrangler dev --var MINTY_DEV_NO_AUTH:1` then http://localhost:8787
+- Run locally: `npm run dev` then http://localhost:8787 (passes `--var MINTY_DEV_NO_AUTH:1`)
   (the flag skips Cloudflare Access and is only honoured for localhost requests)
-- Local cron sync: start with `--test-scheduled`, then
+- Local cron sync (`npm run dev` enables the trigger):
   `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=17+*+*+*+*"`
+- `wrangler.jsonc` is shared by every household's fork: never add per-household values to it
+  (no `database_id`, no `vars`). Household settings are dashboard variables (kept by
+  `keep_vars`) or secrets. That's what keeps "Sync fork" conflict-free. New settings need a
+  code default, a line in the `wrangler.jsonc` header comment, and a `/status` check if required.
+- Deploy: `npm run deploy` (`scripts/deploy.mjs`, run by Workers Builds): migrate then deploy,
+  or deploy first on the very first run (it creates D1). Onboarding for households is SETUP.md.
+- Never put `MINTY_DEV_NO_AUTH` in `.dev.vars.example`: the Deploy button turns that file into
+  secret prompts. CI checks this.
 - Plaid Sandbox end-to-end: `node scripts/sandbox-e2e.ts`. It reads `.dev.vars`, so the user
   runs it, not Claude.
 - Fernet vectors shared by both test suites: `scripts/make-fernet-vectors*.{py,ts}` →
