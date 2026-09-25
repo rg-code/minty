@@ -12,7 +12,9 @@
 //       ALLOWED_LOGINS      ""                     optional extra allow-list of Access emails
 //       PLAID_REDIRECT_URI  ""                     only for OAuth banks in mobile webviews (HTTPS)
 //       TRIAL_ITEM_CAP      "10"                   Plaid Trial logins per credential set
-//       SYNC_MAX_PAGES_PER_RUN "10"                Plaid pages (250 transactions each) per cron run
+//       SYNC_MAX_PAGES_PER_RUN "10"                Plaid pages (100 transactions each) per cron run
+//       SYNC_MAX_BYTES_PER_RUN "150000"            page text per run (median ~8 ms CPU; free plan allows 10)
+//                                                  on Workers Paid: 20000000 bytes / 50 pages
 //   * secrets (Plaid keys, TOKEN_ENC_KEY) likewise live only in the dashboard / `wrangler secret put`,
 //     or in .dev.vars locally. See .dev.vars.example.
 {

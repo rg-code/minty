@@ -9,7 +9,9 @@ import { type ItemRow, syncItem } from "../sync";
  * /link/exchange (stores the encrypted access token, starts the first sync in the background).
  * /link/token/update opens Link in update mode to repair an Item (e.g. login_required). */
 
-const FIRST_SYNC_PAGES = 3;          // the rest of the backfill happens on the next cron runs
+// First sync inside the /link/exchange request, which also does the token exchange and has the
+// same 10 ms CPU limit on the free plan: one page. The rest of the backfill happens on cron runs.
+const FIRST_SYNC = { pages: 1, bytes: 150_000 };
 const HISTORY_DAYS = 730;            // ask for up to 24 months (Plaid's default is 90 days)
 
 async function body(request: Request): Promise<Record<string, unknown>> {
@@ -106,7 +108,7 @@ export async function exchange(env: Env, config: Config, request: Request, ctx: 
   ).bind(owner, plaidAccount, resp.item_id, enc, institution).first<ItemRow>();
 
   // Initial backfill in the background; the response doesn't wait for it.
-  ctx.waitUntil(syncItem(env, config, item!, { pages: FIRST_SYNC_PAGES }).catch((e) =>
+  ctx.waitUntil(syncItem(env, config, item!, { ...FIRST_SYNC }).catch((e) =>
     console.error(`first sync of item ${item!.id} failed:`, e instanceof Error ? e.message : e)));
   return json({ item_id: item!.id, plaid_account: plaidAccount, status: item!.status });
 }

@@ -34,13 +34,10 @@ export function plaidHost(env: Env): string {
   return host;
 }
 
-export async function plaidPost<T>(
-  env: Env,
-  creds: { clientId: string; secret: string },
-  path: string,
-  body: Record<string, unknown>,
-): Promise<PlaidResult<T>> {
-  const res = await fetch(plaidHost(env) + path, {
+type Creds = { clientId: string; secret: string };
+
+function plaidFetch(env: Env, creds: Creds, path: string, body: Record<string, unknown>): Promise<Response> {
+  return fetch(plaidHost(env) + path, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -50,18 +47,35 @@ export async function plaidPost<T>(
     },
     body: JSON.stringify(body),
   });
+}
+
+function errorFrom(res: Response, path: string, text: string): PlaidError {
+  let parsed: any = {};
+  try { parsed = JSON.parse(text); } catch { /* not JSON */ }
+  return new PlaidError(res.status, String(parsed.error_type ?? "API_ERROR"),
+    String(parsed.error_code ?? (res.ok ? "NON_JSON_RESPONSE" : "UNKNOWN")), parsed.request_id,
+    `Plaid ${path}: ${parsed.error_code ?? res.status}`);
+}
+
+export async function plaidPost<T>(env: Env, creds: Creds, path: string, body: Record<string, unknown>): Promise<PlaidResult<T>> {
+  const res = await plaidFetch(env, creds, path, body);
   const text = await res.text();
-  let parsed: any;
+  if (!res.ok) throw errorFrom(res, path, text);
   try {
-    parsed = JSON.parse(text);
+    return { body: JSON.parse(text) as T, text };
   } catch {
-    throw new PlaidError(res.status, "API_ERROR", "NON_JSON_RESPONSE", undefined, `Plaid ${path}: HTTP ${res.status}`);
+    throw errorFrom(res, path, text);
   }
-  if (!res.ok) {
-    throw new PlaidError(res.status, String(parsed.error_type ?? "API_ERROR"), String(parsed.error_code ?? "UNKNOWN"),
-      parsed.request_id, `Plaid ${path}: ${parsed.error_code ?? res.status}`);
-  }
-  return { body: parsed as T, text };
+}
+
+/** Success body as text, never parsed in the Worker. Used for /transactions/sync pages: SQLite
+ * unpacks them, which keeps Worker CPU per page low (the free plan allows 10 ms per run; measured
+ * on Cloudflare, JSON.parse alone is ~0.9 ms per 250-transaction page). Errors are parsed as usual. */
+export async function plaidPostText(env: Env, creds: Creds, path: string, body: Record<string, unknown>): Promise<string> {
+  const res = await plaidFetch(env, creds, path, body);
+  const text = await res.text();
+  if (!res.ok) throw errorFrom(res, path, text);
+  return text;
 }
 
 /** Item-level problems the user must fix by reconnecting the bank (Link update mode). */

@@ -43,7 +43,7 @@ describe("syncItem", () => {
     expect(await syncItem(E, config, item, { pages: 10 })).toBe("good");
 
     expect(plaid.calls.map((c) => [c.clientId, c.body.cursor])).toEqual([["cid_me_backup", undefined], ["cid_me_backup", "c1"]]);
-    expect(plaid.calls[0].body).toMatchObject({ access_token: "access-sandbox-secret", count: 250 });
+    expect(plaid.calls[0].body).toMatchObject({ access_token: "access-sandbox-secret", count: 100 });
     expect((await itemById(item.id)).txn_cursor).toBe("c2");
 
     const txns = await rows("SELECT * FROM transactions");
@@ -122,6 +122,64 @@ describe("syncItem", () => {
       page("c1b", true), page("c2", false));
     expect(await syncItem(E, config, item, { pages: 10 })).toBe("good");
     expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["c0", "c1", "c0", "c1b"]);
+  });
+
+  it("stops when the run's byte budget is spent, then resumes next run", async () => {
+    const item = await addItem();
+    const big = Array.from({ length: 50 }, (_, i) => txn(`b-${i}`, "a1"));
+    plaid.syncPages.push(page("c1", true, { accounts: [account("a1")], added: big }), page("c2", true), page("c3", false));
+    const budget = { pages: 10, bytes: 1_000 };                     // smaller than one page
+    expect(await syncItem(E, config, item, budget)).toBe("partial");
+    expect(plaid.calls).toHaveLength(1);                             // always at least one page
+    expect(budget.bytes).toBeLessThanOrEqual(0);
+    expect((await itemById(item.id)).txn_cursor).toBe("c1");
+    expect(await syncItem(E, config, (await itemById(item.id))!, { pages: 10, bytes: 1_000_000 })).toBe("good");
+    expect(plaid.calls.map((c) => c.body.cursor)).toEqual([undefined, "c1", "c2"]);
+  });
+
+  it("uses SYNC_MAX_BYTES_PER_RUN / SYNC_MAX_PAGES_PER_RUN for the cron budget", async () => {
+    await addItem();
+    plaid.syncPages.push(page("c1", true, { accounts: [account("a1")], added: [txn("t1", "a1")] }), page("c2", true), page("c3", false));
+    await runSyncAll({ ...E, SYNC_MAX_BYTES_PER_RUN: "1", SYNC_MAX_PAGES_PER_RUN: "10" });
+    expect(plaid.calls).toHaveLength(1);
+    plaid.calls = [];
+    await wipe(); await addItem();
+    plaid.syncPages = [page("c1", true), page("c2", true), page("c3", false)];
+    await runSyncAll({ ...E, SYNC_MAX_PAGES_PER_RUN: "2" });
+    expect(plaid.calls).toHaveLength(2);
+  });
+
+  it("leaves no scratch rows behind (full sync and budget cut-off)", async () => {
+    const item = await addItem();
+    plaid.syncPages.push(page("c1", true, { accounts: [account("a1")], added: [txn("t1", "a1")] }), page("c2", true));
+    expect(await syncItem(E, config, item, { pages: 2 })).toBe("partial");
+    expect(await rows("SELECT * FROM sync_pages")).toEqual([]);
+  });
+
+  it.each([
+    ["not JSON at all", "<html>oops</html>"],
+    ["JSON without a next_cursor", { added: [], has_more: false }],
+    ["a JSON string", "just text"],
+  ])("never moves the cursor or writes anything for a malformed page (%s)", async (_, body) => {
+    const item = await addItem({ cursor: "c5" });
+    plaid.syncPages.push(page("c6", true, { accounts: [account("a1")], added: [txn("t1", "a1")] }));
+    plaid.syncPages[0] = { body };
+    expect(await syncItem(E, config, item, { pages: 3 })).toBe("retry");
+    expect((await itemById(item.id))).toMatchObject({ txn_cursor: "c5", status: "good" });
+    expect(await rows("SELECT * FROM transactions")).toEqual([]);
+    expect(await rows("SELECT * FROM sync_pages")).toEqual([]);
+    expect(plaid.calls).toHaveLength(1);                             // stops; the next run retries
+  });
+
+  it("persists a large page (500 transactions) exactly", async () => {
+    const item = await addItem();
+    const added = Array.from({ length: 500 }, (_, i) => txn(`big-${i}`, i % 2 ? "a1" : "a2", { amount: i + 0.01 }));
+    plaid.syncPages.push(page("c1", false, { accounts: [account("a1"), account("a2")], added }));
+    expect(await syncItem(E, config, item, { pages: 1 })).toBe("good");
+    const [{ n, total }] = await rows("SELECT count(*) AS n, sum(amount_cents) AS total FROM transactions");
+    expect(n).toBe(500);
+    expect(total).toBe(Array.from({ length: 500 }, (_, i) => i * 100 + 1).reduce((a, b) => a + b, 0));
+    expect((await itemById(item.id)).txn_cursor).toBe("c1");
   });
 
   it("marks an item whose token doesn't decrypt as error, without calling Plaid", async () => {

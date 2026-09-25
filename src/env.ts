@@ -11,6 +11,8 @@ export interface Env {
   TRIAL_ITEM_CAP?: string;
   /** Plaid pages synced per cron run (each = 1 Plaid call + 1 D1 batch). Default 10. */
   SYNC_MAX_PAGES_PER_RUN?: string;
+  /** Page text synced per cron run, in bytes. Default 150,000 (median ~8 ms CPU measured; free plan allows 10). */
+  SYNC_MAX_BYTES_PER_RUN?: string;
 
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;

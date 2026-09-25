@@ -6,8 +6,11 @@
 // Migrations are tracked in d1_migrations, so re-running this is safe.
 import { spawnSync } from "node:child_process";
 
+// Extra flags are passed to every wrangler call, e.g. `npm run deploy -- --temporary`.
+const EXTRA = process.argv.slice(2);
+
 function wrangler(...args) {
-  const r = spawnSync("npx", ["wrangler", ...args], { encoding: "utf8", stdio: ["inherit", "pipe", "pipe"] });
+  const r = spawnSync("npx", ["wrangler", ...args, ...EXTRA], { encoding: "utf8", stdio: ["inherit", "pipe", "pipe"] });
   process.stdout.write(r.stdout ?? "");
   process.stderr.write(r.stderr ?? "");
   return { ok: r.status === 0, output: `${r.stdout ?? ""}\n${r.stderr ?? ""}` };
