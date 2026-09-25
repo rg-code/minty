@@ -4,6 +4,9 @@ A tiny self-hosted service that pulls transactions from your (and your spouse's)
 and cards via Plaid into one Postgres database, and shows them in a single web dashboard.
 Designed to run beside Immich in Docker and be reached privately over Tailscale.
 
+> **Want your own?** The Cloudflare Workers version needs no server: fork this repo and follow
+> [SETUP.md](SETUP.md). It runs on free plans, and your data stays in your own accounts.
+
 ## What it is
 - **api** — FastAPI service. Holds all Plaid secrets, serves the dashboard + connect page,
   and runs the sync on a background thread. The only thing that talks to Plaid.
@@ -106,9 +109,10 @@ uv venv .venv && uv pip install -p .venv/bin/python -r requirements-dev.txt
 
 Minty is being ported to one Cloudflare Worker plus a D1 database per household. It needs no
 Docker, no always-on machine and no Tailscale. See [docs/serverless-plan.md](docs/serverless-plan.md).
-Phases P1 and P2 are in place: the dashboard, tags, bank linking (Plaid Link, including
-Reconnect for banks that need a new login) and the hourly cron sync all run on the Worker, behind
-Cloudflare Access. Deploy tooling comes in P3.
+Phases P1–P3 are in place: the dashboard, tags, bank linking (Plaid Link, including Reconnect
+for banks that need a new login) and the hourly cron sync all run on the Worker, behind
+Cloudflare Access. Each household deploys its own fork via Cloudflare Workers Builds
+(`npm run deploy`). See [SETUP.md](SETUP.md).
 
     npm ci
     npm test                                            # workerd + local D1, no network

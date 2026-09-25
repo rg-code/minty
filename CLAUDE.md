@@ -62,6 +62,12 @@ Workers port (in progress, `docs/serverless-plan.md`; `src/`, `d1/migrations/`, 
   (the flag skips Cloudflare Access and is only honoured for localhost requests)
 - Local cron sync (`npm run dev` enables the trigger):
   `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=17+*+*+*+*"`
+- `wrangler.jsonc` is shared by every household's fork: never add per-household values to it
+  (no `database_id`, no `vars`). Household settings are dashboard variables (kept by
+  `keep_vars`) or secrets. That's what keeps "Sync fork" conflict-free. New settings need a
+  code default, a line in the `wrangler.jsonc` header comment, and a `/status` check if required.
+- Deploy: `npm run deploy` (`scripts/deploy.mjs`, run by Workers Builds): migrate then deploy,
+  or deploy first on the very first run (it creates D1). Onboarding for households is SETUP.md.
 - Never put `MINTY_DEV_NO_AUTH` in `.dev.vars.example`: the Deploy button turns that file into
   secret prompts. CI checks this.
 - Plaid Sandbox end-to-end: `node scripts/sandbox-e2e.ts`. It reads `.dev.vars`, so the user
