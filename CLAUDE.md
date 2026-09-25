@@ -76,9 +76,13 @@ Workers port (in progress, `docs/serverless-plan.md`; `src/`, `d1/migrations/`, 
   `test/fixtures/fernet-vectors.json` (test key only).
 - The Python app and the Worker share `app/static` and the same API paths/shapes. Keep them
   in step until the P4 cutover. Schema changes for the Worker go in a new `d1/migrations/NNNN_*.sql`.
-- Worker sync (`src/sync.ts`): one D1 batch per Plaid page (cursor advances with its page);
-  a page budget per run (`SYNC_MAX_PAGES_PER_RUN`). Transient Plaid errors retry next run;
-  only item-level errors change `items.status`. Sync runs only from the cron trigger.
+- Worker sync (`src/sync.ts`): one D1 batch per Plaid page (cursor advances with its page).
+  The Worker never parses a page: the text is bound once into `sync_pages` and SQLite unpacks
+  it. Each run has a byte and a page budget (`SYNC_MAX_BYTES_PER_RUN` / `SYNC_MAX_PAGES_PER_RUN`),
+  sized from measurements on Cloudflare against the free plan's 10 ms CPU limit (see
+  docs/serverless-plan.md §8). Don't add per-row work or JSON.parse on the page path, and never
+  bind pages as bytes (18 ms per page). Transient Plaid errors retry next run; only item-level
+  errors change `items.status`. Sync runs only from the cron trigger.
 
 Deploy host (Immich box):
 - Start / rebuild: `docker compose up -d --build`

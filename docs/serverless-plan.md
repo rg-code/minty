@@ -153,3 +153,25 @@ GitHub Actions runs **only tests** on pull requests. That's a normal CI use, all
   fails closed.
 - **P3: setup checks in the app instead of a CLI doctor.** `GET /status` (behind Access) is shown
   on `/add-user`, so a household can see what's missing without a terminal.
+- **Pre-deploy QA (temporary Cloudflare account, 2026-09-25): sync reworked for the free plan's
+  10 ms CPU limit.**
+  - *What was measured:* the real sync code on real D1, with realistic full-detail Plaid pages
+    and one real outbound call per page.
+  - *The problem:* the P2 design parsed each page and bound it to D1 three times. That cost
+    24 ms of CPU for one 250-transaction page and 91 ms for the default 10 pages, so it would
+    have been killed on Workers Free.
+  - *Where the CPU goes, per 388 KiB page:* network 0.4 ms, `text()` 0.5 ms, `JSON.parse`
+    0.9 ms, binding it to D1 as text 1.3–2.1 ms (as bytes: 18 ms, avoid).
+  - *The fix:* page text is bound once, into `sync_pages` (migration 0002), and SQLite
+    returns `next_cursor` / `has_more`, so the Worker never parses a page. Pages are 100
+    transactions. Each run also has a byte budget (`SYNC_MAX_BYTES_PER_RUN`, default 150 KB,
+    about one full-detail page).
+  - *Result:* the cron path measured 4–16 ms CPU per run (median 8 ms). A run that goes over
+    changes nothing, because each page commits atomically with its cursor, and it retries the
+    next hour.
+  - *Trade-off:* on the free plan, a new bank's history backfills at about 100 full-detail
+    transactions an hour. Workers Paid users should raise the budget (e.g. 20000000 bytes /
+    50 pages).
+- **Temporary accounts** (`wrangler … --temporary`) can deploy Workers and create D1, but they
+  have 0 cron triggers, one D1 database, and no D1 API access, so migrations can't run there.
+  They're for QA only; your real account is needed for cron and migrations.

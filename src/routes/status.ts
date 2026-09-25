@@ -9,7 +9,7 @@ import { json } from "../http";
  * /status, which is how the page knows which instructions to show. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql"];
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql"];
 
 const STALE_SYNC_HOURS = 3;          // cron runs hourly; allow a couple of misses
 

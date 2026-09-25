@@ -101,9 +101,12 @@ extras such as backup keys.
 Open **+ Add account**, choose whose account it is, and click **Connect with Plaid**. You sign in
 to your bank inside Plaid's window; Minty never sees your bank password.
 
-The first transactions arrive within a minute. The full history (up to 24 months) fills in over
-the next hourly syncs. If a bank later needs you to sign in again, **+ Add account** shows it
-with a **Reconnect** button.
+The first transactions arrive within a minute. On the free plan, the full history (up to 24
+months) then fills in about a hundred transactions per hourly sync, so a busy account can
+take a day or so. After that, each hourly sync is small. (On Workers Paid, $5/month, set the
+variables `SYNC_MAX_BYTES_PER_RUN` = `20000000` and `SYNC_MAX_PAGES_PER_RUN` = `50`, and the
+history arrives in an hour or two.) If a bank later needs you to sign in again, **+ Add account**
+shows it with a **Reconnect** button.
 
 ## 8. Get updates
 
@@ -128,7 +131,8 @@ and your settings, secrets and data are untouched.
   - `PLAID_REDIRECT_URI`: only needed for some banks when using Minty inside a phone app's
     built-in browser.
   - `TRIAL_ITEM_CAP`: defaults to 10.
-  - `SYNC_MAX_PAGES_PER_RUN`: defaults to 10. Raise it if you're on Workers Paid.
+  - `SYNC_MAX_BYTES_PER_RUN` / `SYNC_MAX_PAGES_PER_RUN`: how much each hourly sync does. The
+    defaults (150000 / 10) fit the free plan's 10 ms CPU limit. On Workers Paid, raise them.
 - **Something's wrong?** Check **+ Add user → Setup checks** first. Then look at
   **Workers & Pages → minty → Logs**, which show sync results by item number and never your
   data.
