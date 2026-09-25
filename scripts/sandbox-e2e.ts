@@ -3,7 +3,7 @@
 //
 //   1. .dev.vars (from .dev.vars.example) with Sandbox keys for PLAID_*_ME_PRIMARY and a TOKEN_ENC_KEY
 //   2. npm run db:migrate:local
-//   3. npx wrangler dev --test-scheduled            (in another terminal; .dev.vars sets MINTY_DEV_NO_AUTH=1)
+//   3. npm run dev                                  (in another terminal; local-only Access bypass + cron trigger)
 //   4. node scripts/sandbox-e2e.ts
 //
 // What it does: creates a Sandbox Item (no Link UI needed), exchanges it through the Worker's
@@ -57,7 +57,7 @@ const cron = () => fetch(`${W}/cdn-cgi/handler/scheduled?cron=17+*+*+*+*`).then(
 check((await worker("/healthz")).status === 200, `Worker is up at ${W}`);
 const me = (await worker("/users")).body?.find((u: any) => u.key === "me");
 check(!!me?.slots?.find((s: any) => s.account === "me_primary")?.configured, "Worker sees Sandbox keys for me_primary");
-check((await cron()) === 200, "cron trigger reachable (wrangler dev --test-scheduled)");
+check((await cron()) === 200, "cron trigger reachable (npm run dev)");
 if (failures) process.exit(1);
 
 // 1. Link: Sandbox public token -> Worker /link/exchange

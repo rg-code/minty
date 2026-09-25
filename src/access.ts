@@ -30,7 +30,7 @@ function isLocalhost(hostname: string): boolean {
 
 export async function checkAccess(request: Request, env: Env, getKey?: JWTVerifyGetKey): Promise<AccessResult> {
   if (env.MINTY_DEV_NO_AUTH === "1") {
-    // Local `wrangler dev` convenience; .dev.vars is never deployed. Refused for real hostnames.
+    // Local `npm run dev` convenience (passed with --var, never stored). Refused for real hostnames.
     return isLocalhost(new URL(request.url).hostname)
       ? { ok: true, email: "dev@localhost" }
       : { ok: false, detail: "MINTY_DEV_NO_AUTH is only honoured on localhost" };

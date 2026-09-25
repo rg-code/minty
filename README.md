@@ -113,10 +113,10 @@ Cloudflare Access. Deploy tooling comes in P3.
     npm ci
     npm test                                            # workerd + local D1, no network
     npm run db:migrate:local && npm run db:seed:local   # demo data
-    npx wrangler dev --var MINTY_DEV_NO_AUTH:1          # http://localhost:8787
+    npm run dev                                         # http://localhost:8787 (Access bypassed, localhost only)
 
 Against Plaid Sandbox: put Sandbox keys and a `TOKEN_ENC_KEY` in `.dev.vars` (see
-`.dev.vars.example`), start `npx wrangler dev --test-scheduled`, then run `node scripts/sandbox-e2e.ts`.
+`.dev.vars.example`), start `npm run dev`, then run `node scripts/sandbox-e2e.ts`.
 To run the cron sync by hand locally: `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=17+*+*+*+*"`.
 
 ## License

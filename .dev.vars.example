@@ -1,9 +1,6 @@
-# Local development settings for `wrangler dev`. Copy to .dev.vars (gitignored, never deployed).
-# Deployed Workers get secrets from `wrangler secret put <NAME>` instead.
-
-# Skip Cloudflare Access locally. Only honoured for localhost requests; never set this on a
-# deployed Worker.
-MINTY_DEV_NO_AUTH=1
+# Worker secrets. Locally: copy to .dev.vars (gitignored, never deployed); `npm run dev` reads it.
+# Deployed: set each with `npx wrangler secret put <NAME>` (the Deploy button also prompts for these).
+# Nothing here may weaken auth: the local-only Access bypass is passed by `npm run dev` instead.
 
 # Plaid SANDBOX keys (dashboard.plaid.com -> Developers -> Keys). Not needed to browse seed data.
 PLAID_CLIENT_ID_ME_PRIMARY=
