@@ -8,7 +8,7 @@ import { runSyncAll, syncItem, type ItemRow } from "../src/sync";
 import type { Env } from "../src/env";
 import { FakePlaid, account, page, plaidError, txn } from "./fake-plaid";
 
-// Port of tests/test_sync_engine.py, against a real local D1.
+// Cursor-based sync, against a real local D1.
 const E = env as unknown as Env;
 const config = loadConfig(E);
 let plaid: FakePlaid;
@@ -106,7 +106,7 @@ describe("syncItem", () => {
   it.each([
     ["ITEM_LOGIN_REQUIRED", "login_required", "login_required"],
     ["ITEM_NOT_FOUND", "error", "error"],
-    ["INTERNAL_SERVER_ERROR", "retry", "good"],         // Python marked this 'error' (and stopped syncing it)
+    ["INTERNAL_SERVER_ERROR", "retry", "good"],         // transient: retried, not marked 'error'
     ["PRODUCT_NOT_READY", "retry", "good"],             // normal right after linking
     ["RATE_LIMIT_EXCEEDED", "retry", "good"],
   ])("maps %s to result %s and status %s", async (code, result, status) => {

@@ -3,13 +3,13 @@ import { env } from "cloudflare:workers";
 import { normaliseTags } from "../src/routes/data";
 import { call, getJson, loadFixture } from "./helpers";
 
-// Port of tests/test_data.py, run against a real (local) D1 instead of SQL-string fakes.
+// Read API and tag editing, against a real (local) D1.
 beforeEach(loadFixture);
 
 const ids = (rows: Array<{ id: number }>) => rows.map((r) => r.id);
 
 describe("GET /transactions", () => {
-  it("returns every row newest first, in the Python API's shape", async () => {
+  it("returns every row newest first, in the shape the pages expect", async () => {
     const { status, body } = await getJson("/transactions");
     expect(status).toBe(200);
     expect(ids(body)).toEqual([100, 101, 102, 200, 201]);

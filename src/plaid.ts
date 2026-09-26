@@ -91,7 +91,7 @@ const PERMANENT = new Set([
 
 /** What a sync failure means for the item's status. null = transient (Plaid/bank outage, rate
  * limit, PRODUCT_NOT_READY right after linking, network): keep the status and retry next run.
- * (The Python app marked every failure 'error', which then stopped syncing that item for good.) */
+ * (Marking every failure 'error' would stop syncing that item for good.) */
 export function statusForError(e: unknown): "login_required" | "error" | null {
   if (!(e instanceof PlaidError)) return null;
   if (LOGIN_REQUIRED.has(e.errorCode)) return "login_required";

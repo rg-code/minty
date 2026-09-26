@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 import { FernetError, fernetDecrypt, fernetEncrypt } from "../src/fernet";
 import vectors from "./fixtures/fernet-vectors.json";
 
-// Python -> Worker direction (the reverse is tests/test_crypto.py). Vectors: scripts/make-fernet-vectors*.
+// Reference vectors from Python's cryptography.fernet (the reference implementation), checked in.
 const { key, other_key: otherKey } = vectors;
 
 const raw = (token: string) => Uint8Array.from(atob(token.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
 
-describe("Fernet compatibility with Python cryptography", () => {
-  it.each(vectors.python_tokens)("decrypts a Python token ($plaintext)", async ({ plaintext, token }) => {
+describe("Fernet compatibility with the reference implementation", () => {
+  it.each(vectors.python_tokens)("decrypts a reference token ($plaintext)", async ({ plaintext, token }) => {
     expect(await fernetDecrypt(token, key)).toBe(plaintext);
   });
 
-  it.each(vectors.python_tokens)("re-encrypts to the identical bytes given Python's IV and time ($plaintext)", async ({ plaintext, token }) => {
+  it.each(vectors.python_tokens)("re-encrypts to the identical bytes given the same IV and time ($plaintext)", async ({ plaintext, token }) => {
     const bytes = raw(token);
     const now = Number(new DataView(bytes.buffer).getBigUint64(1)) * 1000;
     const iv = bytes.slice(9, 25);
