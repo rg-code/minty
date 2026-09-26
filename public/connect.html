@@ -107,7 +107,7 @@ function renderOwners() {
   document.getElementById("owners").innerHTML = USERS.map(u =>
     `<button class="owner" data-owner="${esc(u.key)}" aria-pressed="${u.key === owner}">` +
     `<span class="dot" style="background:${colorOf(u.key)}"></span>${esc(u.label)}</button>`).join("");
-  // Can't link for someone whose Plaid keys aren't in .env yet — say so instead of failing at Plaid.
+  // Can't link for someone whose Plaid keys aren't set yet — say so instead of failing at Plaid.
   const u = USERS.find(x => x.key === owner);
   const ready = !!u && u.slots.some(s => s.configured);
   connectBtn.disabled = !ready;
