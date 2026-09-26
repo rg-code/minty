@@ -5,7 +5,7 @@ import { HttpError, json, unprocessable } from "../http";
 import { plaidPost } from "../plaid";
 import { type ItemRow, syncItem } from "../sync";
 
-/** Port of app/routes/link.py. Plaid Link flow: /link/token -> Link in the browser ->
+/** Plaid Link flow: /link/token -> Link in the browser ->
  * /link/exchange (stores the encrypted access token, starts the first sync in the background).
  * /link/token/update opens Link in update mode to repair an Item (e.g. login_required). */
 
@@ -43,7 +43,7 @@ function linkBase(env: Env, owner: string): Record<string, unknown> {
     user: { client_user_id: owner },
   };
   const redirect = env.PLAID_REDIRECT_URI?.trim();
-  if (redirect) base.redirect_uri = redirect;       // omitted entirely when unset, like the Python app
+  if (redirect) base.redirect_uri = redirect;       // omitted entirely when unset (Plaid rejects an empty one)
   return base;
 }
 

@@ -2,7 +2,7 @@ import type { Env } from "../env";
 import { type Config, isConfigured } from "../config";
 import { HttpError, dateParam, intParam, json, unprocessable } from "../http";
 
-/** Port of app/routes/data.py. Same paths and response shapes, so app/static works unchanged. */
+/** Read API for the pages in public/, plus tag editing. */
 
 const MAX_FILTER_TAGS = 20;   // D1 allows 100 bound parameters per query
 const MAX_TAGS_PER_TXN = 50;
