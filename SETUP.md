@@ -33,40 +33,62 @@ Use a fork, not a download: it's how you get updates later (step 8).
 3. Settings:
    - **Project name:** `minty` (it must match, or the build fails)
    - **Build command:** leave empty
-   - **Deploy command:** `npm run deploy`
+   - **Deploy command:** replace the default `npx wrangler deploy` with `npm run deploy`. Note it's
+     **npm**, not npx: `npx run deploy` fails.
+   - **Non-production branch deploy command** (`npx wrangler preview`): leave it as it is.
+   - There's no production-branch option on this screen. It uses your repo's default branch
+     (`main`); you can check it later under **Settings → Builds → Branch control**.
 4. Click **Deploy**. The first deploy creates the database (`minty`) and sets it up. That takes a
-   minute or two.
+   minute or two, and the log ends with "Success! Build completed."
 5. Open the Worker's `…workers.dev` address. You should see the dashboard page, with no data yet.
+6. Optional tidy-up: in the Worker's **Domains** tab, keep **Production** on and switch the
+   **Preview** URL off. Minty doesn't use preview addresses.
 
 Until step 3 is done, the page loads but every data request is refused. That's deliberate: Minty
 refuses everything until the login is set up.
 
 ## 3. Lock it to your household (Cloudflare Access)
 
-1. **Workers & Pages → minty → Settings → Domains & Routes**. Next to the `workers.dev` route,
-   choose **Enable Cloudflare Access**. (If asked, set up Zero Trust on the free plan. It's free
-   for up to 50 people.)
-2. The confirmation shows two values. Copy both:
-   - the **team domain**, like `yourteam.cloudflareaccess.com`
-   - the **Application Audience (AUD) tag**, a long hex string
+1. Open **Workers & Pages → minty → Access** (a tab along the top of the Worker) and enable
+   Access for **All traffic**. (If asked, set up Zero Trust on the free plan. It's free for up
+   to 50 people.)
+2. **Authentication policy:** pick who may sign in. The list offers pre-configured policies:
+   - **Cloudflare Account**: members of your Cloudflare account (you). Always safe.
+   - **An email domain**: *anyone* with an address at that domain. Only choose it if the domain
+     is yours and you're the only one reading its mail. (A catch-all is fine: codes for any
+     address there land in your inbox.)
+   - **Never** choose "Everyone" or a public domain like gmail.com.
 
-   To find them later: **Zero Trust → Access → Applications → minty**. The AUD tag is under
-   **Additional settings**.
-3. In that Access application, edit the policy so only your household can sign in: **Include →
-   Emails** → your and your partner's email addresses.
-4. Back in **Workers & Pages → minty → Settings → Variables and secrets**, add two **Text**
-   variables:
-   - `ACCESS_TEAM_DOMAIN` = the team domain
+   To allow a specific outside address (e.g. a partner's Gmail), add a custom policy later:
+   **Zero Trust → Access → Policies → Add → Include → Emails**, then attach it to the minty app.
+3. Copy the **AUD tag** (a long hex string) that the Access tab shows. Then find your **team
+   domain**: open your Minty address in a private window. The sign-in page's address starts
+   with `https://<team>.cloudflareaccess.com`, and that host is the team domain.
+4. **Settings → Variables and secrets** (the runtime section, *not* the build variables under
+   Builds) → **Add**. Environment **Production**. For each row, put the name in **Key** and
+   the value in **Value**, leave **Secret unchecked**, and use **+ Add** for the next row:
+   - `ACCESS_TEAM_DOMAIN` = the team domain, e.g. `yourteam.cloudflareaccess.com`
    - `ACCESS_AUD` = the AUD tag
+   - `ALLOWED_LOGINS` = the exact email address(es) you'll sign in with, comma-separated. It's
+     optional but recommended: Minty itself refuses anyone else, even if an Access policy is
+     broader than you meant. Each address must also pass the Access policy.
 
-Reload your Minty address. You'll be asked for your email and sent a one-time code, and then
-the dashboard loads.
+   Then **Deploy**.
+
+Open your Minty address in a private window. You'll be asked for your email and sent a one-time
+code, and then the dashboard loads.
 
 ## 4. Create the encryption key
 
 Minty encrypts each bank connection's Plaid access token before storing it. In the same
-**Variables and secrets** screen, add a **Secret** named `TOKEN_ENC_KEY`. Make its value with one
-of these:
+**Variables and secrets** screen, add a variable named `TOKEN_ENC_KEY` with **Secret checked**.
+
+**Moving from the Docker/Python version of Minty?** Use the `TOKEN_ENC_KEY` from that
+install's `.env`, not a new one. Your existing bank connections were encrypted with it, and
+they can only move over without re-linking if the key is the same. (Re-linking uses up Plaid
+Trial slots for good.)
+
+Otherwise, make a new key with one of these:
 
 - macOS / Linux / Git Bash: `openssl rand -base64 32 | tr '+/' '-_'`
 - Python: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
@@ -78,7 +100,7 @@ can't be used and you'd have to link them again.
 
 1. In the Plaid dashboard: **Developers → Keys**. Copy the **client_id** and the **Production**
    secret. (The Sandbox secret works for testing with Plaid's fake banks.)
-2. In **Variables and secrets**, add these **Secrets**:
+2. In **Variables and secrets**, add these, each with **Secret checked**:
    - `PLAID_CLIENT_ID_ME_PRIMARY` = client_id
    - `PLAID_SECRET_ME_PRIMARY` = secret
 3. Your partner signs up for their own Plaid account and adds `PLAID_CLIENT_ID_SPOUSE_PRIMARY`
