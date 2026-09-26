@@ -43,6 +43,17 @@ export default {
     const matches = ROUTES.map(([m, re, h]) => [m, url.pathname.match(re), h] as const).filter(([, m]) => m);
     if (!matches.length) return env.ASSETS.fetch(request);
 
+    // Cloudflare Access adds the sign-in header to any request that carries the Access cookie,
+    // including ones another site starts in the signed-in browser. Refuse state-changing requests
+    // that didn't come from this origin (browsers always send Origin, and Sec-Fetch-Site, on
+    // cross-site POST/PUT).
+    if (request.method !== "GET" && request.method !== "HEAD") {
+      const origin = request.headers.get("origin");
+      if ((origin && origin !== url.origin) || request.headers.get("sec-fetch-site") === "cross-site") {
+        return json({ detail: "cross-site request refused" }, 403);
+      }
+    }
+
     const auth = await checkAccess(request, env);
     if (!auth.ok) return json({ detail: auth.detail }, 403);
 

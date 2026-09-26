@@ -24,6 +24,27 @@ export function teamIssuer(raw: string | undefined): string | null {
   return `https://${s}`;
 }
 
+/** Why jose refused the token, in terms of what the owner can fix. */
+function rejection(e: unknown): string {
+  const code = (e as { code?: string })?.code;
+  const claim = (e as { claim?: string })?.claim;
+  if (code === "ERR_JWT_EXPIRED") return "forbidden: your Access session expired. Reload the page to sign in again.";
+  if (code === "ERR_JWT_CLAIM_VALIDATION_FAILED" && claim === "aud") {
+    return "forbidden: this sign-in is for a different Access application. " +
+      "Check that ACCESS_AUD is the Application Audience (AUD) tag of this Worker's Access application.";
+  }
+  if ((code === "ERR_JWT_CLAIM_VALIDATION_FAILED" && claim === "iss") ||
+      code === "ERR_JWKS_NO_MATCHING_KEY" || code === "ERR_JWS_SIGNATURE_VERIFICATION_FAILED") {
+    return "forbidden: this sign-in is from a different Access team. Check ACCESS_TEAM_DOMAIN.";
+  }
+  return "forbidden: the Access sign-in isn't valid.";
+}
+
+function refuse(detail: string): AccessResult {
+  console.warn(`access refused: ${detail}`);     // Workers Logs; never the token itself
+  return { ok: false, detail };
+}
+
 function isLocalhost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
 }
@@ -39,11 +60,13 @@ export async function checkAccess(request: Request, env: Env, getKey?: JWTVerify
   const issuer = teamIssuer(env.ACCESS_TEAM_DOMAIN);
   const audience = env.ACCESS_AUD?.trim();
   if (!issuer || !audience) {
-    return { ok: false, detail: "Cloudflare Access is not configured (set ACCESS_TEAM_DOMAIN and ACCESS_AUD)" };
+    return refuse("Cloudflare Access is not configured (set ACCESS_TEAM_DOMAIN and ACCESS_AUD)");
   }
 
+  // Only requests that already passed Cloudflare Access at the edge get here, so the specific
+  // reasons below go to signed-in people, not strangers.
   const token = request.headers.get("cf-access-jwt-assertion");
-  if (!token) return { ok: false, detail: "forbidden" };
+  if (!token) return refuse("forbidden: no Cloudflare Access sign-in on this request. Reload the page to sign in again.");
 
   let keys = getKey ?? jwksByTeam.get(issuer);
   if (!keys) {
@@ -51,14 +74,15 @@ export async function checkAccess(request: Request, env: Env, getKey?: JWTVerify
     jwksByTeam.set(issuer, keys);
   }
 
+  let payload;
   try {
-    const { payload } = await jwtVerify(token, keys, { issuer, audience, algorithms: ["RS256"] });
-    const email = typeof payload.email === "string" ? payload.email.toLowerCase() : "";
-    if (!email) return { ok: false, detail: "forbidden" };        // e.g. service tokens: not a person
-    const allowed = new Set((env.ALLOWED_LOGINS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
-    if (allowed.size && !allowed.has(email)) return { ok: false, detail: "forbidden" };
-    return { ok: true, email };
-  } catch {
-    return { ok: false, detail: "forbidden" };
+    ({ payload } = await jwtVerify(token, keys, { issuer, audience, algorithms: ["RS256"] }));
+  } catch (e) {
+    return refuse(rejection(e));
   }
+  const email = typeof payload.email === "string" ? payload.email.toLowerCase() : "";
+  if (!email) return refuse("forbidden: this sign-in has no email (service tokens can't use Minty).");
+  const allowed = new Set((env.ALLOWED_LOGINS ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean));
+  if (allowed.size && !allowed.has(email)) return refuse(`forbidden: ${email} is not in ALLOWED_LOGINS.`);
+  return { ok: true, email };
 }

@@ -22,51 +22,44 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
   - [x] Step 3: Access variables `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ALLOWED_LOGINS`.
   - [x] Step 4: `TOKEN_ENC_KEY` set to a **new** key (2026-09-26). The owner keeps a copy in a
         password manager; losing it means re-linking every bank.
-  - [ ] **In progress:** step 5 on **Plaid Sandbox** (fake banks), then step 6 and a test link.
+  - [x] Step 5 on **Plaid Sandbox**: `PLAID_*_ME_PRIMARY` and `PLAID_*_SPOUSE_PRIMARY` set to
+        Sandbox keys, `PLAID_ENV` unset (2026-09-26).
+  - [x] Step 6: Setup checks all ✓ (the only "!" is the expected "Plaid: sandbox").
+  - [x] Step 7 (test): linked **First Platypus Bank** with `user_good` / `pass_good`.
+  - Lesson from step 3: Access's policy (who can sign in) and the Worker's `ALLOWED_LOGINS`
+    (who the Worker accepts) are separate lists; a login must be on both. A "forbidden" from the
+    API was an address missing from `ALLOWED_LOGINS`. The API now says which check failed.
 - **The Python/Docker app was never deployed with real data**: no bank was ever linked and the
   Immich box has no `.env`. There is nothing to migrate; P4 is now just retiring the Python app.
 
 ## To do, in order
 
-1. **Step 5 on Sandbox.** Plaid dashboard → **Developers → Keys**: copy the client_id and the
-   **Sandbox** secret. In the Worker's **Variables and secrets**, add (Secret checked):
-   - `PLAID_CLIENT_ID_ME_PRIMARY`, `PLAID_SECRET_ME_PRIMARY`
-   - Optional, to test the second person: the same client_id and Sandbox secret as
-     `PLAID_CLIENT_ID_SPOUSE_PRIMARY` / `PLAID_SECRET_SPOUSE_PRIMARY`. That's fine in Sandbox;
-     in production each person needs their own Plaid account.
-   - **Leave `PLAID_ENV` unset**: it defaults to `sandbox`.
-   - Set `MINTY_USERS` only if the people aren't the default `me:Me,spouse:Spouse`.
-   - Deploy so the new values take effect.
-2. **Step 6:** open **+ Add user → Setup checks**. Everything should be ✓. In particular the
-   database schema check confirms migrations 0001 and 0002 were applied by the first deploy.
-   That can't be seen from outside while Access is on.
-3. **Test link with a fake bank.** **+ Add account** → Me → **Connect with Plaid** → pick
-   **First Platypus Bank** (a non-OAuth test bank; OAuth test banks need a redirect URI) →
-   username `user_good`, password `pass_good`, and code `1234` if asked for one.
-   - The first page of transactions syncs in the background right after linking; the rest
-     arrives on the hourly cron (`:17`), about 100 transactions per run on the free plan.
-   - If the dashboard says "forbidden" after signing in, the Worker-level Access tab isn't
-     sending the `cf-access-jwt-assertion` header. Fix: have `src/access.ts` also read the
-     `CF_Authorization` cookie (the same JWT, same validation).
-4. **Before switching to production** (`PLAID_ENV=production` + Production secrets): the
+1. **Try the dashboard on Sandbox data.** Test banks are **First Platypus Bank** (non-OAuth; OAuth
+   test banks need a redirect URI) with `user_good` / `pass_good`, code `1234` if asked. The first
+   page of transactions syncs right after linking; the rest arrives on the hourly cron (`:17`),
+   about 100 transactions per run on the free plan.
+2. **Keep Cloudflare's "Update your Wrangler configuration" prompt unapplied.** `keep_vars` already
+   preserves dashboard variables across deploys, and copying them into `wrangler.jsonc` would
+   publish the household's emails and Access IDs in this public repo.
+3. **Before switching to production** (`PLAID_ENV=production` + Production secrets): the
    Sandbox Items stay in D1 and would fail against production. Remove them first (a remote D1
    delete, which needs the owner's go-ahead) so only real banks remain.
-5. **Tidy-up:**
+4. **Tidy-up:**
    - Worker → **Domains**: switch the Preview URL off.
    - **Settings → Builds → Branch control**: confirm the production branch is `main`. Optionally
      turn off builds for non-production branches, to save build minutes.
-6. **Watch the free plan's CPU limit** during the first real syncs: **Worker → Metrics**, look for
+5. **Watch the free plan's CPU limit** during the first real syncs: **Worker → Metrics**, look for
    "Exceeded CPU" errors on cron invocations.
    - Measured before deploying: median 8 ms per run (4–16 ms), against a 10 ms limit.
    - An overrun is safe: each page commits with its cursor, and the run retries next hour.
    - If overruns are frequent, lower `SYNC_MAX_BYTES_PER_RUN`, or move to Workers Paid and
      raise it (e.g. 20000000 bytes and 50 pages).
-7. **Plaid Sandbox end-to-end** (optional; the owner runs it because it reads `.dev.vars`):
+6. **Plaid Sandbox end-to-end** (optional; the owner runs it because it reads `.dev.vars`):
    `node scripts/sandbox-e2e.ts` against `npm run dev`.
-8. **P4, retire the Python app.** No data migration (see plan §8, 2026-09-26). Delete the
+7. **P4, retire the Python app.** No data migration (see plan §8, 2026-09-26). Delete the
    Python/Docker app and Tailscale config, and rewrite CLAUDE.md and README for Workers (plan §5
    rule changes). A large deletion, so it needs the owner's go-ahead.
-9. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
+8. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
 
 ## Picking up on a new machine
 

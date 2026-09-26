@@ -36,6 +36,41 @@ describe("Access gate", () => {
     expect((await call("/users", { token })).status).toBe(403);
   });
 
+  it.each([
+    ["no sign-in", null, {}, /no Cloudflare Access sign-in/],
+    ["wrong audience", { aud: "someone-else" }, {}, /ACCESS_AUD/],
+    ["wrong issuer", { iss: "https://evil.cloudflareaccess.com" }, {}, /ACCESS_TEAM_DOMAIN/],
+    ["another key", { key: otherKey }, {}, /ACCESS_TEAM_DOMAIN/],
+    ["expired", { exp: Math.floor(Date.now() / 1000) - 60 }, {}, /expired/],
+    ["not allowed", {}, { ALLOWED_LOGINS: "spouse@example.com" }, /me@example\.com is not in ALLOWED_LOGINS/],
+  ] as const)("says why it refused: %s", async (_, opts, envOverrides, why) => {
+    const token = opts === null ? null : await accessToken({ email: "me@example.com" }, opts as any);
+    const r = await call("/users", { token, envOverrides });
+    expect(r.status).toBe(403);
+    const { detail } = await r.json() as { detail: string };
+    expect(detail).toMatch(/^forbidden: /);
+    expect(detail).toMatch(why);
+  });
+
+  it("refuses state-changing requests started by another site, even when signed in", async () => {
+    // Access adds the sign-in header to any request carrying its cookie, cross-site ones included.
+    const put = { method: "PUT", body: JSON.stringify({ tags: ["x"] }) };
+    const crossSite: Array<Record<string, string>> = [{ origin: "https://evil.example" }, { "sec-fetch-site": "cross-site" }];
+    for (const headers of crossSite) {
+      const r = await call("/transactions/1/tags", { ...put, headers });
+      expect(r.status).toBe(403);
+      expect(await r.json()).toEqual({ detail: "cross-site request refused" });
+      expect((await call("/link/token", { method: "POST", headers, body: "{}" })).status).toBe(403);
+    }
+    // same-origin (or non-browser, no Origin) requests go through to the route
+    const sameSite: Array<Record<string, string>> = [{ origin: "https://minty.example.workers.dev", "sec-fetch-site": "same-origin" }, {}];
+    for (const headers of sameSite) {
+      expect((await call("/transactions/999999/tags", { ...put, headers })).status).toBe(404);
+    }
+    // reads are unaffected (another site can't read the response anyway: no CORS headers)
+    expect((await call("/users", { headers: { origin: "https://evil.example" } })).status).toBe(200);
+  });
+
   it("refuses garbage and tokens without an email (e.g. service tokens)", async () => {
     expect((await call("/users", { token: "not.a.jwt" })).status).toBe(403);
     expect((await call("/users", { token: await accessToken({ common_name: "svc" }) })).status).toBe(403);
