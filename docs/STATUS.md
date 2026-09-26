@@ -1,6 +1,6 @@
 # Minty status and to-do
 
-Handoff notes for continuing on another machine. Last updated 2026-09-25.
+Handoff notes for continuing on another machine. Last updated 2026-09-26.
 Household-specific values (the workers.dev address, Access team and AUD, email addresses)
 are deliberately **not** in this public repo. They're in the owner's Cloudflare dashboard.
 
@@ -19,32 +19,38 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
   - [x] Access enabled from the Worker's **Access** tab. The policies are "Cloudflare Account" plus
         the owner's email domain (a catch-all to the owner's inbox). The edge now redirects to the
         team's sign-in page, and the team's signing keys are reachable (2 × RS256).
-  - [ ] **Paused here:** add the Text variables `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` and
-        `ALLOWED_LOGINS` (Secret unchecked), deploy, then sign in from a private window and
-        confirm the dashboard loads.
-- **The Python/Docker app** on the Immich box is still the live system with real data. It's
-  untouched, and it stays that way until the P4 cutover.
+  - [x] Step 3: Access variables `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ALLOWED_LOGINS`.
+  - [x] Step 4: `TOKEN_ENC_KEY` set to a **new** key (2026-09-26). The owner keeps a copy in a
+        password manager; losing it means re-linking every bank.
+  - [ ] **In progress:** step 5 on **Plaid Sandbox** (fake banks), then step 6 and a test link.
+- **The Python/Docker app was never deployed with real data**: no bank was ever linked and the
+  Immich box has no `.env`. There is nothing to migrate; P4 is now just retiring the Python app.
 
 ## To do, in order
 
-1. **Finish SETUP.md step 3:** the three variables above, then the sign-in test. If the dashboard
-   says "forbidden" after a successful sign-in, the Worker-level Access tab isn't sending the
-   `cf-access-jwt-assertion` header. Fix: have `src/access.ts` also read the `CF_Authorization`
-   cookie (the same JWT, same validation).
-2. **Step 4, `TOKEN_ENC_KEY`: ⚠ use the Python app's existing key** from the Immich box's `.env`,
-   not a new one.
-   - The existing Items' access tokens are Fernet-encrypted with it. The P4 migration moves
-     them without decrypting, which only works with the same key.
-   - A new key would force re-linking every bank, and Plaid Trial slots aren't freed by
-     `/item/remove`.
-   - The owner copies the key by hand. Claude never reads `.env`.
-3. **Step 5, Plaid keys:** use the same credential sets as the Python app (the `PLAID_*_ME_PRIMARY`,
-   `…_BACKUP` and `…_SPOUSE_*` secrets) and `PLAID_ENV=production`.
-   - Migrated tokens only work with the client_id/secret they were issued under.
-   - Set `MINTY_USERS` too, if it isn't the default `me:Me,spouse:Spouse`.
-4. **Step 6:** open **+ Add user → Setup checks**. Everything should be ✓. In particular the
+1. **Step 5 on Sandbox.** Plaid dashboard → **Developers → Keys**: copy the client_id and the
+   **Sandbox** secret. In the Worker's **Variables and secrets**, add (Secret checked):
+   - `PLAID_CLIENT_ID_ME_PRIMARY`, `PLAID_SECRET_ME_PRIMARY`
+   - Optional, to test the second person: the same client_id and Sandbox secret as
+     `PLAID_CLIENT_ID_SPOUSE_PRIMARY` / `PLAID_SECRET_SPOUSE_PRIMARY`. That's fine in Sandbox;
+     in production each person needs their own Plaid account.
+   - **Leave `PLAID_ENV` unset**: it defaults to `sandbox`.
+   - Set `MINTY_USERS` only if the people aren't the default `me:Me,spouse:Spouse`.
+   - Deploy so the new values take effect.
+2. **Step 6:** open **+ Add user → Setup checks**. Everything should be ✓. In particular the
    database schema check confirms migrations 0001 and 0002 were applied by the first deploy.
    That can't be seen from outside while Access is on.
+3. **Test link with a fake bank.** **+ Add account** → Me → **Connect with Plaid** → pick
+   **First Platypus Bank** (a non-OAuth test bank; OAuth test banks need a redirect URI) →
+   username `user_good`, password `pass_good`, and code `1234` if asked for one.
+   - The first page of transactions syncs in the background right after linking; the rest
+     arrives on the hourly cron (`:17`), about 100 transactions per run on the free plan.
+   - If the dashboard says "forbidden" after signing in, the Worker-level Access tab isn't
+     sending the `cf-access-jwt-assertion` header. Fix: have `src/access.ts` also read the
+     `CF_Authorization` cookie (the same JWT, same validation).
+4. **Before switching to production** (`PLAID_ENV=production` + Production secrets): the
+   Sandbox Items stay in D1 and would fail against production. Remove them first (a remote D1
+   delete, which needs the owner's go-ahead) so only real banks remain.
 5. **Tidy-up:**
    - Worker → **Domains**: switch the Preview URL off.
    - **Settings → Builds → Branch control**: confirm the production branch is `main`. Optionally
@@ -57,15 +63,9 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
      raise it (e.g. 20000000 bytes and 50 pages).
 7. **Plaid Sandbox end-to-end** (optional; the owner runs it because it reads `.dev.vars`):
    `node scripts/sandbox-e2e.ts` against `npm run dev`.
-8. **P4, migrate the household from the Immich box.** Not started; it touches production, so it
-   needs the owner's go-ahead.
-   - Export script: Postgres → D1 SQL. Tokens stay encrypted (`bytea` → the token text), and
-     cursors, tags and `plaid_account` routing are kept. Amounts become cents, and `tags text[]`
-     becomes `transaction_tags` rows.
-   - Rehearse into a scratch D1, compare row counts, then import with
-     `wrangler d1 execute DB --remote --file …`.
-   - Run both systems side by side for about a week. Then retire Docker/Tailscale, delete the
-     Python app, and rewrite CLAUDE.md and README (plan §5 rule changes).
+8. **P4, retire the Python app.** No data migration (see plan §8, 2026-09-26). Delete the
+   Python/Docker app and Tailscale config, and rewrite CLAUDE.md and README for Workers (plan §5
+   rule changes). A large deletion, so it needs the owner's go-ahead.
 9. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
 
 ## Picking up on a new machine

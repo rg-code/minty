@@ -16,7 +16,7 @@ Anyone (you, friends, family) can copy this repo and run Minty for their own hou
 - about $0 a month
 - they only ever hold their own data and keys
 
-Your household moves over without re-linking banks. Re-linking would use up Trial slots, because `/item/remove` does not free one.
+Your household starts fresh on Cloudflare: the Python app was never deployed with real data, so there is nothing to migrate (see §8, 2026-09-26). Households that did run the Python app can still move over without re-linking, by reusing its `TOKEN_ENC_KEY` (re-linking would use up Trial slots, because `/item/remove` does not free one).
 
 ## 2. Architecture
 
@@ -107,7 +107,7 @@ GitHub Actions runs **only tests** on pull requests. That's a normal CI use, all
 | **P1 Skeleton + read API** | `wrangler.jsonc` and `src/` at the repo root, next to the Python app (no clashing paths). Static pages, Access login check (fails closed), D1 schema, every read route plus tag editing and the multi-tag filter, seed script, ported tests | Dashboard works under `wrangler dev` on seeded data, identical to today |
 | **P2 Plaid + sync** | Fernet module (cross-tested against Python), Plaid REST client, `/link/*`, sync engine, scheduled handler with budget | On a throwaway Cloudflare account with **Plaid Sandbox**: link, backfill, cron sync, reconnect. CPU and outbound calls measured |
 | **P3 Deploy + onboarding** | `deploy` script (`d1 migrations apply --remote && wrangler deploy`), CI tests on PRs, `SETUP.md` checklist for friends, `/add-user` for Workers, update path. **Choose between** the Deploy button (one click, auto-creates D1, but makes a copy, so updates are manual) **and** fork + Cloudflare "Import repository" (GitHub's "Sync fork" then redeploys) by trying both on a throwaway account | A brand-new account goes from zero to a working Sandbox dashboard using only `SETUP.md` |
-| **P4 Migrate your household** | Export script run on the Immich box: Postgres to D1 SQL, tokens **still encrypted**, cursors and tags kept. Rehearse into a dev D1, compare row counts. Then cut over **(needs your go-ahead: touches production)**. Run both side by side for about a week, then retire Docker/Tailscale, delete the Python app, rewrite CLAUDE.md and README | All existing banks sync on Cloudflare with no re-linking; old stack turned off |
+| **P4 Retire the Python app** | ~~Export script, rehearsal, side-by-side cutover~~: dropped, there is no household data to migrate (§8, 2026-09-26). Remaining: delete the Python/Docker app and Tailscale config, rewrite CLAUDE.md and README for Workers (§5 rules) **(needs your go-ahead: large deletion)** | One codebase (Workers); docs describe only it |
 
 ## 5. Changes to CLAUDE.md rules (need your approval; applied in P4 docs, followed from P1)
 
@@ -175,3 +175,8 @@ GitHub Actions runs **only tests** on pull requests. That's a normal CI use, all
 - **Temporary accounts** (`wrangler … --temporary`) can deploy Workers and create D1, but they
   have 0 cron triggers, one D1 database, and no D1 API access, so migrations can't run there.
   They're for QA only; your real account is needed for cron and migrations.
+- **2026-09-26: no migration needed.** The Python/Docker app was never deployed with real
+  data: no bank was ever linked and the Immich box has no `.env`. So the owner's household
+  uses a fresh `TOKEN_ENC_KEY`, starts on Plaid Sandbox, and P4 shrinks to retiring the
+  Python app. `SETUP.md`'s "moving from the Docker version" note stays for anyone who did
+  run it.

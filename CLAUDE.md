@@ -96,9 +96,11 @@ Deploy host (Immich box):
   Once it exists, keep it in sync when adding services, env vars, or migration steps.
 
 ## Safety
-- The Linux box is production and holds real financial data. Prefer a separate
-  dev database / compose project for experiments. Ask before running
-  migrations or sync against the production stack.
+- The Python/Docker app was never deployed with real data (no linked banks, no
+  `.env` on the Immich box); it's slated for removal in P4. The live household
+  deployment is the Cloudflare Worker: ask before running remote D1 migrations
+  or commands (`wrangler … --remote`) against it, or before switching it from
+  Plaid Sandbox to production.
 - Never read or modify `.env` or any secrets file. Never commit secrets.
   If a new setting is needed, add a placeholder to `.env.example` and tell me.
 - Develop and test against Plaid Sandbox credentials, not live Items.
