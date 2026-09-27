@@ -45,10 +45,9 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 3. **Before switching to production** (`PLAID_ENV=production` + Production secrets): the
    Sandbox Items stay in D1 and would fail against production. Remove them first (a remote D1
    delete, which needs the owner's go-ahead) so only real banks remain.
-4. **Tidy-up:**
-   - Worker → **Domains**: switch the Preview URL off.
-   - **Settings → Builds → Branch control**: confirm the production branch is `main`. Optionally
-     turn off builds for non-production branches, to save build minutes.
+4. **Tidy-up:** **Settings → Builds → Branch control**: confirm the production branch is `main`.
+   (Preview URLs: off since 2026-09-27, switched off in the dashboard and enforced by
+   `"preview_urls": false` in `wrangler.jsonc`. Branch builds still run as PR checks.)
 5. **Watch the free plan's CPU limit** during the first real syncs: **Worker → Metrics**, look for
    "Exceeded CPU" errors on cron invocations.
    - Measured before deploying: median 8 ms per run (4–16 ms), against a 10 ms limit.

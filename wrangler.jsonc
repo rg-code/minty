@@ -26,6 +26,11 @@
   // Keep variables set in the dashboard when deploying (there are none in this file to clash).
   "keep_vars": true,
 
+  // No per-version Preview URLs (<version>-minty.<subdomain>.workers.dev). They would serve
+  // untested branch code with the household's production secrets and database. Every deploy
+  // enforces this; left unset, Wrangler would keep whatever the dashboard says.
+  "preview_urls": false,
+
   // The dashboard pages, served as-is. API paths run the Worker first; everything else is a
   // static file. Cloudflare Access protects both at the edge.
   "assets": {

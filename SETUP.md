@@ -41,8 +41,7 @@ Use a fork, not a download: it's how you get updates later (step 8).
 4. Click **Deploy**. The first deploy creates the database (`minty`) and sets it up. That takes a
    minute or two, and the log ends with "Success! Build completed."
 5. Open the Worker's `…workers.dev` address. You should see the dashboard page, with no data yet.
-6. Optional tidy-up: in the Worker's **Domains** tab, keep **Production** on and switch the
-   **Preview** URL off. Minty doesn't use preview addresses.
+   (Preview URLs are switched off automatically on every deploy; Minty doesn't use them.)
 
 Until step 3 is done, the page loads but every data request is refused. That's deliberate: Minty
 refuses everything until the login is set up.
