@@ -27,6 +27,9 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
         Sandbox keys, `PLAID_ENV` unset (2026-09-26).
   - [x] Step 6: Setup checks all ✓ (the only "!" is the expected "Plaid: sandbox").
   - [x] Step 7 (test): linked **First Platypus Bank** with `user_good` / `pass_good`.
+  - [x] Tidy-up (2026-09-27): Preview URLs off (dashboard, and enforced by `"preview_urls": false`
+        in `wrangler.jsonc`; branch builds still pass as PR checks). Production branch confirmed
+        as `main` under **Settings → Builds → Branch control**.
   - Lesson from step 3: Access's policy (who can sign in) and the Worker's `ALLOWED_LOGINS`
     (who the Worker accepts) are separate lists; a login must be on both. A "forbidden" from the
     API was an address missing from `ALLOWED_LOGINS`. The API now says which check failed.
@@ -45,18 +48,15 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 3. **Before switching to production** (`PLAID_ENV=production` + Production secrets): the
    Sandbox Items stay in D1 and would fail against production. Remove them first (a remote D1
    delete, which needs the owner's go-ahead) so only real banks remain.
-4. **Tidy-up:** **Settings → Builds → Branch control**: confirm the production branch is `main`.
-   (Preview URLs: off since 2026-09-27, switched off in the dashboard and enforced by
-   `"preview_urls": false` in `wrangler.jsonc`. Branch builds still run as PR checks.)
-5. **Watch the free plan's CPU limit** during the first real syncs: **Worker → Metrics**, look for
+4. **Watch the free plan's CPU limit** during the first real syncs: **Worker → Metrics**, look for
    "Exceeded CPU" errors on cron invocations.
    - Measured before deploying: median 8 ms per run (4–16 ms), against a 10 ms limit.
    - An overrun is safe: each page commits with its cursor, and the run retries next hour.
    - If overruns are frequent, lower `SYNC_MAX_BYTES_PER_RUN`, or move to Workers Paid and
      raise it (e.g. 20000000 bytes and 50 pages).
-6. **Plaid Sandbox end-to-end** (optional; the owner runs it because it reads `.dev.vars`):
+5. **Plaid Sandbox end-to-end** (optional; the owner runs it because it reads `.dev.vars`):
    `node scripts/sandbox-e2e.ts` against `npm run dev`.
-7. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
+6. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
 
 ## Picking up on a new machine
 
