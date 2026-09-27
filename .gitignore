@@ -1,8 +1,5 @@
 .env
 secrets/
-__pycache__/
-.venv/
-.pytest_cache/
 .claude/worktrees/
 # Cloudflare Workers (local secrets, local D1/state, deps)
 .dev.vars

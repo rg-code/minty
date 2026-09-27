@@ -6,9 +6,10 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 
 ## Where things stand
 
-- **Code:** the Cloudflare Workers port, phases P0–P3 plus the pre-deploy QA fix (#10), is on
-  `main`. CI (vitest in workerd, typecheck, pytest) runs on every PR.
-  - Tests: 137 Worker, 63 Python.
+- **Code:** Minty is Cloudflare-only: phases P0–P4 are on `main`. P4 removed the Python/Docker
+  app (its last version is tagged `python-app-final`) and moved the pages to `public/`.
+  CI (vitest in workerd + typecheck) runs on every PR.
+  - Tests: 144 Worker.
   - Plan and decision log: [serverless-plan.md](serverless-plan.md) §8.
 - **The owner's household deployment (in progress):**
   - [x] Imported `rg-code/minty` via Workers & Pages → Import a repository. Name `minty`, deploy
@@ -29,8 +30,8 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
   - Lesson from step 3: Access's policy (who can sign in) and the Worker's `ALLOWED_LOGINS`
     (who the Worker accepts) are separate lists; a login must be on both. A "forbidden" from the
     API was an address missing from `ALLOWED_LOGINS`. The API now says which check failed.
-- **The Python/Docker app was never deployed with real data**: no bank was ever linked and the
-  Immich box has no `.env`. There is nothing to migrate; P4 is now just retiring the Python app.
+- **The Python/Docker app is retired (P4).** It was never deployed with real data, nothing was
+  running on the Immich box, and there was nothing to migrate.
 
 ## To do, in order
 
@@ -56,10 +57,7 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
      raise it (e.g. 20000000 bytes and 50 pages).
 6. **Plaid Sandbox end-to-end** (optional; the owner runs it because it reads `.dev.vars`):
    `node scripts/sandbox-e2e.ts` against `npm run dev`.
-7. **P4, retire the Python app.** No data migration (see plan §8, 2026-09-26). Delete the
-   Python/Docker app and Tailscale config, and rewrite CLAUDE.md and README for Workers (plan §5
-   rule changes). A large deletion, so it needs the owner's go-ahead.
-8. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
+7. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
 
 ## Picking up on a new machine
 
@@ -67,7 +65,6 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
     npm ci                       # Node 22+; if npm 10 errors resolving new deps, use npx npm@11
     npm test && npm run typecheck
     npm run db:migrate:local && npm run db:seed:local && npm run dev   # http://localhost:8787
-    # Python app tests: python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt && .venv/bin/python -m pytest
 
 - **Cloudflare CLI** (optional; the dashboard is enough): `npx wrangler login`.
 - **Temporary QA accounts:** `npx wrangler deploy --temporary` works for Workers + D1. It can't

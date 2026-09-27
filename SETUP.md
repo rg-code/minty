@@ -4,8 +4,8 @@ Minty puts your household's bank and card transactions on one private dashboard.
 **own copy**, on your own free accounts. Nobody else, including whoever shared this repo, can
 see your data or your keys.
 
-It takes about 30–45 minutes, and most of that is Plaid's sign-up. You don't need a server,
-Docker, or a terminal: everything below is done in a web browser.
+It takes about 30–45 minutes, and most of that is Plaid's sign-up. You don't need a server:
+everything below is done in a web browser, apart from one command to make a key (step 4).
 
 **What it costs:** $0. It uses the free plans of GitHub, Cloudflare (Workers, D1, Access) and
 Plaid (Trial). Plaid's Trial covers **10 bank logins per Plaid account**.
@@ -83,15 +83,11 @@ code, and then the dashboard loads.
 Minty encrypts each bank connection's Plaid access token before storing it. In the same
 **Variables and secrets** screen, add a variable named `TOKEN_ENC_KEY` with **Secret checked**.
 
-**Moving from the Docker/Python version of Minty?** Use the `TOKEN_ENC_KEY` from that
-install's `.env`, not a new one. Your existing bank connections were encrypted with it, and
-they can only move over without re-linking if the key is the same. (Re-linking uses up Plaid
-Trial slots for good.)
-
-Otherwise, make a new key with one of these:
+Make a new key with one of these, and paste the result as the value:
 
 - macOS / Linux / Git Bash: `openssl rand -base64 32 | tr '+/' '-_'`
-- Python: `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+- Windows PowerShell:
+  `$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')`
 
 **Keep a copy somewhere safe**, such as a password manager. Without it, stored bank connections
 can't be used and you'd have to link them again.

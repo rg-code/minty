@@ -7,7 +7,7 @@ import type { Env } from "../src/env";
 import { call, getJson } from "./helpers";
 import { FakePlaid, account, page, plaidError, txn } from "./fake-plaid";
 
-// Port of tests/test_link.py.
+// Plaid Link routes: token, exchange, update mode, trial-cap overflow.
 const E = env as unknown as Env;
 const KEY = E.TOKEN_ENC_KEY!;
 let plaid: FakePlaid;

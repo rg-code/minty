@@ -2,8 +2,7 @@ import { describe, expect, it } from "vitest";
 import { teamIssuer } from "../src/access";
 import { AUD, accessToken, call, otherKey } from "./helpers";
 
-// Port of tests/test_gate.py for the Cloudflare Access gate — plus fail-closed behaviour,
-// which replaces "empty ALLOWED_LOGINS disables the gate".
+// The Cloudflare Access gate on every API route. Fails closed: missing settings refuse everything.
 
 const GATED: Array<[string, string]> = [
   ["GET", "/users"], ["GET", "/items"], ["GET", "/accounts"], ["GET", "/capacity"],

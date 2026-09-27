@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import type { Env } from "./env";
 
-/** Replaces the Tailscale identity gate. Cloudflare Access protects the whole hostname at the
+/** The login check. Cloudflare Access protects the whole hostname at the
  * edge; because static assets sit behind Cloudflare's internal router, the Worker doesn't get
  * ctx.access, so every API request re-validates the Access JWT itself.
  * Fail closed: if ACCESS_TEAM_DOMAIN / ACCESS_AUD are unset, nothing gets through. */

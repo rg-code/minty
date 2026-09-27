@@ -29,7 +29,7 @@
   // The dashboard pages, served as-is. API paths run the Worker first; everything else is a
   // static file. Cloudflare Access protects both at the edge.
   "assets": {
-    "directory": "./app/static",
+    "directory": "./public",
     "binding": "ASSETS",
     "run_worker_first": [
       "/healthz",

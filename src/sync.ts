@@ -65,7 +65,7 @@ const UPSERT_ACCOUNTS = `
     balance_available_cents = excluded.balance_available_cents,
     currency = excluded.currency, updated_at = excluded.updated_at`;
 
-// Transactions whose account isn't known yet are skipped (the JOIN drops them), as in Python;
+// Transactions whose account isn't known yet are skipped (the JOIN drops them);
 // a later page's accounts[] backfills them. 'tags' live elsewhere and are never written here.
 const UPSERT_TRANSACTIONS = `
   INSERT INTO transactions (owner, account_id, plaid_txn_id, amount_cents, currency, date, datetime,

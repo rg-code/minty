@@ -5,8 +5,7 @@ import { plaidHost } from "../plaid";
 import { json } from "../http";
 
 /** GET /status: setup checks for the household, shown on the /add-user page. Behind Access like
- * every API route; reports only whether things are set, never values. The Python backend has no
- * /status, which is how the page knows which instructions to show. */
+ * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
 export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql"];

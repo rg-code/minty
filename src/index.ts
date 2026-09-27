@@ -9,7 +9,7 @@ import { PlaidError } from "./plaid";
 import { runSyncAll } from "./sync";
 
 /** Minty Worker. API paths are listed in wrangler.jsonc assets.run_worker_first; everything
- * else is served straight from app/static. /healthz is the only path outside the Access check.
+ * else is served straight from public/. /healthz is the only path outside the Access check.
  * Sync runs only from the cron trigger (scheduled below); there is deliberately no HTTP sync endpoint. */
 
 type Handler = (c: {
@@ -38,7 +38,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/healthz") return json({ ok: true });
 
-    // Not an API route: a static file (or its 404). Those are the public pages from app/static
+    // Not an API route: a static file (or its 404). Those are the pages in public/
     // and carry no data; Access still guards the hostname at the edge.
     const matches = ROUTES.map(([m, re, h]) => [m, url.pathname.match(re), h] as const).filter(([, m]) => m);
     if (!matches.length) return env.ASSETS.fetch(request);

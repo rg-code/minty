@@ -107,9 +107,9 @@ GitHub Actions runs **only tests** on pull requests. That's a normal CI use, all
 | **P1 Skeleton + read API** | `wrangler.jsonc` and `src/` at the repo root, next to the Python app (no clashing paths). Static pages, Access login check (fails closed), D1 schema, every read route plus tag editing and the multi-tag filter, seed script, ported tests | Dashboard works under `wrangler dev` on seeded data, identical to today |
 | **P2 Plaid + sync** | Fernet module (cross-tested against Python), Plaid REST client, `/link/*`, sync engine, scheduled handler with budget | On a throwaway Cloudflare account with **Plaid Sandbox**: link, backfill, cron sync, reconnect. CPU and outbound calls measured |
 | **P3 Deploy + onboarding** | `deploy` script (`d1 migrations apply --remote && wrangler deploy`), CI tests on PRs, `SETUP.md` checklist for friends, `/add-user` for Workers, update path. **Choose between** the Deploy button (one click, auto-creates D1, but makes a copy, so updates are manual) **and** fork + Cloudflare "Import repository" (GitHub's "Sync fork" then redeploys) by trying both on a throwaway account | A brand-new account goes from zero to a working Sandbox dashboard using only `SETUP.md` |
-| **P4 Retire the Python app** | ~~Export script, rehearsal, side-by-side cutover~~: dropped, there is no household data to migrate (§8, 2026-09-26). Remaining: delete the Python/Docker app and Tailscale config, rewrite CLAUDE.md and README for Workers (§5 rules) **(needs your go-ahead: large deletion)** | One codebase (Workers); docs describe only it |
+| **P4 Retire the Python app** ✅ | ~~Export script, rehearsal, side-by-side cutover~~: dropped, there is no household data to migrate (§8, 2026-09-26). **Done 2026-09-26:** Python/Docker app, Postgres migrations and Tailscale config deleted (last version tagged `python-app-final`), pages moved to `public/`, CLAUDE.md and README rewritten for Workers (§5 rules) | One codebase (Workers); docs describe only it |
 
-## 5. Changes to CLAUDE.md rules (need your approval; applied in P4 docs, followed from P1)
+## 5. Changes to CLAUDE.md rules (approved; applied to CLAUDE.md in P4)
 
 | Current rule | New rule |
 |---|---|

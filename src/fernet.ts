@@ -1,5 +1,5 @@
-/** Fernet (https://github.com/fernet/spec), byte-compatible with Python's `cryptography.fernet`,
- * so Plaid access tokens encrypted by the Python app decrypt here unchanged (and vice versa).
+/** Fernet (https://github.com/fernet/spec), byte-compatible with the reference implementation
+ * (Python's `cryptography.fernet`; test/fixtures/fernet-vectors.json was generated with it).
  * token = base64url( 0x80 | timestamp u64 BE | IV 16 | AES-128-CBC(PKCS7) ciphertext | HMAC-SHA256 32 )
  * key   = base64url( signing key 16 | encryption key 16 )
  * Errors never include the token or the plaintext. */
@@ -25,7 +25,7 @@ function b64urlDecode(s: string): Uint8Array {
 function b64urlEncode(bytes: Uint8Array): string {
   let bin = "";
   for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_");   // keep "=" padding, like Python
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_");   // keep "=" padding, as the spec does
 }
 
 interface Keys { sign: CryptoKey; encrypt: CryptoKey }
@@ -65,7 +65,7 @@ export async function fernetEncrypt(
   return b64urlEncode(token);
 }
 
-/** No TTL check, matching the Python app's `Fernet.decrypt(token)` (access tokens don't expire). */
+/** No TTL check: stored Plaid access tokens don't expire. */
 export async function fernetDecrypt(token: string, key: string): Promise<string> {
   const { sign, encrypt } = await importKeys(key);
   const data = b64urlDecode(token.trim());

@@ -1,4 +1,4 @@
-/** Errors carry an HTTP status and a FastAPI-style {"detail": ...} body, matching the Python API. */
+/** Errors carry an HTTP status and a {"detail": ...} body; the pages show `detail`. */
 export class HttpError extends Error {
   constructor(public status: number, public detail: string) {
     super(detail);

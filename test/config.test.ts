@@ -4,7 +4,7 @@ import { ConfigError, credsFor, isConfigured, loadConfig, parseUsers } from "../
 import type { Env } from "../src/env";
 import { call, getJson } from "./helpers";
 
-// Port of tests/test_config.py and tests/test_users.py.
+// MINTY_USERS parsing, credential slots and settings validation.
 const E = env as unknown as Env;
 
 describe("MINTY_USERS", () => {
