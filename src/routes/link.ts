@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { type Config, ConfigError, credsFor, isConfigured } from "../config";
+import { type Config, ConfigError, credsFor, isConfigured, secretNames } from "../config";
 import { FernetError, fernetDecrypt, fernetEncrypt } from "../fernet";
 import { HttpError, json, unprocessable } from "../http";
 import { plaidPost } from "../plaid";
@@ -53,26 +53,34 @@ async function countItems(env: Env, plaidAccount: string): Promise<number> {
   return row?.n ?? 0;
 }
 
-/** This person's first Trial account under the Item cap (primary, then backup). Never another person's. */
+/** This person's first credential slot (PLAID_SLOTS order) that has keys and is under the Item
+ * cap. Slots without keys are skipped, so people can have different numbers of Plaid accounts.
+ * Never another person's. */
 export async function chooseAccountFor(env: Env, config: Config, owner: string): Promise<string> {
+  let firstWithoutKeys: string | undefined;
   for (const key of config.ownerAccounts.get(owner) ?? []) {
+    if (!isConfigured(env, config, key)) {
+      firstWithoutKeys ??= key;
+      continue;
+    }
     if ((await countItems(env, key)) < config.itemCap) return key;
+  }
+  if (firstWithoutKeys) {
+    const n = secretNames(firstWithoutKeys);
+    throw new HttpError(400,
+      `No Plaid account for '${owner}' has room: every slot with keys is at the ${config.itemCap}-item cap ` +
+      `or none has keys yet. Add keys for '${firstWithoutKeys}': Worker secrets ${n.clientId} and ${n.secret} ` +
+      `(npx wrangler secret put ${n.clientId}).`);
   }
   throw new HttpError(409,
     `All Plaid trial accounts for '${owner}' are at the ${config.itemCap}-item cap. ` +
-    "Add another overflow account or upgrade to a paid Plaid plan.");
+    "Add another slot to PLAID_SLOTS (with its keys) or upgrade to a paid Plaid plan.");
 }
 
 export async function createLinkToken(env: Env, config: Config, request: Request): Promise<Response> {
   const owner = (await body(request)).owner;
   if (typeof owner !== "string" || !config.users.has(owner)) throw new HttpError(400, "unknown owner");
   const account = await chooseAccountFor(env, config, owner);     // overflow decision happens here
-  if (!isConfigured(env, config, account)) {
-    const s = account.toUpperCase();
-    throw new HttpError(400,
-      `Plaid keys for '${account}' aren't set. Add Worker secrets PLAID_CLIENT_ID_${s} and PLAID_SECRET_${s} ` +
-      `(npx wrangler secret put PLAID_CLIENT_ID_${s}).`);
-  }
   const { body: resp } = await plaidPost<{ link_token: string }>(env, credsFor(env, config, account), "/link/token/create", {
     ...linkBase(env, owner),
     products: ["transactions"],

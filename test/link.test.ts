@@ -44,10 +44,52 @@ describe("choose_account_for", () => {
   });
 
   it("never routes to the other person's accounts, and 409s when all are full", async () => {
+    const e = { ...E, PLAID_CLIENT_ID_SPOUSE_BACKUP: "c", PLAID_SECRET_SPOUSE_BACKUP: "s" };
     await addItems("spouse_primary", "spouse", 10);
-    expect(await chooseAccountFor(E, config, "spouse")).toBe("spouse_backup");
+    expect(await chooseAccountFor(e, loadConfig(e), "spouse")).toBe("spouse_backup");
     await addItems("spouse_backup", "spouse", 10);
-    await expect(chooseAccountFor(E, config, "spouse")).rejects.toMatchObject({ status: 409 });
+    await expect(chooseAccountFor(e, loadConfig(e), "spouse")).rejects.toMatchObject({ status: 409 });
+  });
+
+  describe("with three or more slots (PLAID_SLOTS)", () => {
+    const three = { ...E, PLAID_SLOTS: "primary,backup,extra1", PLAID_CLIENT_ID_ME_EXTRA1: "cid_me_extra1", PLAID_SECRET_ME_EXTRA1: "secret_me_extra1" };
+    const cfg = loadConfig(three);
+
+    it("overflows primary -> backup -> extra1", async () => {
+      await addItems("me_primary", "me", 10);
+      await addItems("me_backup", "me", 10);
+      expect(await chooseAccountFor(three, cfg, "me")).toBe("me_extra1");
+      await addItems("me_extra1", "me", 10);
+      await expect(chooseAccountFor(three, cfg, "me")).rejects.toMatchObject({ status: 409 });
+    });
+
+    it("skips a slot without keys, so people can have different numbers of Plaid accounts", async () => {
+      const gap = { ...three, PLAID_CLIENT_ID_ME_BACKUP: "", PLAID_SECRET_ME_BACKUP: "" };
+      await addItems("me_primary", "me", 10);
+      expect(await chooseAccountFor(gap, loadConfig(gap), "me")).toBe("me_extra1");
+    });
+
+    it("names the next slot's secrets when every slot with keys is full", async () => {
+      await addItems("spouse_primary", "spouse", 10);                   // spouse: only primary has keys
+      await expect(chooseAccountFor(three, cfg, "spouse")).rejects.toMatchObject({
+        status: 400, detail: expect.stringContaining("PLAID_CLIENT_ID_SPOUSE_BACKUP") });
+    });
+
+    it("uses the chosen slot's credentials end to end", async () => {
+      await addItems("me_primary", "me", 10);
+      await addItems("me_backup", "me", 10);
+      const r = await post("/link/token", { owner: "me" }, { PLAID_SLOTS: three.PLAID_SLOTS,
+        PLAID_CLIENT_ID_ME_EXTRA1: three.PLAID_CLIENT_ID_ME_EXTRA1, PLAID_SECRET_ME_EXTRA1: three.PLAID_SECRET_ME_EXTRA1 });
+      expect(await r.json()).toEqual({ link_token: "link-sandbox-abc", plaid_account: "me_extra1" });
+      expect([plaid.calls[0].clientId, plaid.calls[0].secret]).toEqual(["cid_me_extra1", "secret_me_extra1"]);
+    });
+
+    it("exchanges onto a third slot and rejects slots that aren't configured in PLAID_SLOTS", async () => {
+      plaid.syncPages.push(page("c1", false));
+      const env3 = { PLAID_SLOTS: three.PLAID_SLOTS, PLAID_CLIENT_ID_ME_EXTRA1: "c", PLAID_SECRET_ME_EXTRA1: "s" };
+      expect((await post("/link/exchange", { owner: "me", plaid_account: "me_extra1", public_token: "p" }, env3)).status).toBe(200);
+      expect((await post("/link/exchange", { owner: "me", plaid_account: "me_extra2", public_token: "p" }, env3)).status).toBe(400);
+    });
   });
 });
 

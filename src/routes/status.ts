@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { type Config, isConfigured } from "../config";
+import { type Config, keyState, secretNames } from "../config";
 import { fernetDecrypt, fernetEncrypt } from "../fernet";
 import { plaidHost } from "../plaid";
 import { json } from "../http";
@@ -51,13 +51,28 @@ export async function status(env: Env, config: Config, email: string): Promise<R
   }
 
   for (const [key, label] of config.users) {
-    const [primary, backup] = config.ownerAccounts.get(key)!;
-    const P = primary.toUpperCase(), B = backup.toUpperCase();
-    add(isConfigured(env, config, primary)
-      ? { id: `plaid_keys_${key}`, ok: true, level: "warn",
-          message: `${label}: Plaid keys set${isConfigured(env, config, backup) ? " (primary + backup)" : " (primary)"}.` }
-      : { id: `plaid_keys_${key}`, ok: false, level: "warn", message: `${label}: no Plaid keys yet, so they can't link banks.`,
-          fix: `Add secrets PLAID_CLIENT_ID_${P} and PLAID_SECRET_${P} (backup, optional: PLAID_CLIENT_ID_${B} / PLAID_SECRET_${B}).` });
+    const accounts = config.ownerAccounts.get(key)!;
+    const slotOf = (a: string) => a.slice(a.indexOf("_") + 1);
+    const set = accounts.filter((a) => keyState(env, config, a) === "set");
+    const partial = accounts.filter((a) => keyState(env, config, a) === "partial");
+    if (!set.length) {
+      const n = secretNames(accounts[0]);
+      add({ id: `plaid_keys_${key}`, ok: false, level: "warn", message: `${label}: no Plaid keys yet, so they can't link banks.`,
+            fix: `Add secrets ${n.clientId} and ${n.secret}` +
+                 (accounts.length > 1 ? ` (more Plaid accounts go in the next slots: ${accounts.slice(1).map(slotOf).join(", ")}).` : ".") });
+    } else {
+      const unused = accounts.filter((a) => keyState(env, config, a) === "missing").map(slotOf);
+      add({ id: `plaid_keys_${key}`, ok: true, level: "warn",
+            message: `${label}: Plaid keys set for ${set.map(slotOf).join(", ")}` +
+                     ` (${set.length} of ${accounts.length} slot${accounts.length === 1 ? "" : "s"}, up to ${set.length * config.itemCap} bank logins)` +
+                     (unused.length ? `; ${unused.join(", ")} unused.` : ".") });
+    }
+    for (const a of partial) {                   // half-set keys are a typo, not an unused slot
+      const n = secretNames(a);
+      add({ id: `plaid_keys_partial_${a}`, ok: false, level: "error",
+            message: `${label}: slot ${slotOf(a)} has only one of its two Plaid keys, so it's skipped.`,
+            fix: `Set both ${n.clientId} and ${n.secret}, or remove the one that's there.` });
+    }
   }
 
   let applied: string[] = [];
@@ -76,6 +91,19 @@ export async function status(env: Env, config: Config, email: string): Promise<R
   if (byStatus.login_required) {
     add({ id: "items_login", ok: false, level: "warn", message: `${byStatus.login_required} bank(s) need you to sign in again.`,
           fix: "Open Add account and use Reconnect." });
+  }
+  // Banks whose credential set is gone (person removed from MINTY_USERS, slot removed from
+  // PLAID_SLOTS) or has no keys any more: sync skips them, so say so instead of failing silently.
+  const { results: perAccount } = await env.DB.prepare(
+    "SELECT plaid_account, count(*) AS n FROM items WHERE status IN ('good', 'login_required') GROUP BY plaid_account",
+  ).all<{ plaid_account: string; n: number }>().catch(() => ({ results: [] as { plaid_account: string; n: number }[] }));
+  const stranded = perAccount.filter((r) => !config.accountOwner.has(r.plaid_account) || keyState(env, config, r.plaid_account) !== "set");
+  if (stranded.length) {
+    const total = stranded.reduce((t, r) => t + r.n, 0);
+    const why = stranded.map((r) => `${r.plaid_account} (${config.accountOwner.has(r.plaid_account)
+      ? "no keys" : "not in MINTY_USERS / PLAID_SLOTS"})`).join(", ");
+    add({ id: "items_stranded", ok: false, level: "error", message: `${total} bank(s) can't sync: ${why}.`,
+          fix: "Restore that person / slot and its keys. Banks stay with the Plaid account they were linked under." });
   }
   if (byStatus.error) {
     add({ id: "items_error", ok: false, level: "warn", message: `${byStatus.error} bank(s) stopped syncing with a permanent Plaid error.`,

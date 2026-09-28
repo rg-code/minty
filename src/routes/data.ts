@@ -54,6 +54,7 @@ export async function capacity(env: Env, config: Config): Promise<Response> {
       slot: k.slice(k.indexOf("_") + 1),
       used: counts.get(k) ?? 0,
       cap: config.itemCap,
+      configured: isConfigured(env, config, k),       // slots without keys are skipped when linking
     }));
   }
   return json(out);

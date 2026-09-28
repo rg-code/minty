@@ -95,7 +95,8 @@
       <li>In the Cloudflare dashboard open <b>Workers &amp; Pages → minty → Settings → Variables and secrets</b>
           and set the variable <code>MINTY_USERS</code> to the value below (first line).</li>
       <li>Add their Plaid keys there as <b>secrets</b>. Each person needs their own Plaid Trial keys;
-          <b>backup</b> is optional and only used once primary reaches the 10-login cap. Or from a terminal
+          only the first slot is required. Each further slot is another Plaid Trial account, used once the
+          ones before it reach the 10-login cap (slots come from <code>PLAID_SLOTS</code>). Or from a terminal
           in your fork, use the <code>wrangler secret put</code> commands below.</li>
       <li>So they can sign in, add their email to the Access policy (<b>Zero Trust → Access → Applications → minty</b>),
           and to <code>ALLOWED_LOGINS</code> if you set one.</li>
@@ -167,13 +168,15 @@ function update() {
   if (!ok) return;
   const K = key.toUpperCase();
   const users = [...USERS.map(u => `${u.key}:${u.label}`), `${key}:${label}`].join(",");
+  // Every person gets the same slots (PLAID_SLOTS), so take the names from any existing user.
+  const slots = (USERS[0]?.slots ?? [{ slot: "primary" }, { slot: "backup" }]).map(s => s.slot);
   $("out").textContent = [
     `MINTY_USERS = ${users}`,
     ``,
-    `npx wrangler secret put PLAID_CLIENT_ID_${K}_PRIMARY`,
-    `npx wrangler secret put PLAID_SECRET_${K}_PRIMARY`,
-    `npx wrangler secret put PLAID_CLIENT_ID_${K}_BACKUP  # optional`,
-    `npx wrangler secret put PLAID_SECRET_${K}_BACKUP  # optional`,
+    ...slots.flatMap((slot, i) => {
+      const S = slot.toUpperCase(), note = i === 0 ? "" : "  # optional";
+      return [`npx wrangler secret put PLAID_CLIENT_ID_${K}_${S}${note}`, `npx wrangler secret put PLAID_SECRET_${K}_${S}${note}`];
+    }),
   ].join("\n");
   $("newname").innerHTML = `<span class="dot" style="background:${color(USERS.length)}"></span> ${esc(label)}`;
 }

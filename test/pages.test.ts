@@ -46,6 +46,11 @@ describe("static pages", () => {
     for (const gone of ["docker", ".env", "Tailscale", "BACKEND"]) expect(html).not.toContain(gone);
   });
 
+  it("connect page capacity bars actually render (the fill span is a block)", async () => {
+    const { html } = await page("/connect");
+    expect(html).toMatch(/\.cap \.fill \{ display:block;/);   // an inline span ignores width/height
+  });
+
   it("routes API paths to the Worker (Access check applies)", async () => {
     const r = await SELF.fetch("https://minty.example.workers.dev/transactions");
     expect(r.status).toBe(403);

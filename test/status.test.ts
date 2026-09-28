@@ -27,8 +27,8 @@ describe("GET /status", () => {
     expect(c.access).toMatchObject({ ok: true, message: expect.stringContaining("me@example.com") });
     expect(c.token_key.ok).toBe(true);
     expect(c.migrations.ok).toBe(true);
-    expect(c.plaid_keys_me).toMatchObject({ ok: true, message: "Me: Plaid keys set (primary + backup)." });
-    expect(c.plaid_keys_spouse).toMatchObject({ ok: true, message: "Spouse: Plaid keys set (primary)." });
+    expect(c.plaid_keys_me).toMatchObject({ ok: true, message: "Me: Plaid keys set for primary, backup (2 of 2 slots, up to 20 bank logins)." });
+    expect(c.plaid_keys_spouse).toMatchObject({ ok: true, message: "Spouse: Plaid keys set for primary (1 of 2 slots, up to 10 bank logins); backup unused." });
     expect(c.plaid_env).toMatchObject({ ok: false, level: "warn" });            // tests run on sandbox
     expect(text).not.toMatch(/secret_|cid_|uJ2Cr7/);                             // never values
   });
@@ -38,6 +38,30 @@ describe("GET /status", () => {
       const c = byId((await getJson("/status", { envOverrides: { TOKEN_ENC_KEY } })).body.checks);
       expect(c.token_key).toMatchObject({ ok: false, level: "error", fix: expect.stringContaining("openssl rand -base64 32") });
     }
+  });
+
+  it("describes three slots and flags half-set keys as an error", async () => {
+    const c = byId((await getJson("/status", { envOverrides: { PLAID_SLOTS: "primary,backup,extra1",
+      PLAID_CLIENT_ID_ME_EXTRA1: "c", PLAID_SECRET_ME_EXTRA1: "s", PLAID_SECRET_SPOUSE_BACKUP: "secret-without-id" } })).body.checks);
+    expect(c.plaid_keys_me.message).toBe("Me: Plaid keys set for primary, backup, extra1 (3 of 3 slots, up to 30 bank logins).");
+    expect(c.plaid_keys_partial_spouse_backup).toMatchObject({ ok: false, level: "error",
+      fix: expect.stringContaining("PLAID_CLIENT_ID_SPOUSE_BACKUP") });
+    expect(c.plaid_keys_partial_me_primary).toBeUndefined();
+  });
+
+  it("flags banks that can't sync because their slot, person or keys are gone", async () => {
+    await env.DB.prepare(
+      `INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc) VALUES
+       ('me', 'me_primary', 'ok', 'x'),
+       ('me', 'me_extra1', 'slot-removed', 'x'),
+       ('alex', 'alex_primary', 'person-removed', 'x'),
+       ('spouse', 'spouse_backup', 'no-keys', 'x')`).run();
+    const c = byId((await getJson("/status")).body.checks);
+    expect(c.items_stranded).toMatchObject({ ok: false, level: "error" });
+    expect(c.items_stranded.message).toMatch(/^3 bank\(s\) can't sync/);
+    expect(c.items_stranded.message).toContain("me_extra1 (not in MINTY_USERS / PLAID_SLOTS)");
+    expect(c.items_stranded.message).toContain("spouse_backup (no keys)");
+    expect(c.items_stranded.message).not.toContain("me_primary");
   });
 
   it("flags people without Plaid keys, naming the secrets", async () => {
