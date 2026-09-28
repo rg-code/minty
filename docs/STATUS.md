@@ -1,6 +1,6 @@
 # Minty status and to-do
 
-Handoff notes for continuing on another machine. Last updated 2026-09-26.
+Handoff notes for continuing on another machine. Last updated 2026-09-28.
 Household-specific values (the workers.dev address, Access team and AUD, email addresses)
 are deliberately **not** in this public repo. They're in the owner's Cloudflare dashboard.
 
@@ -30,6 +30,10 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
   - [x] Tidy-up (2026-09-27): Preview URLs off (dashboard, and enforced by `"preview_urls": false`
         in `wrangler.jsonc`; branch builds still pass as PR checks). Production branch confirmed
         as `main` under **Settings → Builds → Branch control**.
+  - [x] Sandbox cleanup (2026-09-28): deleted both Sandbox Items (First Platypus Bank, Tartan
+        Bank) and their 10 accounts, 200 transactions and 2 tags from remote D1 via the dashboard
+        console, with the owner's go-ahead. Verified: every count is 0, and both migrations are still
+        recorded. The Sandbox keys are still set, until the switch below.
   - Lesson from step 3: Access's policy (who can sign in) and the Worker's `ALLOWED_LOGINS`
     (who the Worker accepts) are separate lists; a login must be on both. A "forbidden" from the
     API was an address missing from `ALLOWED_LOGINS`. The API now says which check failed.
@@ -38,25 +42,26 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 
 ## To do, in order
 
-1. **Try the dashboard on Sandbox data.** Test banks are **First Platypus Bank** (non-OAuth; OAuth
-   test banks need a redirect URI) with `user_good` / `pass_good`, code `1234` if asked. The first
-   page of transactions syncs right after linking; the rest arrives on the hourly cron (`:17`),
-   about 100 transactions per run on the free plan.
+1. **Switch to production** (Worker → Settings → Variables and secrets):
+   - Edit `PLAID_SECRET_ME_PRIMARY` and `PLAID_SECRET_SPOUSE_PRIMARY` to the Plaid **Production**
+     secrets. The client_id is shared across environments; change `PLAID_CLIENT_ID_*` only if they
+     differ.
+   - Add a Text variable `PLAID_ENV` = `production`, then **Deploy**.
+   - Setup checks should show "Plaid: production (real banks)" ✓.
+   - Then link real banks. **Each one uses a Plaid Trial slot for good** (10 per credential set),
+     so link only banks you'll keep.
 2. **Keep Cloudflare's "Update your Wrangler configuration" prompt unapplied.** `keep_vars` already
    preserves dashboard variables across deploys, and copying them into `wrangler.jsonc` would
    publish the household's emails and Access IDs in this public repo.
-3. **Before switching to production** (`PLAID_ENV=production` + Production secrets): the
-   Sandbox Items stay in D1 and would fail against production. Remove them first (a remote D1
-   delete, which needs the owner's go-ahead) so only real banks remain.
-4. **Watch the free plan's CPU limit** during the first real syncs: **Worker → Metrics**, look for
+3. **Watch the free plan's CPU limit** during the first real syncs: **Worker → Metrics**, look for
    "Exceeded CPU" errors on cron invocations.
    - Measured before deploying: median 8 ms per run (4–16 ms), against a 10 ms limit.
    - An overrun is safe: each page commits with its cursor, and the run retries next hour.
    - If overruns are frequent, lower `SYNC_MAX_BYTES_PER_RUN`, or move to Workers Paid and
      raise it (e.g. 20000000 bytes and 50 pages).
-5. **Plaid Sandbox end-to-end** (optional; the owner runs it because it reads `.dev.vars`):
+4. **Plaid Sandbox end-to-end** (optional; the owner runs it because it reads `.dev.vars`):
    `node scripts/sandbox-e2e.ts` against `npm run dev`.
-6. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
+5. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
 
 ## Picking up on a new machine
 
