@@ -104,6 +104,21 @@ can't be used and you'd have to link them again.
 4. When you're using the Production secret, add a **Text** variable `PLAID_ENV` = `production`.
    Without it, Minty uses Plaid's Sandbox (test banks).
 
+**Tried Sandbox first?** Test banks don't work once you switch to production, so delete them
+before linking real ones. Go to **Storage & Databases → D1 → minty → Console**. Check what's there
+with `SELECT id, institution_name, created_at FROM items;`, then run:
+
+```sql
+DELETE FROM transaction_tags;
+DELETE FROM transactions;
+DELETE FROM accounts;
+DELETE FROM sync_pages;
+DELETE FROM items;
+```
+
+This removes every linked bank and its transactions and tags, and nothing else. Only do it while
+everything linked is a test bank.
+
 **More than one Plaid account per person.** Each Plaid Trial allows 10 bank logins, where one
 login covers every account at that bank, dormant ones included. Minty gives each person two
 slots, `primary` then `backup`: add `PLAID_CLIENT_ID_ME_BACKUP` / `PLAID_SECRET_ME_BACKUP` (from a
