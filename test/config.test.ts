@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { ConfigError, credsFor, isConfigured, loadConfig, parseUsers } from "../src/config";
+import { ConfigError, credsFor, isConfigured, keyState, loadConfig, parseSlots, parseUsers, secretNames } from "../src/config";
 import type { Env } from "../src/env";
 import { call, getJson } from "./helpers";
 
@@ -23,6 +23,47 @@ describe("MINTY_USERS", () => {
 
   it("rejects duplicates", () => {
     expect(() => parseUsers("me:Me,me:Again")).toThrow(/duplicate/);
+  });
+});
+
+describe("PLAID_SLOTS", () => {
+  it("defaults to primary, backup", () => {
+    expect(parseSlots(undefined)).toEqual(["primary", "backup"]);
+    expect(parseSlots(" , ")).toEqual(["primary", "backup"]);
+    expect(loadConfig(E).slots).toEqual(["primary", "backup"]);
+  });
+
+  it("takes any number of slots in overflow order, trimmed", () => {
+    expect(parseSlots(" primary , backup,extra1 ,extra2")).toEqual(["primary", "backup", "extra1", "extra2"]);
+    const c = loadConfig({ ...E, PLAID_SLOTS: "primary,backup,extra1" });
+    expect(c.ownerAccounts.get("me")).toEqual(["me_primary", "me_backup", "me_extra1"]);
+    expect(c.accountOwner.get("spouse_extra1")).toBe("spouse");
+  });
+
+  it.each(["Primary", "extra_1", "1st", "x".repeat(17), "a b"])("rejects slot name %j", (bad) => {
+    expect(() => parseSlots(`primary,${bad}`)).toThrow(ConfigError);
+  });
+
+  it("rejects duplicates and more than 10 slots", () => {
+    expect(() => parseSlots("primary,backup,primary")).toThrow(/duplicate/);
+    expect(() => parseSlots(Array.from({ length: 11 }, (_, i) => `s${i}`).join(","))).toThrow(/at most 10/);
+  });
+
+  it("reads each slot's own secrets and tells set / partial / missing apart", () => {
+    const e = { ...E, PLAID_SLOTS: "primary,backup,extra1", PLAID_CLIENT_ID_ME_EXTRA1: "cid_x", PLAID_SECRET_ME_EXTRA1: "sec_x",
+      PLAID_CLIENT_ID_SPOUSE_EXTRA1: "only-an-id" };
+    const c = loadConfig(e);
+    expect(credsFor(e, c, "me_extra1")).toEqual({ clientId: "cid_x", secret: "sec_x" });
+    expect([keyState(e, c, "me_extra1"), keyState(e, c, "spouse_extra1"), keyState(e, c, "spouse_backup")])
+      .toEqual(["set", "partial", "missing"]);
+    expect(isConfigured(e, c, "spouse_extra1")).toBe(false);
+    expect(secretNames("me_extra1")).toEqual({ clientId: "PLAID_CLIENT_ID_ME_EXTRA1", secret: "PLAID_SECRET_ME_EXTRA1" });
+  });
+
+  it("surfaces a PLAID_SLOTS mistake as a readable 500", async () => {
+    const { status, body } = await getJson("/users", { envOverrides: { PLAID_SLOTS: "primary,Backup" } });
+    expect(status).toBe(500);
+    expect(body.detail).toMatch(/PLAID_SLOTS: invalid slot name/);
   });
 });
 

@@ -8,6 +8,8 @@
 //       ACCESS_TEAM_DOMAIN  (required) "<team>.cloudflareaccess.com"; unset = every API call refused
 //       ACCESS_AUD          (required) the Access application's AUD tag
 //       MINTY_USERS         "me:Me,spouse:Spouse"  people, in display order ("key:Label,...")
+//       PLAID_SLOTS         "primary,backup"       Plaid accounts per person, in overflow order;
+//                                                  each slot = one more Plaid Trial (10 logins)
 //       PLAID_ENV           "sandbox"              "production" once you use real banks
 //       ALLOWED_LOGINS      ""                     optional extra allow-list of Access emails
 //       PLAID_REDIRECT_URI  ""                     only for OAuth banks in mobile webviews (HTTPS)

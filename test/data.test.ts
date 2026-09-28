@@ -86,11 +86,18 @@ describe("items, accounts, capacity", () => {
 
   it("reports every slot's usage against the cap", async () => {
     expect((await getJson("/capacity")).body).toEqual({
-      me: [{ account: "me_primary", slot: "primary", used: 1, cap: 10 },
-           { account: "me_backup", slot: "backup", used: 0, cap: 10 }],
-      spouse: [{ account: "spouse_primary", slot: "primary", used: 1, cap: 10 },
-               { account: "spouse_backup", slot: "backup", used: 0, cap: 10 }],
+      me: [{ account: "me_primary", slot: "primary", used: 1, cap: 10, configured: true },
+           { account: "me_backup", slot: "backup", used: 0, cap: 10, configured: true }],
+      spouse: [{ account: "spouse_primary", slot: "primary", used: 1, cap: 10, configured: true },
+               { account: "spouse_backup", slot: "backup", used: 0, cap: 10, configured: false }],
     });
+  });
+
+  it("follows PLAID_SLOTS, one entry per slot in overflow order", async () => {
+    const body = (await getJson("/capacity", { envOverrides: {
+      PLAID_SLOTS: "primary,backup,extra1", PLAID_CLIENT_ID_ME_EXTRA1: "c", PLAID_SECRET_ME_EXTRA1: "s" } })).body;
+    expect(body.me.map((s: any) => [s.slot, s.configured])).toEqual([["primary", true], ["backup", true], ["extra1", true]]);
+    expect(body.spouse.map((s: any) => [s.slot, s.configured])).toEqual([["primary", true], ["backup", false], ["extra1", false]]);
   });
 });
 

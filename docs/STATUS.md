@@ -36,6 +36,11 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 - **The Python/Docker app is retired (P4).** It was never deployed with real data, nothing was
   running on the Immich box, and there was nothing to migrate.
 
+- **More Plaid accounts per person (2026-09-28):** `PLAID_SLOTS` makes the number of credential
+  slots configurable (default `primary,backup`, up to 10). Routing skips slots without keys, and
+  `/status` flags half-set keys and banks stranded on a removed slot. With the default, adding
+  the `…_BACKUP` secrets gives each person 20 bank logins.
+
 ## To do, in order
 
 1. **Try the dashboard on Sandbox data.** Test banks are **First Platypus Bank** (non-OAuth; OAuth

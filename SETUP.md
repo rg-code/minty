@@ -104,14 +104,25 @@ can't be used and you'd have to link them again.
 4. When you're using the Production secret, add a **Text** variable `PLAID_ENV` = `production`.
    Without it, Minty uses Plaid's Sandbox (test banks).
 
+**More than one Plaid account per person.** Each Plaid Trial allows 10 bank logins, where one
+login covers every account at that bank, dormant ones included. Minty gives each person two
+slots, `primary` then `backup`: add `PLAID_CLIENT_ID_ME_BACKUP` / `PLAID_SECRET_ME_BACKUP` (from a
+second Plaid account), and new links move to backup automatically once primary is full. For
+more, add a **Text** variable `PLAID_SLOTS` listing them in order, e.g.
+`primary,backup,extra1`, plus that slot's two secrets (`…_ME_EXTRA1`).
+- Slots without keys are skipped, so your partner can have fewer.
+- Keep a slot in the list once it has banks: they stay with the Plaid account they were linked
+  under.
+- Removing a bank doesn't give its Trial login back.
+
 **Other names or more people:** open **+ Add user** on the dashboard. It generates the exact
 `MINTY_USERS` value and secret names to add. People default to "Me" and "Spouse".
 
 ## 6. Check the setup
 
 Open **+ Add user** on your dashboard. The **Setup checks** list shows what's working and what's
-still missing, with the fix for each item. Every line should show ✓, apart from optional
-extras such as backup keys.
+still missing, with the fix for each item. Every line should show ✓, apart from the expected
+"Plaid: sandbox" while you're testing.
 
 ## 7. Connect your banks
 

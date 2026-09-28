@@ -6,6 +6,8 @@ export interface Env {
   ASSETS: Fetcher;
 
   MINTY_USERS?: string;
+  /** Plaid credential slots per person, in overflow order. Default "primary,backup". */
+  PLAID_SLOTS?: string;
   PLAID_ENV?: string;
   PLAID_REDIRECT_URI?: string;
   TRIAL_ITEM_CAP?: string;

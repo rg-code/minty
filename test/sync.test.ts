@@ -189,6 +189,18 @@ describe("syncItem", () => {
   });
 });
 
+describe("syncItem with more slots", () => {
+  it("syncs an item on a third slot with that slot's keys, and skips it once the slot is removed", async () => {
+    const e = { ...E, PLAID_SLOTS: "primary,backup,extra1", PLAID_CLIENT_ID_ME_EXTRA1: "cid_me_extra1", PLAID_SECRET_ME_EXTRA1: "s" };
+    const item = await addItem({ plaid_account: "me_extra1" });
+    plaid.syncPages.push(page("c1", false));
+    expect(await syncItem(e, loadConfig(e), item, { pages: 1 })).toBe("good");
+    expect(plaid.calls[0].clientId).toBe("cid_me_extra1");
+    expect(await syncItem(E, config, (await itemById(item.id))!, { pages: 1 })).toBe("skipped");   // default slots only
+    expect((await itemById(item.id)).status).toBe("good");                                          // untouched, not errored
+  });
+});
+
 describe("runSyncAll / cron", () => {
   it("sweeps syncable items least-recently-updated first, skipping errored, demo and removed users' items", async () => {
     const newer = await addItem({ updated_at: "2026-09-20T00:00:00.000Z" });

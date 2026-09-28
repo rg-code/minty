@@ -45,9 +45,10 @@
   .cap .line { display:flex; justify-content:space-between; align-items:center; gap:10px; }
   .cap .line + .line { margin-top:6px; }
   .cap .bar { flex:1; height:6px; border-radius:3px; background:var(--track); overflow:hidden; }
-  .cap .fill { height:100%; background:var(--c, var(--accent)); }
+  .cap .fill { display:block; height:100%; background:var(--c, var(--accent)); }
   .cap b { color:var(--ink); font-variant-numeric:tabular-nums; }
   .cap .active { color:var(--ink); font-weight:600; }
+  .cap .idle { margin-top:6px; opacity:.75; }
 
   button.connect { width:100%; padding:13px; border:0; border-radius:var(--radius); cursor:pointer;
     font:inherit; font-weight:600; color:var(--btn-ink); background:var(--btn-bg); }
@@ -173,19 +174,27 @@ function renderCapacity() {
   const box = document.getElementById("cap");
   if (!capacity || !capacity[owner]) { box.hidden = true; return; }
   const slots = capacity[owner];
-  // the "active" account is the first one under cap (matches server overflow logic)
-  const active = slots.find(s => s.used < s.cap);
+  const hasKeys = s => s.configured !== false;
+  // The next link goes to the first slot with keys that's under the cap (the server's overflow logic).
+  const active = slots.find(s => hasKeys(s) && s.used < s.cap);
+  const shown = slots.filter(s => hasKeys(s) || s.used > 0);   // slots in use, or holding banks
+  const idle = slots.filter(s => !hasKeys(s) && s.used === 0).map(s => s.slot);
   box.hidden = false;
   box.style.setProperty("--c", colorOf(owner));
-  box.innerHTML = slots.map(s => {
+  box.innerHTML = shown.map(s => {
     const pct = Math.min(100, Math.round((s.used / s.cap) * 100));
     const isActive = active && s.account === active.account;
-    return `<div class="line">
-      <span class="${isActive ? "active" : ""}">${s.slot}${isActive ? " · next link" : ""}</span>
+    const label = !hasKeys(s) ? `${esc(s.slot)} · no keys, ${s.used} bank(s) can't sync` : `${esc(s.slot)}${isActive ? " · next link" : ""}`;
+    return `<div class="line"${hasKeys(s) ? "" : ' style="color:var(--err)"'}>
+      <span class="${isActive ? "active" : ""}">${label}</span>
       <span class="bar"><span class="fill" style="width:${pct}%"></span></span>
       <b>${s.used}/${s.cap}</b>
     </div>`;
-  }).join("") + (active ? "" : `<div class="line" style="color:var(--err);margin-top:8px">Both trials full — add an overflow account or upgrade Plaid.</div>`);
+  }).join("")
+    + (idle.length ? `<div class="line idle">${esc(idle.join(", "))}: no keys yet (add them to use ${idle.length === 1 ? "this Plaid account" : "these Plaid accounts"})</div>` : "")
+    + (active ? "" : `<div class="line" style="color:var(--err);margin-top:8px">${idle.length
+        ? `Every Plaid account with keys is full. Add keys for ${esc(idle[0])} to link more.`
+        : "All Plaid trial accounts are full. Add another slot to PLAID_SLOTS (with its keys) or upgrade Plaid."}</div>`);
 }
 
 // OAuth return: resume with the SAME link_token + plaid_account saved pre-redirect.

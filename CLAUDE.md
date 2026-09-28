@@ -25,11 +25,16 @@ Design history and decisions: `docs/serverless-plan.md`.
 - `owner` (a `MINTY_USERS` key; default me | spouse) and `plaid_account` (which
   Plaid credential set) are DISTINCT concepts. Never collapse or infer one from
   the other.
-- People come from the `MINTY_USERS` Worker variable; each has two credential sets,
-  `<key>_primary` and `<key>_backup` (`PLAID_CLIENT_ID_<KEY>_<SLOT>` /
-  `PLAID_SECRET_<KEY>_<SLOT>` secrets). The `/add-user` page generates the values;
-  Plaid secrets never go through the browser or the database. Routing of new
-  institutions goes through `chooseAccountFor()` (`src/routes/link.ts`).
+- People come from the `MINTY_USERS` Worker variable. Each person has one credential set per
+  slot in `PLAID_SLOTS`, in overflow order (default `primary,backup`; up to 10). The sets are
+  `<key>_<slot>`, with `PLAID_CLIENT_ID_<KEY>_<SLOT>` / `PLAID_SECRET_<KEY>_<SLOT>` secrets. The
+  `/add-user` page generates the values; Plaid secrets never go through the browser or the
+  database.
+- Routing of new institutions goes through `chooseAccountFor()` (`src/routes/link.ts`): the
+  first slot that has keys and is under the cap. Slots without keys are skipped, so people can
+  have different numbers of Plaid accounts. An Item keeps its `plaid_account` for good, so
+  removing a slot or person that still has Items strands them (they're skipped, and `/status`
+  flags them).
 - A Plaid Item = one institution login (not one account). The Trial cap is
   10 Items per credential set (`TRIAL_ITEM_CAP`); routing logic depends on this.
 - Plaid access tokens are stored Fernet-encrypted (`src/fernet.ts`, `TOKEN_ENC_KEY`).
