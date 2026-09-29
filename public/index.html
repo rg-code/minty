@@ -164,6 +164,12 @@
   .tagopts label:hover { background: var(--row-hover); }
   .tagopts input { accent-color: var(--accent); margin: 0; }
   .tagopts .none { color: var(--muted); font-size: 13px; padding: 6px; }
+  .menutitle { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 0 4px; }
+  .optgroup { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted);
+              padding: 8px 6px 2px; }
+  .optgroup:first-child { padding-top: 2px; }
+  .optgroup .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .tagopts .note { margin-left: auto; font-size: 11.5px; color: var(--pending-ink); white-space: nowrap; }
 
   /* expandable detail */
   .detail { display: none; padding: 4px 16px 16px 15px; background: var(--detail-bg); }
@@ -216,6 +222,16 @@
         <div class="tagopts" id="tagOpts" role="group" aria-label="Tags"></div>
       </div>
     </div>
+    <div class="tagpick" id="bankPick">
+      <button type="button" class="tagbtn" id="bankBtn" aria-haspopup="true" aria-expanded="false" aria-controls="bankMenu">All banks</button>
+      <div class="tagmenu" id="bankMenu" hidden>
+        <div class="menuhead">
+          <span class="menutitle">Banks</span>
+          <button type="button" class="tagclear" id="bankClear">Clear</button>
+        </div>
+        <div class="tagopts" id="bankOpts" role="group" aria-label="Banks"></div>
+      </div>
+    </div>
     <input type="date" id="start" aria-label="From date" />
     <input type="date" id="end" aria-label="To date" />
   </div>
@@ -231,7 +247,8 @@
 let USERS = [{ key: "me", label: "Me" }, { key: "spouse", label: "Spouse" }];
 const colorOf = k => { const i = USERS.findIndex(u => u.key === k); return i < 0 ? "var(--muted)" : `var(--u${i % 6})`; };
 const labelOf = k => USERS.find(u => u.key === k)?.label ?? k;
-let state = { owner: "all", q: "", start: "", end: "", tags: [], tagMode: "any" };
+let state = { owner: "all", q: "", start: "", end: "", tags: [], tagMode: "any", banks: [] };
+let ITEMS = null;                  // linked bank logins from /items (null until loaded)
 let openRows = new Set();          // plaid_txn_id of expanded rows (survives re-render)
 let current = new Map();           // plaid_txn_id -> txn object (for tag edits)
 let allTags = [];
@@ -263,6 +280,7 @@ async function load() {
   if (state.end) p.set("end", state.end);
   for (const t of state.tags) p.append("tag", t);
   if (state.tags.length > 1 && state.tagMode === "all") p.set("tag_mode", "all");
+  for (const id of state.banks) p.append("item_id", id);
   p.set("limit", "500");
 
   let txns;
@@ -314,6 +332,58 @@ function renderTagControls() {
   btn.classList.toggle("active", n > 0);
   for (const b of document.querySelectorAll("#tagMode button")) b.setAttribute("aria-pressed", b.dataset.mode === state.tagMode);
   document.getElementById("tagClear").disabled = !n;
+}
+
+// --- bank filter: linked bank logins (Plaid Items), grouped by person -------------------------
+async function loadItems() {
+  try {
+    const r = await fetch("/items");
+    if (r.ok) ITEMS = await r.json();
+  } catch {}
+  populateBankFilter();
+}
+
+const bankName = it => it.institution_name || `Bank #${it.id}`;
+
+function visibleBanks() {
+  return (ITEMS || []).filter(it => state.owner === "all" || it.owner === state.owner);
+}
+
+function populateBankFilter() {
+  const banks = visibleBanks();
+  let html;
+  if (ITEMS === null) html = `<div class="none">Banks load from the Minty API.</div>`;
+  else if (!banks.length) html = `<div class="none">No banks linked${state.owner === "all" ? "" : " for " + escapeHtml(labelOf(state.owner))} yet. Use “+ Add account”.</div>`;
+  else {
+    // one group per person, in MINTY_USERS order, then anyone since removed from it
+    const owners = [...USERS.map(u => u.key), ...new Set(banks.map(b => b.owner))].filter((o, i, a) => a.indexOf(o) === i);
+    html = owners.filter(o => banks.some(b => b.owner === o)).map(o =>
+      `<div class="optgroup"><span class="dot" style="background:${colorOf(o)}"></span>${escapeHtml(labelOf(o))}</div>` +
+      banks.filter(b => b.owner === o).map(b => {
+        const note = b.status === "login_required" ? "needs reconnect" : b.status === "error" ? "sync error" : "";
+        return `<label><input type="checkbox" value="${b.id}" ${state.banks.includes(b.id) ? "checked" : ""} />` +
+          `${escapeHtml(bankName(b))}${note ? `<span class="note">${note}</span>` : ""}</label>`;
+      }).join("")).join("");
+  }
+  const opts = document.getElementById("bankOpts");
+  if (opts.dataset.html !== html) { opts.innerHTML = html; opts.dataset.html = html; }   // don't steal focus mid-menu
+  renderBankControls();
+}
+
+function renderBankControls() {
+  const chosen = (ITEMS || []).filter(it => state.banks.includes(it.id));
+  const btn = document.getElementById("bankBtn");
+  const withOwner = it => state.owner === "all" && USERS.length > 1 ? `${bankName(it)} (${labelOf(it.owner)})` : bankName(it);
+  btn.textContent = !chosen.length ? "All banks" : chosen.length === 1 ? withOwner(chosen[0]) : `${chosen.length} banks`;
+  btn.title = chosen.length ? `Banks: ${chosen.map(withOwner).join(", ")}` : "";
+  btn.classList.toggle("active", chosen.length > 0);
+  document.getElementById("bankClear").disabled = !chosen.length;
+}
+
+function setBanks(ids) {
+  state.banks = ids;
+  populateBankFilter();
+  load();
 }
 
 function setTags(tags) {
@@ -373,7 +443,7 @@ function txnHTML(t) {
 
 function detailHTML(t) {
   const acct = t.account_name
-    ? `${escapeHtml(t.account_name)}${t.account_mask ? ` ····${escapeHtml(t.account_mask)}` : ""}${t.account_subtype ? ` · ${escapeHtml(titleCase(t.account_subtype))}` : ""}`
+    ? `${t.institution_name ? `${escapeHtml(t.institution_name)} · ` : ""}${escapeHtml(t.account_name)}${t.account_mask ? ` ····${escapeHtml(t.account_mask)}` : ""}${t.account_subtype ? ` · ${escapeHtml(titleCase(t.account_subtype))}` : ""}`
     : "—";
   const when = t.datetime ? new Date(t.datetime).toLocaleString() : prettyDate(t.date);
   const chips = (t.tags || []).map(tg =>
@@ -503,7 +573,11 @@ function escapeAttr(s) { return String(s).replace(/[&"']/g, c => ({ "&": "&amp;"
 document.getElementById("ownerSeg").addEventListener("click", e => {
   const b = e.target.closest("button[data-owner]");
   if (!b) return;
-  state.owner = b.dataset.owner; renderOwnerSeg(); load();
+  state.owner = b.dataset.owner; renderOwnerSeg();
+  if (state.owner !== "all" && ITEMS) {
+    state.banks = state.banks.filter(id => ITEMS.some(it => it.id === id && it.owner === state.owner));
+  }
+  populateBankFilter(); load();
 });
 let deb;
 document.getElementById("q").addEventListener("input", e => { clearTimeout(deb); deb = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250); });
@@ -524,6 +598,18 @@ document.getElementById("tagMode").addEventListener("click", e => {
   if (state.tags.length > 1) load();
 });
 document.getElementById("tagClear").addEventListener("click", () => setTags([]));
+// bank filter dropdown
+const bankBtn = document.getElementById("bankBtn"), bankMenu = document.getElementById("bankMenu");
+function setBankMenu(open) { bankMenu.hidden = !open; bankBtn.setAttribute("aria-expanded", open); }
+bankBtn.addEventListener("click", () => { setMenu(false); setBankMenu(bankMenu.hidden); });
+tagBtn.addEventListener("click", () => setBankMenu(false));
+document.addEventListener("click", e => { if (!e.target.closest("#bankPick")) setBankMenu(false); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !bankMenu.hidden) { setBankMenu(false); bankBtn.focus(); } });
+document.getElementById("bankOpts").addEventListener("change", () => {
+  state.banks = [...document.querySelectorAll("#bankOpts input:checked")].map(b => Number(b.value));
+  renderBankControls(); load();
+});
+document.getElementById("bankClear").addEventListener("click", () => setBanks([]));
 document.getElementById("start").addEventListener("change", e => { state.start = e.target.value; load(); });
 document.getElementById("end").addEventListener("change", e => { state.end = e.target.value; load(); });
 
@@ -556,7 +642,7 @@ const SAMPLE = [
   });
 })();
 
-loadUsers().then(load);
+loadUsers().then(() => { loadItems(); load(); });
 </script>
 </body>
 </html>

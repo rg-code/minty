@@ -18,6 +18,7 @@ describe("GET /transactions", () => {
       date: "2026-09-20", datetime: null, name: "WHOLE FOODS", merchant_name: "Whole Foods Market",
       category: "FOOD_AND_DRINK", pending: false, pending_txn_id: null, tags: ["groceries"],
       account_name: "Sapphire", account_mask: "9912", account_type: "credit", account_subtype: "credit card",
+      item_id: 1, institution_name: "Chase",
     });
     expect(body.find((t: any) => t.id === 102).amount).toBe(-2450);      // cents -> dollars, sign kept
     expect(body.find((t: any) => t.id === 101).pending).toBe(true);
@@ -30,6 +31,32 @@ describe("GET /transactions", () => {
     expect(ids((await getJson("/transactions?start=2026-09-17&end=2026-09-19")).body)).toEqual([101, 102, 200]);
     expect(ids((await getJson("/transactions?q=whole")).body)).toEqual([100]);           // case-insensitive
     expect(ids((await getJson("/transactions?q=airlines")).body)).toEqual([201]);        // merchant_name too
+  });
+
+  it("filters by one or several banks (item_id), alone or with other filters", async () => {
+    expect(ids((await getJson("/transactions?item_id=1")).body)).toEqual([100, 101, 102]);   // every account at Chase
+    expect(ids((await getJson("/transactions?item_id=2")).body)).toEqual([200, 201]);
+    expect(ids((await getJson("/transactions?item_id=1&item_id=2")).body)).toEqual([100, 101, 102, 200, 201]);
+    expect(ids((await getJson("/transactions?item_id=1&item_id=1")).body)).toEqual([100, 101, 102]);  // duplicates ok
+    expect(ids((await getJson("/transactions?item_id=1&owner=spouse")).body)).toEqual([]);   // filters AND together
+    expect(ids((await getJson("/transactions?item_id=1&item_id=2&q=netflix")).body)).toEqual([200]);
+    expect(ids((await getJson("/transactions?item_id=1&tag=car")).body)).toEqual([101]);
+    expect(ids((await getJson("/transactions?item_id=999")).body)).toEqual([]);             // unknown bank: no rows
+    expect(ids((await getJson("/transactions?item_id=")).body)).toHaveLength(5);            // blank = no filter
+    const rows = (await getJson("/transactions?item_id=2")).body;
+    expect(rows.map((t: any) => [t.item_id, t.institution_name])).toEqual([[2, "Ally"], [2, "Ally"]]);
+  });
+
+  it("rejects malformed or too many bank filters", async () => {
+    for (const bad of ["abc", "-1", "1.5", "1 OR 1=1"]) {
+      const r = await getJson(`/transactions?item_id=${encodeURIComponent(bad)}`);
+      expect(r.status).toBe(422);
+      expect(r.body.detail).toMatch(/item_id must be an integer/);
+    }
+    const many = Array.from({ length: 51 }, (_, i) => `item_id=${i + 1}`).join("&");
+    expect((await getJson(`/transactions?${many}`)).status).toBe(422);
+    const max = Array.from({ length: 50 }, (_, i) => `item_id=${i + 1}`).join("&");
+    expect((await getJson(`/transactions?${max}&tag=a&tag=b`)).status).toBe(200);            // fits D1's bind limit
   });
 
   it("treats user input as data, never SQL", async () => {
