@@ -22,6 +22,14 @@ describe("static pages", () => {
     expect(html).toContain('id="tagBtn"');                         // multi-tag filter
   });
 
+  it("dashboard has the multi-bank filter, fed by /items and sent as item_id", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('id="bankBtn"');
+    expect(html).toContain('fetch("/items")');
+    expect(html).toContain('p.append("item_id", id)');
+    expect(html).not.toMatch(/data-bank|value="\d+"/);             // banks are rendered from /items, not hard-coded
+  });
+
   it.each(["/", "/connect", "/add-user"])("%s has the theme toggle and dark palette", async (path) => {
     const { status, html } = await page(path);
     expect(status).toBe(200);

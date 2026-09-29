@@ -5,6 +5,7 @@ import { HttpError, dateParam, intParam, json, unprocessable } from "../http";
 /** Read API for the pages in public/, plus tag editing. */
 
 const MAX_FILTER_TAGS = 20;   // D1 allows 100 bound parameters per query
+const MAX_FILTER_BANKS = 50;  // with 20 tags and the other filters, still under 100
 const MAX_TAGS_PER_TXN = 50;
 const MAX_TAG_LENGTH = 64;
 
@@ -91,12 +92,18 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
   const tagMode = p.get("tag_mode") ?? "any";
   if (tagMode !== "any" && tagMode !== "all") throw unprocessable("tag_mode must be 'any' or 'all'");
   if (tags.length > MAX_FILTER_TAGS) throw unprocessable(`at most ${MAX_FILTER_TAGS} tags can be filtered on`);
+  // item_id (repeatable): a linked bank login. Several means "any of these banks".
+  const itemIds = p.getAll("item_id").filter((s) => s !== "");
+  if (itemIds.some((s) => !/^\d+$/.test(s))) throw unprocessable("item_id must be an integer");
+  const banks = [...new Set(itemIds.map(Number))];
+  if (banks.length > MAX_FILTER_BANKS) throw unprocessable(`at most ${MAX_FILTER_BANKS} banks can be filtered on`);
   const limit = intParam(url, "limit", { def: 500, min: 1, max: 1000 })!;
 
   const clauses: string[] = [];
   const params: unknown[] = [];
   if (owner)                   { clauses.push("t.owner = ?");      params.push(owner); }
   if (accountId !== undefined) { clauses.push("t.account_id = ?"); params.push(accountId); }
+  if (banks.length)            { clauses.push(`a.item_id IN (${banks.map(() => "?").join(", ")})`); params.push(...banks); }
   if (start)                   { clauses.push("t.date >= ?");      params.push(start); }
   if (end)                     { clauses.push("t.date <= ?");      params.push(end); }
   if (tags.length) {
@@ -126,9 +133,12 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
            a.name    AS account_name,
            a.mask    AS account_mask,
            a.type    AS account_type,
-           a.subtype AS account_subtype
+           a.subtype AS account_subtype,
+           a.item_id,
+           i.institution_name
     FROM transactions t
     JOIN accounts a ON a.id = t.account_id
+    JOIN items i ON i.id = a.item_id
     ${where}
     ORDER BY t.date DESC, t.id DESC
     LIMIT ?`;

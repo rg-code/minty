@@ -55,7 +55,7 @@ the secret names to add in the Cloudflare dashboard.
     POST /link/token/update      {item_id}  (reconnect a bank that needs a new login)
     GET  /items                  linked institutions + status
     GET  /accounts               accounts + balances   (?owner=)
-    GET  /transactions           unified feed   (?owner= &tag= [repeatable] &tag_mode=any|all &q= &start= &end= &account_id=)
+    GET  /transactions           unified feed   (?owner= &tag= [repeatable] &tag_mode=any|all &q= &start= &end= &account_id= &item_id= [repeatable: banks])
     GET  /tags                   distinct tags in use
     PUT  /transactions/{id}/tags {tags:[...]}  replace a transaction's tags
     GET  /capacity               per-person trial usage (used/cap)
