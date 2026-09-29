@@ -67,6 +67,8 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 4. **Plaid Sandbox end-to-end** (optional; the owner runs it because it reads `.dev.vars`):
    `node scripts/sandbox-e2e.ts` against `npm run dev`.
 5. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
+6. **Optional finance agent ("Ask Minty"):** proposal in [agent-plan.md](agent-plan.md).
+   Nothing built; four decisions pending (§9) before phase A1.
 
 ## Picking up on a new machine
 
