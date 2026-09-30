@@ -170,6 +170,7 @@
   .optgroup:first-child { padding-top: 2px; }
   .optgroup .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   .tagopts .note { margin-left: auto; font-size: 11.5px; color: var(--pending-ink); white-space: nowrap; }
+  .tagopts .kind { margin-left: auto; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
 
   /* expandable detail */
   .detail { display: none; padding: 4px 16px 16px 15px; background: var(--detail-bg); }
@@ -232,6 +233,16 @@
         <div class="tagopts" id="bankOpts" role="group" aria-label="Banks"></div>
       </div>
     </div>
+    <div class="tagpick" id="acctPick">
+      <button type="button" class="tagbtn" id="acctBtn" aria-haspopup="true" aria-expanded="false" aria-controls="acctMenu">All cards &amp; accounts</button>
+      <div class="tagmenu" id="acctMenu" hidden>
+        <div class="menuhead">
+          <span class="menutitle">Cards &amp; accounts</span>
+          <button type="button" class="tagclear" id="acctClear">Clear</button>
+        </div>
+        <div class="tagopts" id="acctOpts" role="group" aria-label="Cards and accounts"></div>
+      </div>
+    </div>
     <input type="date" id="start" aria-label="From date" />
     <input type="date" id="end" aria-label="To date" />
   </div>
@@ -247,8 +258,9 @@
 let USERS = [{ key: "me", label: "Me" }, { key: "spouse", label: "Spouse" }];
 const colorOf = k => { const i = USERS.findIndex(u => u.key === k); return i < 0 ? "var(--muted)" : `var(--u${i % 6})`; };
 const labelOf = k => USERS.find(u => u.key === k)?.label ?? k;
-let state = { owner: "all", q: "", start: "", end: "", tags: [], tagMode: "any", banks: [] };
+let state = { owner: "all", q: "", start: "", end: "", tags: [], tagMode: "any", banks: [], accounts: [] };
 let ITEMS = null;                  // linked bank logins from /items (null until loaded)
+let ACCOUNTS = null;               // their accounts and cards from /accounts (null until loaded)
 let openRows = new Set();          // plaid_txn_id of expanded rows (survives re-render)
 let current = new Map();           // plaid_txn_id -> txn object (for tag edits)
 let allTags = [];
@@ -281,6 +293,7 @@ async function load() {
   for (const t of state.tags) p.append("tag", t);
   if (state.tags.length > 1 && state.tagMode === "all") p.set("tag_mode", "all");
   for (const id of state.banks) p.append("item_id", id);
+  for (const id of state.accounts) p.append("account_id", id);
   p.set("limit", "500");
 
   let txns;
@@ -341,6 +354,7 @@ async function loadItems() {
     if (r.ok) ITEMS = await r.json();
   } catch {}
   populateBankFilter();
+  populateAccountFilter();          // group headings use the bank names
 }
 
 const bankName = it => it.institution_name || `Bank #${it.id}`;
@@ -383,6 +397,69 @@ function renderBankControls() {
 function setBanks(ids) {
   state.banks = ids;
   populateBankFilter();
+  pruneAccounts(); populateAccountFilter();
+  load();
+}
+
+// --- card/account filter: every account when no bank is picked, else only the picked banks' ---
+async function loadAccounts() {
+  try {
+    const r = await fetch("/accounts");
+    if (r.ok) ACCOUNTS = await r.json();
+  } catch {}
+  populateAccountFilter();
+}
+
+const acctName = a => `${a.name || "Account"}${a.mask ? ` ••${a.mask}` : ""}`;
+
+function visibleAccounts() {
+  return (ACCOUNTS || []).filter(a =>
+    (state.owner === "all" || a.owner === state.owner) &&
+    (!state.banks.length || state.banks.includes(a.item_id)));
+}
+
+// Drop picked accounts that the person or bank selection no longer shows.
+function pruneAccounts() {
+  const shown = new Set(visibleAccounts().map(a => a.id));
+  state.accounts = state.accounts.filter(id => shown.has(id));
+}
+
+function populateAccountFilter() {
+  const accts = visibleAccounts();
+  let html;
+  if (ACCOUNTS === null) html = `<div class="none">Accounts load from the Minty API.</div>`;
+  else if (!accts.length) html = `<div class="none">${state.banks.length ? "No accounts at the selected banks." : "No accounts yet. Use “+ Add account”."}</div>`;
+  else {
+    // one group per bank, in /items order, then any account whose bank isn't listed
+    const order = [...(ITEMS || []).map(it => it.id), ...new Set(accts.map(a => a.item_id))].filter((id, i, xs) => xs.indexOf(id) === i);
+    html = order.filter(id => accts.some(a => a.item_id === id)).map(id => {
+      const bank = (ITEMS || []).find(it => it.id === id);
+      const owner = bank?.owner ?? accts.find(a => a.item_id === id).owner;
+      const who = state.owner === "all" && USERS.length > 1 ? ` · ${escapeHtml(labelOf(owner))}` : "";
+      return `<div class="optgroup"><span class="dot" style="background:${colorOf(owner)}"></span>${escapeHtml(bank ? bankName(bank) : `Bank #${id}`)}${who}</div>` +
+        accts.filter(a => a.item_id === id).map(a =>
+          `<label><input type="checkbox" value="${a.id}" ${state.accounts.includes(a.id) ? "checked" : ""} />` +
+          `${escapeHtml(acctName(a))}${a.subtype || a.type ? `<span class="kind">${escapeHtml(titleCase(a.subtype || a.type))}</span>` : ""}</label>`
+        ).join("");
+    }).join("");
+  }
+  const opts = document.getElementById("acctOpts");
+  if (opts.dataset.html !== html) { opts.innerHTML = html; opts.dataset.html = html; }   // don't steal focus mid-menu
+  renderAccountControls();
+}
+
+function renderAccountControls() {
+  const chosen = (ACCOUNTS || []).filter(a => state.accounts.includes(a.id));
+  const btn = document.getElementById("acctBtn");
+  btn.textContent = !chosen.length ? "All cards & accounts" : chosen.length === 1 ? acctName(chosen[0]) : `${chosen.length} accounts`;
+  btn.title = chosen.length ? `Accounts: ${chosen.map(acctName).join(", ")}` : "";
+  btn.classList.toggle("active", chosen.length > 0);
+  document.getElementById("acctClear").disabled = !chosen.length;
+}
+
+function setAccounts(ids) {
+  state.accounts = ids;
+  populateAccountFilter();
   load();
 }
 
@@ -577,16 +654,28 @@ document.getElementById("ownerSeg").addEventListener("click", e => {
   if (state.owner !== "all" && ITEMS) {
     state.banks = state.banks.filter(id => ITEMS.some(it => it.id === id && it.owner === state.owner));
   }
-  populateBankFilter(); load();
+  populateBankFilter();
+  pruneAccounts(); populateAccountFilter();
+  load();
 });
 let deb;
 document.getElementById("q").addEventListener("input", e => { clearTimeout(deb); deb = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250); });
-// tag filter dropdown
-const tagBtn = document.getElementById("tagBtn"), tagMenu = document.getElementById("tagMenu");
-function setMenu(open) { tagMenu.hidden = !open; tagBtn.setAttribute("aria-expanded", open); }
-tagBtn.addEventListener("click", () => setMenu(tagMenu.hidden));
-document.addEventListener("click", e => { if (!e.target.closest("#tagPick")) setMenu(false); });
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !tagMenu.hidden) { setMenu(false); tagBtn.focus(); } });
+// Filter dropdowns (tags, banks, cards & accounts): opening one closes the others; a click
+// outside or Escape closes them.
+const DROPDOWNS = [["tagPick", "tagBtn", "tagMenu"], ["bankPick", "bankBtn", "bankMenu"], ["acctPick", "acctBtn", "acctMenu"]]
+  .map(([pick, btn, menu]) => ({ pick: document.getElementById(pick), btn: document.getElementById(btn), menu: document.getElementById(menu) }));
+function setDropdown(d, open) { d.menu.hidden = !open; d.btn.setAttribute("aria-expanded", open); }
+for (const d of DROPDOWNS) d.btn.addEventListener("click", () => {
+  const open = d.menu.hidden;
+  for (const o of DROPDOWNS) setDropdown(o, o === d && open);
+});
+document.addEventListener("click", e => { for (const d of DROPDOWNS) if (!d.pick.contains(e.target)) setDropdown(d, false); });
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  const d = DROPDOWNS.find(x => !x.menu.hidden);
+  if (d) { setDropdown(d, false); d.btn.focus(); }
+});
+// tag filter
 document.getElementById("tagOpts").addEventListener("change", e => {
   const boxes = [...document.querySelectorAll("#tagOpts input:checked")].map(b => b.value);
   state.tags = boxes; renderTagControls(); load();
@@ -598,18 +687,20 @@ document.getElementById("tagMode").addEventListener("click", e => {
   if (state.tags.length > 1) load();
 });
 document.getElementById("tagClear").addEventListener("click", () => setTags([]));
-// bank filter dropdown
-const bankBtn = document.getElementById("bankBtn"), bankMenu = document.getElementById("bankMenu");
-function setBankMenu(open) { bankMenu.hidden = !open; bankBtn.setAttribute("aria-expanded", open); }
-bankBtn.addEventListener("click", () => { setMenu(false); setBankMenu(bankMenu.hidden); });
-tagBtn.addEventListener("click", () => setBankMenu(false));
-document.addEventListener("click", e => { if (!e.target.closest("#bankPick")) setBankMenu(false); });
-document.addEventListener("keydown", e => { if (e.key === "Escape" && !bankMenu.hidden) { setBankMenu(false); bankBtn.focus(); } });
+// bank filter
 document.getElementById("bankOpts").addEventListener("change", () => {
   state.banks = [...document.querySelectorAll("#bankOpts input:checked")].map(b => Number(b.value));
-  renderBankControls(); load();
+  renderBankControls();
+  pruneAccounts(); populateAccountFilter();      // only the picked banks' accounts stay listed
+  load();
 });
 document.getElementById("bankClear").addEventListener("click", () => setBanks([]));
+// card/account filter
+document.getElementById("acctOpts").addEventListener("change", () => {
+  state.accounts = [...document.querySelectorAll("#acctOpts input:checked")].map(b => Number(b.value));
+  renderAccountControls(); load();
+});
+document.getElementById("acctClear").addEventListener("click", () => setAccounts([]));
 document.getElementById("start").addEventListener("change", e => { state.start = e.target.value; load(); });
 document.getElementById("end").addEventListener("change", e => { state.end = e.target.value; load(); });
 
@@ -642,7 +733,7 @@ const SAMPLE = [
   });
 })();
 
-loadUsers().then(() => { loadItems(); load(); });
+loadUsers().then(() => { loadItems(); loadAccounts(); load(); });
 </script>
 </body>
 </html>
