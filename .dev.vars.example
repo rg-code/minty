@@ -7,10 +7,8 @@ PLAID_CLIENT_ID_ME_PRIMARY=
 PLAID_SECRET_ME_PRIMARY=
 PLAID_CLIENT_ID_ME_BACKUP=
 PLAID_SECRET_ME_BACKUP=
-PLAID_CLIENT_ID_SPOUSE_PRIMARY=
-PLAID_SECRET_SPOUSE_PRIMARY=
-PLAID_CLIENT_ID_SPOUSE_BACKUP=
-PLAID_SECRET_SPOUSE_BACKUP=
+# More people: list them in MINTY_USERS (e.g. me:Alex,sam:Sam) and add their keys the same way,
+# e.g. PLAID_CLIENT_ID_SAM_PRIMARY / PLAID_SECRET_SAM_PRIMARY. The Add user page lists the names.
 
 # Fernet key for Plaid access tokens (used from P2). Generate once:
 #   openssl rand -base64 32 | tr '+/' '-_'

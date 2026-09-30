@@ -92,6 +92,20 @@ export async function status(env: Env, config: Config, email: string): Promise<R
     add({ id: "items_login", ok: false, level: "warn", message: `${byStatus.login_required} bank(s) need you to sign in again.`,
           fix: "Open Add account and use Reconnect." });
   }
+  // Plaid keys for someone who isn't in MINTY_USERS (e.g. set up for a second person who was never
+  // added): they're never used, so say so rather than leave them silently ignored.
+  const known = new Set([...config.users.keys()].map((k) => k.toUpperCase()));
+  const orphans = [...new Set(Object.keys(env)
+    .filter((k) => typeof (env as Record<string, unknown>)[k] === "string" && (env as Record<string, unknown>)[k] !== "")
+    .map((k) => /^PLAID_(?:CLIENT_ID|SECRET)_([A-Z][A-Z0-9]*)_[A-Z0-9]+$/.exec(k)?.[1])
+    .filter((k): k is string => !!k && !known.has(k)))];
+  if (orphans.length) {
+    const example = [...[...config.users].map(([k, l]) => `${k}:${l}`), ...orphans.map((o) => `${o.toLowerCase()}:Name`)].join(",");
+    add({ id: "keys_unused", ok: false, level: "warn",
+          message: `Plaid keys are set for ${orphans.join(", ")}, who ${orphans.length === 1 ? "isn't" : "aren't"} in MINTY_USERS, so they aren't used.`,
+          fix: `To add ${orphans.length === 1 ? "them" : "those people"}, set MINTY_USERS to e.g. ${example}. Otherwise delete those secrets.` });
+  }
+
   // Banks whose credential set is gone (person removed from MINTY_USERS, slot removed from
   // PLAID_SLOTS) or has no keys any more: sync skips them, so say so instead of failing silently.
   const { results: perAccount } = await env.DB.prepare(

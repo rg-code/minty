@@ -21,11 +21,13 @@ web browser.
   (apply D1 migrations, then deploy). GitHub Actions only runs tests.
 
 ## People and the trial overflow model
-People come from the `MINTY_USERS` variable (default `me:Me,spouse:Spouse`). Each person has
-two Plaid Trial credential sets, a **primary** and a **backup**:
+People come from the `MINTY_USERS` variable, `key:Name` in display order. The default is one
+person, `me:Me`; with two or more (e.g. `me:Alex,sam:Sam,kim:Kim`), the dashboard shows a person
+switch: **Combined**, then each name. Each person has their own Plaid Trial credential sets, a
+**primary** and a **backup** by default (`PLAID_SLOTS`):
 
-    me_primary     → me_backup      (owner: me)
-    spouse_primary → spouse_backup  (owner: spouse)
+    me_primary  → me_backup   (owner: me)
+    sam_primary → sam_backup  (owner: sam)
 
 `owner` drives the dashboard's filtering and totals; `plaid_account` is the credential set a
 bank login is bound to. New links land on the person's primary; when it reaches
@@ -69,6 +71,7 @@ the secret names to add in the Cloudflare dashboard.
     npm run typecheck
     npm run db:migrate:local && npm run db:seed:local   # demo data
     npm run dev                                         # http://localhost:8787 (Access bypassed, localhost only)
+    npm run dev:demo                                    # same, with two demo people (Alex, Sam) for the seed data
 
 Against Plaid Sandbox: put Sandbox keys and a `TOKEN_ENC_KEY` in `.dev.vars` (see
 `.dev.vars.example`), start `npm run dev`, then run `node scripts/sandbox-e2e.ts`.

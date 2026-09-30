@@ -8,9 +8,10 @@ import { call, getJson } from "./helpers";
 const E = env as unknown as Env;
 
 describe("MINTY_USERS", () => {
-  it("defaults to me + spouse, in order", () => {
-    expect([...parseUsers("me:Me,spouse:Spouse")]).toEqual([["me", "Me"], ["spouse", "Spouse"]]);
-    expect([...loadConfig({ ...E, MINTY_USERS: "" }).users]).toEqual([["me", "Me"], ["spouse", "Spouse"]]);
+  it("defaults to one person; more come only from MINTY_USERS, in order", () => {
+    expect([...loadConfig({ ...E, MINTY_USERS: "" }).users]).toEqual([["me", "Me"]]);
+    expect([...loadConfig({ ...E, MINTY_USERS: undefined }).users]).toEqual([["me", "Me"]]);
+    expect([...parseUsers("me:Alex,sam:Sam,kim:Kim")]).toEqual([["me", "Alex"], ["sam", "Sam"], ["kim", "Kim"]]);
   });
 
   it("trims and defaults labels", () => {

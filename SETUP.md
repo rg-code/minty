@@ -58,7 +58,7 @@ refuses everything until the login is set up.
      address there land in your inbox.)
    - **Never** choose "Everyone" or a public domain like gmail.com.
 
-   To allow a specific outside address (e.g. a partner's Gmail), add a custom policy later:
+   To allow a specific outside address (e.g. another person's Gmail), add a custom policy later:
    **Zero Trust → Access → Policies → Add → Include → Emails**, then attach it to the minty app.
 3. Copy the **AUD tag** (a long hex string) that the Access tab shows. Then find your **team
    domain**: open your Minty address in a private window. The sign-in page's address starts
@@ -98,10 +98,7 @@ can't be used and you'd have to link them again.
 2. In **Variables and secrets**, add these, each with **Secret checked**:
    - `PLAID_CLIENT_ID_ME_PRIMARY` = client_id
    - `PLAID_SECRET_ME_PRIMARY` = secret
-3. Your partner signs up for their own Plaid account and adds `PLAID_CLIENT_ID_SPOUSE_PRIMARY`
-   and `PLAID_SECRET_SPOUSE_PRIMARY` the same way. (Separate accounts, because each Plaid Trial
-   allows 10 bank logins.)
-4. When you're using the Production secret, add a **Text** variable `PLAID_ENV` = `production`.
+3. When you're using the Production secret, add a **Text** variable `PLAID_ENV` = `production`.
    Without it, Minty uses Plaid's Sandbox (test banks).
 
 **Tried Sandbox first?** Test banks don't work once you switch to production, so delete them
@@ -125,13 +122,17 @@ slots, `primary` then `backup`: add `PLAID_CLIENT_ID_ME_BACKUP` / `PLAID_SECRET_
 second Plaid account), and new links move to backup automatically once primary is full. For
 more, add a **Text** variable `PLAID_SLOTS` listing them in order, e.g.
 `primary,backup,extra1`, plus that slot's two secrets (`…_ME_EXTRA1`).
-- Slots without keys are skipped, so your partner can have fewer.
+- Slots without keys are skipped, so each person can have a different number.
 - Keep a slot in the list once it has banks: they stay with the Plaid account they were linked
   under.
 - Removing a bank doesn't give its Trial login back.
 
-**Other names or more people:** open **+ Add user** on the dashboard. It generates the exact
-`MINTY_USERS` value and secret names to add. People default to "Me" and "Spouse".
+**Your name, or more people:** Minty starts with one person, "Me". To use your name, or to add
+a partner or family members, open **+ Add user** on the dashboard. It generates the exact
+`MINTY_USERS` value (e.g. `me:Alex,sam:Sam`) and the secret names to add. Each extra person
+signs up for their own Plaid account (each Plaid Trial allows 10 bank logins) and gets their
+own `PLAID_CLIENT_ID_<KEY>_PRIMARY` / `PLAID_SECRET_<KEY>_PRIMARY`. With two or more people, the
+dashboard gets a person switch: **Combined** plus each name.
 
 ## 6. Check the setup
 
