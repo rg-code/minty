@@ -1,6 +1,6 @@
 # Plan: an optional finance agent for Minty
 
-**Status: proposal, decisions pending (§9).** Nothing is built yet. Written 2026-09-29.
+**Status: the next step (2026-09-30); decisions pending (§9).** Nothing is built yet. Written 2026-09-29.
 
 Goal: an optional "Ask Minty" assistant that works on the household's own transactions, with
 the household's choice of model provider (OpenRouter, OpenAI, Anthropic, …). For example:
@@ -171,3 +171,7 @@ key-storage option is chosen.
 ## 10. Decision log
 
 (Filled in as decisions are made.)
+
+- **2026-09-30:** chosen as the next step, now that the household runs on Plaid production
+  (4 banks linked). The owner reports no CPU overruns from the hourly sync on the free plan.
+  A0 still has to measure agent steps, which are a different workload. §9 decisions still pending.
