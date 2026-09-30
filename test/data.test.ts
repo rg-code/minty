@@ -53,10 +53,30 @@ describe("GET /transactions", () => {
       expect(r.status).toBe(422);
       expect(r.body.detail).toMatch(/item_id must be an integer/);
     }
-    const many = Array.from({ length: 51 }, (_, i) => `item_id=${i + 1}`).join("&");
-    expect((await getJson(`/transactions?${many}`)).status).toBe(422);
-    const max = Array.from({ length: 50 }, (_, i) => `item_id=${i + 1}`).join("&");
-    expect((await getJson(`/transactions?${max}&tag=a&tag=b`)).status).toBe(200);            // fits D1's bind limit
+    const ids60 = (n: number, name: string, from = 1) => Array.from({ length: n }, (_, i) => `${name}=${from + i}`);
+    // banks + accounts share one cap of 60
+    expect((await getJson(`/transactions?${ids60(61, "item_id").join("&")}`)).status).toBe(422);
+    expect((await getJson(`/transactions?${[...ids60(40, "item_id"), ...ids60(21, "account_id")].join("&")}`)).status).toBe(422);
+    // the worst case still fits D1's 100 bound parameters: 60 ids + 20 tags (all) + every other filter
+    const tags = Array.from({ length: 20 }, (_, i) => `tag=t${i}`);
+    const worst = [...ids60(30, "item_id"), ...ids60(30, "account_id"), ...tags, "tag_mode=all", "owner=me",
+                   "start=2026-01-01", "end=2026-12-31", "q=x", "limit=10"].join("&");
+    expect((await getJson(`/transactions?${worst}`)).status).toBe(200);
+  });
+
+  it("filters by one or several accounts (account_id), within the selected banks", async () => {
+    expect(ids((await getJson("/transactions?account_id=10")).body)).toEqual([100, 101]);            // Sapphire card
+    expect(ids((await getJson("/transactions?account_id=10&account_id=20")).body)).toEqual([100, 101, 200, 201]);
+    expect(ids((await getJson("/transactions?account_id=11&item_id=1")).body)).toEqual([102]);       // account in bank
+    expect(ids((await getJson("/transactions?account_id=20&item_id=1")).body)).toEqual([]);          // ANDs with banks
+    expect(ids((await getJson("/transactions?account_id=10&account_id=10")).body)).toEqual([100, 101]);  // duplicates ok
+    expect(ids((await getJson("/transactions?account_id=10&tag=car")).body)).toEqual([101]);
+    expect(ids((await getJson("/transactions?account_id=")).body)).toHaveLength(5);                  // blank = no filter
+    for (const bad of ["x", "-3", "2.5"]) {
+      const r = await getJson(`/transactions?account_id=${bad}`);
+      expect(r.status).toBe(422);
+      expect(r.body.detail).toMatch(/account_id must be an integer/);
+    }
   });
 
   it("treats user input as data, never SQL", async () => {

@@ -5,7 +5,9 @@ import { HttpError, dateParam, intParam, json, unprocessable } from "../http";
 /** Read API for the pages in public/, plus tag editing. */
 
 const MAX_FILTER_TAGS = 20;   // D1 allows 100 bound parameters per query
-const MAX_FILTER_BANKS = 50;  // with 20 tags and the other filters, still under 100
+// Banks + accounts together. Worst case: 60 ids + 20 tags + 1 tag count + owner, start, end,
+// 2 for q, and limit = 87 bound parameters, under D1's 100.
+const MAX_FILTER_IDS = 60;
 const MAX_TAGS_PER_TXN = 50;
 const MAX_TAG_LENGTH = 64;
 
@@ -75,6 +77,15 @@ export function normaliseTags(tags: string[]): string[] {
   return clean;
 }
 
+/** Repeatable positive-integer query param (item_id, account_id), de-duplicated. */
+function idList(p: URLSearchParams, name: string): number[] {
+  const raw = p.getAll(name).filter((s) => s !== "");
+  if (raw.some((s) => !/^\d+$/.test(s))) throw unprocessable(`${name} must be an integer`);
+  return [...new Set(raw.map(Number))];
+}
+
+const marks = (xs: unknown[]) => xs.map(() => "?").join(", ");
+
 interface TxnRow {
   pending: number;
   tags: string;
@@ -84,7 +95,6 @@ interface TxnRow {
 export async function transactions(env: Env, url: URL): Promise<Response> {
   const p = url.searchParams;
   const owner = p.get("owner") || undefined;
-  const accountId = intParam(url, "account_id");
   const start = dateParam(url, "start");
   const end = dateParam(url, "end");
   const q = p.get("q") || undefined;
@@ -92,18 +102,20 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
   const tagMode = p.get("tag_mode") ?? "any";
   if (tagMode !== "any" && tagMode !== "all") throw unprocessable("tag_mode must be 'any' or 'all'");
   if (tags.length > MAX_FILTER_TAGS) throw unprocessable(`at most ${MAX_FILTER_TAGS} tags can be filtered on`);
-  // item_id (repeatable): a linked bank login. Several means "any of these banks".
-  const itemIds = p.getAll("item_id").filter((s) => s !== "");
-  if (itemIds.some((s) => !/^\d+$/.test(s))) throw unprocessable("item_id must be an integer");
-  const banks = [...new Set(itemIds.map(Number))];
-  if (banks.length > MAX_FILTER_BANKS) throw unprocessable(`at most ${MAX_FILTER_BANKS} banks can be filtered on`);
+  // item_id (repeatable): a linked bank login; account_id (repeatable): one account or card.
+  // Several of either mean "any of these"; the two AND together and with every other filter.
+  const banks = idList(p, "item_id");
+  const accountIds = idList(p, "account_id");
+  if (banks.length + accountIds.length > MAX_FILTER_IDS) {
+    throw unprocessable(`at most ${MAX_FILTER_IDS} banks and accounts can be filtered on together`);
+  }
   const limit = intParam(url, "limit", { def: 500, min: 1, max: 1000 })!;
 
   const clauses: string[] = [];
   const params: unknown[] = [];
   if (owner)                   { clauses.push("t.owner = ?");      params.push(owner); }
-  if (accountId !== undefined) { clauses.push("t.account_id = ?"); params.push(accountId); }
-  if (banks.length)            { clauses.push(`a.item_id IN (${banks.map(() => "?").join(", ")})`); params.push(...banks); }
+  if (accountIds.length)        { clauses.push(`t.account_id IN (${marks(accountIds)})`); params.push(...accountIds); }
+  if (banks.length)             { clauses.push(`a.item_id IN (${marks(banks)})`); params.push(...banks); }
   if (start)                   { clauses.push("t.date >= ?");      params.push(start); }
   if (end)                     { clauses.push("t.date <= ?");      params.push(end); }
   if (tags.length) {
