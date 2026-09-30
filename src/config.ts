@@ -4,7 +4,7 @@ import type { Env } from "./env";
 // can't contain underscores.
 const USER_KEY = /^[a-z][a-z0-9]{0,23}$/;
 const SLOT_NAME = /^[a-z][a-z0-9]{0,15}$/;
-const DEFAULT_USERS = "me:Me,spouse:Spouse";
+const DEFAULT_USERS = "me:Me";      // one person; add more with MINTY_USERS
 
 /** Plaid credential sets ("slots") each person can have, in overflow order: new links go to the
  * first slot that has keys and is under the Item cap. PLAID_SLOTS overrides the default; each
@@ -33,7 +33,7 @@ export function parseSlots(raw: string | undefined): string[] {
   return names;
 }
 
-/** "me:Me,spouse:Spouse" -> Map { me => "Me", spouse => "Spouse" }, preserving order. */
+/** "me:Alex,sam:Sam" -> Map { me => "Alex", sam => "Sam" }, preserving order. */
 export function parseUsers(raw: string): Map<string, string> {
   const users = new Map<string, string>();
   for (const part of raw.split(",")) {

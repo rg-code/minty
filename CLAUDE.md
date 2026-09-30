@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Minty — Project Context
 
 Self-hosted personal finance aggregator that consolidates bank and credit card
-transactions for a household (default: me + spouse) into one private dashboard.
+transactions for a household (one person by default; any number via `MINTY_USERS`) into one
+private dashboard.
 Anyone can fork it and run their own copy on Cloudflare's free plans.
 Goals: full data ownership, no subscription fees, no public endpoints.
 
@@ -22,7 +23,7 @@ Design history and decisions: `docs/serverless-plan.md`.
   onboarding is `SETUP.md`. Development with `wrangler dev` on any machine (Node 22+).
 
 ## Architecture invariants (do not change without asking)
-- `owner` (a `MINTY_USERS` key; default me | spouse) and `plaid_account` (which
+- `owner` (a `MINTY_USERS` key; default just `me`) and `plaid_account` (which
   Plaid credential set) are DISTINCT concepts. Never collapse or infer one from
   the other.
 - People come from the `MINTY_USERS` Worker variable. Each person has one credential set per

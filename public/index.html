@@ -92,6 +92,7 @@
   .controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
   .seg { display: inline-flex; background: var(--bg); border: 1px solid var(--hairline);
          border-radius: var(--radius); padding: 3px; gap: 3px; }
+  .seg[hidden] { display: none; }
   .seg button {
     border: 0; background: transparent; cursor: pointer; font: inherit;
     padding: 7px 14px; border-radius: 7px; color: var(--muted); font-weight: 550;
@@ -255,7 +256,7 @@
 <script>
 // People come from /users (MINTY_USERS order sets their colour). The offline preview
 // falls back to the two people in SAMPLE.
-let USERS = [{ key: "me", label: "Me" }, { key: "spouse", label: "Spouse" }];
+let USERS = [{ key: "me", label: "Alex" }, { key: "sam", label: "Sam" }];   // offline preview only (SAMPLE's two people)
 const colorOf = k => { const i = USERS.findIndex(u => u.key === k); return i < 0 ? "var(--muted)" : `var(--u${i % 6})`; };
 const labelOf = k => USERS.find(u => u.key === k)?.label ?? k;
 let state = { owner: "all", q: "", start: "", end: "", tags: [], tagMode: "any", banks: [], accounts: [] };
@@ -276,6 +277,9 @@ async function loadUsers() {
 }
 
 function renderOwnerSeg() {
+  const seg = document.getElementById("ownerSeg");
+  seg.hidden = USERS.length < 2;                 // one person: nothing to switch between
+  if (seg.hidden) { seg.innerHTML = ""; state.owner = "all"; return; }
   const n = USERS.length;
   const stops = USERS.map((u, i) => `${colorOf(u.key)} ${i * 100 / n}% ${(i + 1) * 100 / n}%`).join(", ");
   const btn = (key, label, bg) => `<button data-owner="${escapeAttr(key)}" aria-pressed="${state.owner === key}">` +
@@ -501,7 +505,8 @@ function txnHTML(t) {
   const tagChips = (t.tags || []).map(tg =>
     `<span class="tag${state.tags.includes(tg) ? " sel" : ""}" data-tag="${escapeAttr(tg)}" title="Filter by ${escapeAttr(tg)}">${escapeHtml(tg)}</span>`).join("") +
     `<button type="button" class="tag addtag" data-addtag aria-label="Add a tag to ${escapeAttr(merchant)}">+ tag</button>`;
-  const meta = [`<span>${escapeHtml(labelOf(t.owner))}</span>`];
+  // name each row's person only when there's more than one (or it's someone since removed)
+  const meta = USERS.length > 1 || !USERS.some(u => u.key === t.owner) ? [`<span>${escapeHtml(labelOf(t.owner))}</span>`] : [];
   if (t.category) meta.push(`<span>${escapeHtml(titleCase(t.category))}</span>`);
   if (t.pending) meta.push(`<span class="chip pending">Pending</span>`);
   return `
@@ -707,11 +712,11 @@ document.getElementById("end").addEventListener("change", e => { state.end = e.t
 // sample data for offline preview only (includes account fields + tags)
 const SAMPLE = [
   { id: 1, owner:"me",     plaid_txn_id:"s1", date:"2026-07-20", name:"Whole Foods", merchant_name:"Whole Foods Market", amount:84.12, category:"GROCERIES", pending:false, account_name:"Chase Sapphire", account_mask:"4021", account_subtype:"credit card", datetime:null, tags:["groceries"] },
-  { id: 2, owner:"spouse", plaid_txn_id:"s2", date:"2026-07-20", name:"Shell", merchant_name:"Shell", amount:52.40, category:"TRANSPORTATION", pending:true, account_name:"Amex Blue Cash", account_mask:"1007", account_subtype:"credit card", datetime:null, tags:["car"] },
+  { id: 2, owner:"sam"   , plaid_txn_id:"s2", date:"2026-07-20", name:"Shell", merchant_name:"Shell", amount:52.40, category:"TRANSPORTATION", pending:true, account_name:"Amex Blue Cash", account_mask:"1007", account_subtype:"credit card", datetime:null, tags:["car"] },
   { id: 3, owner:"me",     plaid_txn_id:"s3", date:"2026-07-19", name:"Payroll", merchant_name:"ACME Corp", amount:-2450.00, category:"INCOME", pending:false, account_name:"Ally Checking", account_mask:"8890", account_subtype:"checking", datetime:null, tags:[] },
-  { id: 4, owner:"spouse", plaid_txn_id:"s4", date:"2026-07-19", name:"Netflix", merchant_name:"Netflix", amount:15.49, category:"ENTERTAINMENT", pending:false, account_name:"Amex Blue Cash", account_mask:"1007", account_subtype:"credit card", datetime:null, tags:["subscription"] },
+  { id: 4, owner:"sam"   , plaid_txn_id:"s4", date:"2026-07-19", name:"Netflix", merchant_name:"Netflix", amount:15.49, category:"ENTERTAINMENT", pending:false, account_name:"Amex Blue Cash", account_mask:"1007", account_subtype:"credit card", datetime:null, tags:["subscription"] },
   { id: 5, owner:"me",     plaid_txn_id:"s5", date:"2026-07-18", name:"Delta Air", merchant_name:"Delta Airlines", amount:312.00, category:"TRAVEL", pending:false, account_name:"Chase Sapphire", account_mask:"4021", account_subtype:"credit card", datetime:null, tags:["travel","reimbursable"] },
-  { id: 6, owner:"spouse", plaid_txn_id:"s6", date:"2026-07-18", name:"Transfer", merchant_name:"From Savings", amount:-500.00, category:"TRANSFER_IN", pending:false, account_name:"Ally Checking", account_mask:"3312", account_subtype:"checking", datetime:null, tags:[] },
+  { id: 6, owner:"sam"   , plaid_txn_id:"s6", date:"2026-07-18", name:"Transfer", merchant_name:"From Savings", amount:-500.00, category:"TRANSFER_IN", pending:false, account_name:"Ally Checking", account_mask:"3312", account_subtype:"checking", datetime:null, tags:[] },
 ];
 
 // Light/dark toggle. The <head> script already applied the initial theme.

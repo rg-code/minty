@@ -25,9 +25,9 @@ const ITEMS = [
                                  ["Chase Sapphire Preferred", "9912", "credit", "credit card", 1284.55]]],
   ["me", "me_primary", "American Express", [["Blue Cash Everyday", "1005", "credit", "credit card", 412.90]]],
   ["me", "me_primary", "Fidelity", [["Cash Management", "7730", "depository", "cash management", 18950.00]]],
-  ["spouse", "spouse_primary", "Bank of America", [["Adv Plus Banking", "3317", "depository", "checking", 4102.77],
+  ["sam", "sam_primary", "Bank of America", [["Adv Plus Banking", "3317", "depository", "checking", 4102.77],
                                                    ["Customized Cash Rewards", "6604", "credit", "credit card", 689.31]]],
-  ["spouse", "spouse_primary", "Ally Bank", [["Online Savings", "2290", "depository", "savings", 22500.00]]],
+  ["sam", "sam_primary", "Ally Bank", [["Online Savings", "2290", "depository", "savings", 22500.00]]],
 ];
 
 // merchant, category, [min, max], times per 30 days, card-only?

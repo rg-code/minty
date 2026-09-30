@@ -69,6 +69,29 @@ describe("GET /status", () => {
     expect(c.plaid_keys_alex).toMatchObject({ ok: false, fix: expect.stringContaining("PLAID_CLIENT_ID_ALEX_PRIMARY") });
   });
 
+  it("flags Plaid keys set for someone who isn't in MINTY_USERS, never showing values", async () => {
+    // the test env has SPOUSE keys; with only one person configured they'd be silently unused
+    const r = await getJson("/status", { envOverrides: { MINTY_USERS: "me:Alex" } });
+    const c = byId(r.body.checks);
+    expect(c.keys_unused).toMatchObject({ ok: false, level: "warn",
+      message: "Plaid keys are set for SPOUSE, who isn't in MINTY_USERS, so they aren't used.",
+      fix: expect.stringContaining("me:Alex,spouse:Name") });
+    expect(JSON.stringify(r.body)).not.toMatch(/secret_|cid_/);
+    // everyone with keys is configured: no warning (the default test setup)
+    expect(byId((await getJson("/status")).body.checks).keys_unused).toBeUndefined();
+    // blank secrets don't count as set
+    const blank = await getJson("/status", { envOverrides: { MINTY_USERS: "me:Alex", PLAID_CLIENT_ID_SPOUSE_PRIMARY: "", PLAID_SECRET_SPOUSE_PRIMARY: "" } });
+    expect(byId(blank.body.checks).keys_unused).toBeUndefined();
+  });
+
+  it("with one person (the default) there are no checks for anyone else", async () => {
+    const c = byId((await getJson("/status", { envOverrides: { MINTY_USERS: "" } })).body.checks);
+    expect(c.plaid_keys_me).toMatchObject({ ok: true });
+    expect(c.plaid_keys_spouse).toBeUndefined();
+    const users = (await getJson("/users", { envOverrides: { MINTY_USERS: "" } })).body;
+    expect(users.map((u: any) => [u.key, u.label])).toEqual([["me", "Me"]]);
+  });
+
   it("reports production Plaid and rejects a bad PLAID_ENV", async () => {
     expect(byId((await getJson("/status", { envOverrides: { PLAID_ENV: "production" } })).body.checks).plaid_env.ok).toBe(true);
     const bad = byId((await getJson("/status", { envOverrides: { PLAID_ENV: "development" } })).body.checks).plaid_env;

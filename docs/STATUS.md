@@ -48,9 +48,12 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 ## To do, in order
 
 1. **Switch to production** (Worker → Settings → Variables and secrets):
-   - Edit `PLAID_SECRET_ME_PRIMARY` and `PLAID_SECRET_SPOUSE_PRIMARY` to the Plaid **Production**
-     secrets. The client_id is shared across environments; change `PLAID_CLIENT_ID_*` only if they
-     differ.
+   - Edit `PLAID_SECRET_ME_PRIMARY` to the Plaid **Production** secret. The client_id is shared
+     across environments; change `PLAID_CLIENT_ID_*` only if it differs.
+   - **People (2026-09-30):** the default is now one person, "Me". The `PLAID_*_SPOUSE_*` secrets
+     from Sandbox testing held your own keys: delete them, or, to add a second person, set
+     `MINTY_USERS` (e.g. `me:<Your name>,spouse:<Their name>`) and give their slot **their own**
+     Plaid account's keys. Setup checks flag keys set for someone not in `MINTY_USERS`.
    - Add a Text variable `PLAID_ENV` = `production`, then **Deploy**.
    - Setup checks should show "Plaid: production (real banks)" ✓.
    - Then link real banks. **Each one uses a Plaid Trial slot for good** (10 per credential set),
@@ -75,7 +78,7 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
     git clone git@github.com:rg-code/minty.git && cd minty
     npm ci                       # Node 22+; if npm 10 errors resolving new deps, use npx npm@11
     npm test && npm run typecheck
-    npm run db:migrate:local && npm run db:seed:local && npm run dev   # http://localhost:8787
+    npm run db:migrate:local && npm run db:seed:local && npm run dev:demo   # http://localhost:8787, two demo people
 
 - **Cloudflare CLI** (optional; the dashboard is enough): `npx wrangler login`.
 - **Temporary QA accounts:** `npx wrangler deploy --temporary` works for Workers + D1. It can't
