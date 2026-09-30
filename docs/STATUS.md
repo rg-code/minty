@@ -50,10 +50,16 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 1. **Switch to production** (Worker → Settings → Variables and secrets):
    - Edit `PLAID_SECRET_ME_PRIMARY` to the Plaid **Production** secret. The client_id is shared
      across environments; change `PLAID_CLIENT_ID_*` only if it differs.
-   - **People (2026-09-30):** the default is now one person, "Me". The `PLAID_*_SPOUSE_*` secrets
-     from Sandbox testing held your own keys: delete them, or, to add a second person, set
-     `MINTY_USERS` (e.g. `me:<Your name>,spouse:<Their name>`) and give their slot **their own**
-     Plaid account's keys. Setup checks flag keys set for someone not in `MINTY_USERS`.
+   - **People (2026-09-30):** the default is now one person, "Me". **Before deploying that change,
+     check whose name each linked bank is under** (dashboard **Banks** dropdown, or the per-person
+     counts on **+ Add account**):
+     - Any bank under **Spouse**: set `MINTY_USERS` (e.g. `me:<Your name>,spouse:<Their name>`)
+       first, and **never delete or change the `PLAID_*_SPOUSE_*` secrets** those banks were
+       linked with. A bank only syncs with the Plaid keys it was linked under, and re-linking uses
+       up another Trial slot for good.
+     - All banks under Me: the Spouse secrets are unused. Delete them, or give the slot a second
+       person's own Plaid keys before linking anything for them.
+     - Setup checks flag keys set for someone not in `MINTY_USERS`, and banks that can't sync.
    - Add a Text variable `PLAID_ENV` = `production`, then **Deploy**.
    - Setup checks should show "Plaid: production (real banks)" ✓.
    - Then link real banks. **Each one uses a Plaid Trial slot for good** (10 per credential set),
