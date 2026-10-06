@@ -57,12 +57,13 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 ## To do, in order
 
 1. **Next: the finance agent ("Ask Minty").** Plan: [agent-plan.md](agent-plan.md).
-   - First, the four decisions in §9: how model keys are stored, default provider, whether the
-     agent may tag after a Confirm, and free vs paid Workers.
-   - Then phase **A0**: measure CPU per agent step on the free plan with real model calls (the
-     hourly sync fits the 10 ms limit, but agent steps are a different workload), and check tool
-     calling on 2–3 cheap models. Record the results in the plan.
-   - Then A1 (the query layer, useful even without AI) and A2 (the read-only agent).
+   - Decisions made (2026-10-06): household secret; providers OpenRouter free models, Workers AI,
+     and own OpenAI/Anthropic API keys; tagging with Confirm from the start; free plan only;
+     automations (exact rules or AI judgement) with a **dashboard inbox**.
+   - Next: **A0** (agent-plan.md §8.1): a spike script the owner runs on synthetic data to pick a
+     free model and check it works with "train on inputs" off, plus a CPU estimate per step.
+   - Then A1 (the query layer, useful even without AI), A2 (the agent, with tagging), A3 (inbox +
+     automations without AI) and A4 (AI-powered automations).
 2. **Keep testing production:** new transactions arriving hourly, the Banks and Cards & accounts
    filters, tags, and Setup checks.
    - **Each new bank uses a Plaid Trial slot for good** (10 per credential set), so link only
