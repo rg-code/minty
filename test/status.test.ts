@@ -64,6 +64,34 @@ describe("GET /status", () => {
     expect(c.items_stranded.message).not.toContain("me_primary");
   });
 
+  it("reports card members per bank for Amex, and for any bank that has them; never as a warning", async () => {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO items (id, owner, plaid_account, plaid_item_id, access_token_enc, institution_name) VALUES
+        (1, 'me', 'me_primary', 'amex-au', 'x', 'American Express'),
+        (2, 'me', 'me_primary', 'chase', 'x', 'Chase'),
+        (3, 'me', 'me_primary', 'amex-solo', 'x', 'American Express'),
+        (4, 'me', 'me_primary', 'other', 'x', 'Capital One')`),
+      env.DB.prepare(`INSERT INTO accounts (id, owner, item_id, plaid_account_id, name, mask) VALUES
+        (10, 'me', 1, 'a10', 'Gold', '1001'), (20, 'me', 2, 'a20', 'Checking', '4821'),
+        (30, 'me', 3, 'a30', 'Blue', '1005'), (40, 'me', 4, 'a40', 'Venture', '7777')`),
+      env.DB.prepare(`INSERT INTO transactions (owner, account_id, plaid_txn_id, amount_cents, date, account_owner) VALUES
+        ('me', 10, 't1', 100, '2026-10-01', 'ALEX MORGAN'), ('me', 10, 't2', 200, '2026-10-02', 'SAM MORGAN -1013'),
+        ('me', 10, 't3', 300, '2026-10-03', NULL), ('me', 10, 't3b', 300, '2026-10-04', 'ALEX MORGAN'),
+        ('me', 20, 't4', 400, '2026-10-01', NULL),
+        ('me', 30, 't5', 500, '2026-10-01', NULL), ('me', 30, 't6', 600, '2026-10-02', NULL),
+        ('me', 40, 't7', 700, '2026-10-01', 'JO DOE')`),
+    ]);
+    const r = await getJson("/status");
+    const c = byId(r.body.checks);
+    expect(c.card_members_1).toEqual({ id: "card_members_1", ok: true, level: "warn",
+      message: "American Express: card member on 3 of 4 transactions (2 card members)." });
+    expect(c.card_members_3).toEqual({ id: "card_members_3", ok: true, level: "warn",
+      message: "American Express: no card members on its 2 transactions yet. Plaid fills this in only for some accounts, such as Amex authorized-user cards." });
+    expect(c.card_members_2).toBeUndefined();                     // a bank without card members: no line
+    expect(c.card_members_4.message).toBe("Capital One: card member on 1 of 1 transaction (1 card member).");
+    expect(JSON.stringify(r.body)).not.toContain("MORGAN");        // counts only, never the names
+  });
+
   it("flags people without Plaid keys, naming the secrets", async () => {
     const c = byId((await getJson("/status", { envOverrides: { MINTY_USERS: "me:Me,alex:Alex" } })).body.checks);
     expect(c.plaid_keys_alex).toMatchObject({ ok: false, fix: expect.stringContaining("PLAID_CLIENT_ID_ALEX_PRIMARY") });
