@@ -108,8 +108,10 @@ ITEMS.forEach(([owner, plaidAccount, inst, accts], i) => {
       const datetime = `${date}T${String(7 + randrange(15)).padStart(2, "0")}:${String(randrange(60)).padStart(2, "0")}:00Z`;
       const name = rand() < 0.3 ? merchant.toUpperCase() : merchant;
       const pending = daysAgo <= 2 && rand() < 0.6 ? 1 : 0;
-      out.push(`INSERT INTO transactions (id, owner, account_id, plaid_txn_id, amount_cents, currency, date, datetime, name, merchant_name, category, pending)
-                VALUES (${id}, ${q(owner)}, ${aId}, ${q(`local-seed-txn-${id}`)}, ${cents(amt)}, 'USD', ${q(date)}, ${q(datetime)}, ${q(name)}, ${NO_MERCHANT.has(cat) ? "NULL" : q(merchant)}, ${q(cat)}, ${pending});`);
+      // Demo Amex card with an authorized user: Plaid's account_owner names the card member.
+      const member = inst === "American Express" && cat !== "LOAN_PAYMENTS" ? (id % 3 === 0 ? "SAM MORGAN" : "ALEX MORGAN") : null;
+      out.push(`INSERT INTO transactions (id, owner, account_id, plaid_txn_id, amount_cents, currency, date, datetime, name, merchant_name, category, pending, account_owner)
+                VALUES (${id}, ${q(owner)}, ${aId}, ${q(`local-seed-txn-${id}`)}, ${cents(amt)}, 'USD', ${q(date)}, ${q(datetime)}, ${q(name)}, ${NO_MERCHANT.has(cat) ? "NULL" : q(merchant)}, ${q(cat)}, ${pending}, ${member ? q(member) : "NULL"});`);
       tags.forEach((tag, pos) => out.push(`INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (${id}, ${q(tag)}, ${pos});`));
     }
   });

@@ -8,7 +8,7 @@ import { json } from "../http";
  * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql"];
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql"];
 
 const STALE_SYNC_HOURS = 3;          // cron runs hourly; allow a couple of misses
 

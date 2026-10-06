@@ -18,7 +18,7 @@ describe("GET /transactions", () => {
       date: "2026-09-20", datetime: null, name: "WHOLE FOODS", merchant_name: "Whole Foods Market",
       category: "FOOD_AND_DRINK", pending: false, pending_txn_id: null, tags: ["groceries"],
       account_name: "Sapphire", account_mask: "9912", account_type: "credit", account_subtype: "credit card",
-      item_id: 1, institution_name: "Chase",
+      item_id: 1, institution_name: "Chase", account_owner: null,
     });
     expect(body.find((t: any) => t.id === 102).amount).toBe(-2450);      // cents -> dollars, sign kept
     expect(body.find((t: any) => t.id === 101).pending).toBe(true);

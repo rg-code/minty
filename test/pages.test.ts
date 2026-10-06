@@ -32,6 +32,7 @@ describe("static pages", () => {
     expect(html).toContain('id="acctBtn"');                        // card/account filter next to it
     expect(html).toContain('fetch("/accounts")');
     expect(html).toContain('p.append("account_id", id)');
+    expect(html).toContain("<dt>Card member</dt>");                // Plaid's account_owner, when present
     expect(html).not.toMatch(/data-bank|value="\d+"/);             // banks are rendered from /items, not hard-coded
   });
 

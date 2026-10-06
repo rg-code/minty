@@ -67,23 +67,26 @@ const UPSERT_ACCOUNTS = `
 
 // Transactions whose account isn't known yet are skipped (the JOIN drops them);
 // a later page's accounts[] backfills them. 'tags' live elsewhere and are never written here.
+// account_owner is Plaid's card member on multi-card accounts (e.g. Amex authorized users).
 const UPSERT_TRANSACTIONS = `
   INSERT INTO transactions (owner, account_id, plaid_txn_id, amount_cents, currency, date, datetime,
-                            name, merchant_name, category, pending, pending_txn_id)
+                            name, merchant_name, category, pending, pending_txn_id, account_owner)
   SELECT ?2, acc.id, t.value ->> 'transaction_id',
          CAST(round((t.value ->> 'amount') * 100) AS INTEGER),
          t.value ->> 'iso_currency_code', t.value ->> 'date', t.value ->> 'datetime',
          t.value ->> 'name', t.value ->> 'merchant_name',
          t.value -> 'personal_finance_category' ->> 'primary',
          CASE WHEN t.value ->> 'pending' THEN 1 ELSE 0 END,
-         t.value ->> 'pending_transaction_id'
+         t.value ->> 'pending_transaction_id',
+         t.value ->> 'account_owner'
   FROM (SELECT value FROM json_each(${PAGE}, '$.added') UNION ALL SELECT value FROM json_each(${PAGE}, '$.modified')) t
   JOIN accounts acc ON acc.plaid_account_id = t.value ->> 'account_id'
   WHERE true
   ON CONFLICT (plaid_txn_id) DO UPDATE SET
     amount_cents = excluded.amount_cents, date = excluded.date, datetime = excluded.datetime,
     name = excluded.name, merchant_name = excluded.merchant_name, category = excluded.category,
-    pending = excluded.pending, pending_txn_id = excluded.pending_txn_id`;
+    pending = excluded.pending, pending_txn_id = excluded.pending_txn_id,
+    account_owner = excluded.account_owner`;
 
 const DELETE_REMOVED = `
   DELETE FROM transactions

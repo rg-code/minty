@@ -209,7 +209,7 @@ User: "subset all transactions on Amex card ending in 1234 at store XYZ in the l
 If the question is ambiguous (two Amex cards ending 1234, or several XYZ merchants), the model
 asks which one instead of guessing.
 
-## 6. Data model: migration `0003_agent.sql`
+## 6. Data model: the agent's migration
 
 ```
 agent_conversations (id, email, title, model, created_at, updated_at)

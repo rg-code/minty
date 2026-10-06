@@ -534,6 +534,7 @@ function detailHTML(t) {
   return `
     <dl class="kv">
       <dt>Account</dt><dd>${acct}</dd>
+      ${t.account_owner ? `<dt>Card member</dt><dd>${escapeHtml(t.account_owner)}</dd>` : ""}
       <dt>When</dt><dd>${escapeHtml(when)}</dd>
       <dt>Amount</dt><dd class="num">${fmt.format(Math.abs(displayAmount(t.amount)))} ${displayAmount(t.amount) < 0 ? "out" : "in"}</dd>
       <dt>Plaid ID</dt><dd class="mono">${escapeHtml(t.plaid_txn_id)}</dd>
