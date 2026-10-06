@@ -7,7 +7,8 @@ import { HttpError, dateParam, intParam, json, unprocessable } from "../http";
 const MAX_FILTER_TAGS = 20;   // D1 allows 100 bound parameters per query
 // Banks + accounts together. Worst case: 60 ids + 20 tags + 1 tag count + owner, start, end,
 // 2 for q, and limit = 87 bound parameters, under D1's 100.
-const MAX_FILTER_IDS = 60;
+const MAX_FILTER_IDS = 60;    // a card member counts as 2 (account id + name)
+const MAX_CARD_MEMBER_LENGTH = 200;
 const MAX_TAGS_PER_TXN = 50;
 const MAX_TAG_LENGTH = 64;
 
@@ -41,7 +42,20 @@ export async function accounts(env: Env, url: URL): Promise<Response> {
   const stmt = owner
     ? env.DB.prepare(`${select} WHERE owner = ? ORDER BY name`).bind(owner)
     : env.DB.prepare(`${select} ORDER BY owner, name`);
-  return json((await stmt.all()).results);
+  const rows = (await stmt.all<{ id: number }>()).results;
+  // Card members (Plaid's account_owner) on multi-card accounts, e.g. Amex authorized-user cards,
+  // most-used first. Only accounts that have any; their transactions without one are listed as
+  // { name: null } so they can be picked too.
+  const { results: members } = await env.DB.prepare(
+    `SELECT account_id, account_owner AS name, count(*) AS count FROM transactions
+     WHERE account_id IN (SELECT DISTINCT account_id FROM transactions WHERE account_owner IS NOT NULL)
+     GROUP BY account_id, account_owner
+     ORDER BY account_id, account_owner IS NULL, count DESC, account_owner`,
+  ).all<{ account_id: number; name: string | null; count: number }>();
+  return json(rows.map((a) => ({
+    ...a,
+    card_members: members.filter((m) => m.account_id === a.id).map(({ name, count }) => ({ name, count })),
+  })));
 }
 
 export async function capacity(env: Env, config: Config): Promise<Response> {
@@ -86,6 +100,23 @@ function idList(p: URLSearchParams, name: string): number[] {
 
 const marks = (xs: unknown[]) => xs.map(() => "?").join(", ");
 
+/** card (repeatable): "<account_id>:<card member>", one card member on a multi-card account
+ * (Plaid's account_owner). An empty member means that account's transactions without one. */
+function cardList(p: URLSearchParams): { accountId: number; member: string | null }[] {
+  const seen = new Set<string>();
+  const out: { accountId: number; member: string | null }[] = [];
+  for (const raw of p.getAll("card")) {
+    if (raw === "") continue;
+    const m = /^(\d+):([\s\S]*)$/.exec(raw);
+    if (!m) throw unprocessable("card must be <account_id>:<card member>");
+    if (m[2].length > MAX_CARD_MEMBER_LENGTH) throw unprocessable(`card member must be at most ${MAX_CARD_MEMBER_LENGTH} characters`);
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    out.push({ accountId: Number(m[1]), member: m[2] === "" ? null : m[2] });
+  }
+  return out;
+}
+
 interface TxnRow {
   pending: number;
   tags: string;
@@ -102,19 +133,30 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
   const tagMode = p.get("tag_mode") ?? "any";
   if (tagMode !== "any" && tagMode !== "all") throw unprocessable("tag_mode must be 'any' or 'all'");
   if (tags.length > MAX_FILTER_TAGS) throw unprocessable(`at most ${MAX_FILTER_TAGS} tags can be filtered on`);
-  // item_id (repeatable): a linked bank login; account_id (repeatable): one account or card.
-  // Several of either mean "any of these"; the two AND together and with every other filter.
+  // item_id (repeatable): a linked bank login. account_id (repeatable): a whole account or card;
+  // card (repeatable): one card member on an account. Accounts and card members are one choice
+  // (any of them matches); banks AND with that, and with every other filter.
   const banks = idList(p, "item_id");
   const accountIds = idList(p, "account_id");
-  if (banks.length + accountIds.length > MAX_FILTER_IDS) {
-    throw unprocessable(`at most ${MAX_FILTER_IDS} banks and accounts can be filtered on together`);
+  const cards = cardList(p);
+  if (banks.length + accountIds.length + 2 * cards.length > MAX_FILTER_IDS) {
+    throw unprocessable(`at most ${MAX_FILTER_IDS} banks, accounts and card members can be filtered on together ` +
+                        "(a card member counts as 2)");
   }
   const limit = intParam(url, "limit", { def: 500, min: 1, max: 1000 })!;
 
   const clauses: string[] = [];
   const params: unknown[] = [];
   if (owner)                   { clauses.push("t.owner = ?");      params.push(owner); }
-  if (accountIds.length)        { clauses.push(`t.account_id IN (${marks(accountIds)})`); params.push(...accountIds); }
+  if (accountIds.length || cards.length) {
+    const any: string[] = [];
+    if (accountIds.length) { any.push(`t.account_id IN (${marks(accountIds)})`); params.push(...accountIds); }
+    for (const c of cards) {
+      if (c.member === null) { any.push("(t.account_id = ? AND t.account_owner IS NULL)"); params.push(c.accountId); }
+      else { any.push("(t.account_id = ? AND t.account_owner = ?)"); params.push(c.accountId, c.member); }
+    }
+    clauses.push(`(${any.join(" OR ")})`);
+  }
   if (banks.length)             { clauses.push(`a.item_id IN (${marks(banks)})`); params.push(...banks); }
   if (start)                   { clauses.push("t.date >= ?");      params.push(start); }
   if (end)                     { clauses.push("t.date <= ?");      params.push(end); }

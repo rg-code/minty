@@ -64,6 +64,37 @@ describe("GET /transactions", () => {
     expect((await getJson(`/transactions?${worst}`)).status).toBe(200);
   });
 
+  it("filters by card member (card=<account_id>:<member>), OR'd with whole accounts, AND'd with the rest", async () => {
+    await env.DB.prepare("UPDATE transactions SET account_owner = 'ALEX MORGAN' WHERE id = 100").run();
+    await env.DB.prepare("UPDATE transactions SET account_owner = 'A:B -1013' WHERE id = 200").run();
+    const q = (s: string) => getJson(`/transactions?${s}`).then((r) => ids(r.body));
+    expect(await q(`card=${encodeURIComponent("10:ALEX MORGAN")}`)).toEqual([100]);
+    expect(await q("card=10:")).toEqual([101]);                                    // that card's rows without a member
+    expect(await q(`card=${encodeURIComponent("10:ALEX MORGAN")}&account_id=11`)).toEqual([100, 102]);   // OR with whole accounts
+    expect(await q(`card=${encodeURIComponent("10:ALEX MORGAN")}&card=10:`)).toEqual([100, 101]);
+    expect(await q(`card=${encodeURIComponent("10:ALEX MORGAN")}&item_id=2`)).toEqual([]);              // AND with banks
+    expect(await q(`card=${encodeURIComponent("10:ALEX MORGAN")}&q=whole`)).toEqual([100]);
+    expect(await q(`card=${encodeURIComponent("20:A:B -1013")}`)).toEqual([200]);  // ":" inside a member name
+    expect(await q(`card=${encodeURIComponent("10:NOBODY")}`)).toEqual([]);
+    expect(await q("card=")).toHaveLength(5);                                       // blank = no filter
+    for (const bad of ["abc", "10", "x:ALEX", `10:${"x".repeat(201)}`]) {
+      expect((await getJson(`/transactions?card=${encodeURIComponent(bad)}`)).status).toBe(422);
+    }
+    const cards30 = Array.from({ length: 30 }, (_, i) => `card=${i + 1}:M`).join("&");
+    expect((await getJson(`/transactions?${cards30}`)).status).toBe(200);           // 30 members = 60
+    expect((await getJson(`/transactions?${cards30}&item_id=1`)).status).toBe(422);  // 61
+  });
+
+  it("lists each multi-card account's card members with counts", async () => {
+    await env.DB.prepare("UPDATE transactions SET account_owner = 'SAM MORGAN -1013' WHERE id = 100").run();
+    const accts = (await getJson("/accounts")).body;
+    expect(accts.find((a: any) => a.id === 10).card_members).toEqual([
+      { name: "SAM MORGAN -1013", count: 1 }, { name: null, count: 1 },            // named first, then "no card member"
+    ]);
+    expect(accts.find((a: any) => a.id === 11).card_members).toEqual([]);
+    expect(accts.find((a: any) => a.id === 20).card_members).toEqual([]);
+  });
+
   it("filters by one or several accounts (account_id), within the selected banks", async () => {
     expect(ids((await getJson("/transactions?account_id=10")).body)).toEqual([100, 101]);            // Sapphire card
     expect(ids((await getJson("/transactions?account_id=10&account_id=20")).body)).toEqual([100, 101, 200, 201]);

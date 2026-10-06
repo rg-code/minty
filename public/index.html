@@ -172,6 +172,7 @@
   .optgroup .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
   .tagopts .note { margin-left: auto; font-size: 11.5px; color: var(--pending-ink); white-space: nowrap; }
   .tagopts .kind { margin-left: auto; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .tagopts label.sub { padding-left: 28px; font-size: 13.5px; }
 
   /* expandable detail */
   .detail { display: none; padding: 4px 16px 16px 15px; background: var(--detail-bg); }
@@ -259,7 +260,8 @@
 let USERS = [{ key: "me", label: "Alex" }, { key: "sam", label: "Sam" }];   // offline preview only (SAMPLE's two people)
 const colorOf = k => { const i = USERS.findIndex(u => u.key === k); return i < 0 ? "var(--muted)" : `var(--u${i % 6})`; };
 const labelOf = k => USERS.find(u => u.key === k)?.label ?? k;
-let state = { owner: "all", q: "", start: "", end: "", tags: [], tagMode: "any", banks: [], accounts: [] };
+// cards: card members picked on multi-card accounts, as "<account_id>:<member>" ("" member = none)
+let state = { owner: "all", q: "", start: "", end: "", tags: [], tagMode: "any", banks: [], accounts: [], cards: [] };
 let ITEMS = null;                  // linked bank logins from /items (null until loaded)
 let ACCOUNTS = null;               // their accounts and cards from /accounts (null until loaded)
 let openRows = new Set();          // plaid_txn_id of expanded rows (survives re-render)
@@ -298,6 +300,7 @@ async function load() {
   if (state.tags.length > 1 && state.tagMode === "all") p.set("tag_mode", "all");
   for (const id of state.banks) p.append("item_id", id);
   for (const id of state.accounts) p.append("account_id", id);
+  for (const k of state.cards) p.append("card", k);
   p.set("limit", "500");
 
   let txns;
@@ -422,11 +425,15 @@ function visibleAccounts() {
     (!state.banks.length || state.banks.includes(a.item_id)));
 }
 
-// Drop picked accounts that the person or bank selection no longer shows.
+// Drop picked accounts and card members that the person or bank selection no longer shows.
 function pruneAccounts() {
   const shown = new Set(visibleAccounts().map(a => a.id));
   state.accounts = state.accounts.filter(id => shown.has(id));
+  state.cards = state.cards.filter(k => shown.has(Number(k.slice(0, k.indexOf(":")))));
 }
+
+const cardKey = (acctId, name) => `${acctId}:${name ?? ""}`;
+const memberName = name => name ?? "No card member";
 
 function populateAccountFilter() {
   const accts = visibleAccounts();
@@ -442,8 +449,14 @@ function populateAccountFilter() {
       const who = state.owner === "all" && USERS.length > 1 ? ` · ${escapeHtml(labelOf(owner))}` : "";
       return `<div class="optgroup"><span class="dot" style="background:${colorOf(owner)}"></span>${escapeHtml(bank ? bankName(bank) : `Bank #${id}`)}${who}</div>` +
         accts.filter(a => a.item_id === id).map(a =>
-          `<label><input type="checkbox" value="${a.id}" ${state.accounts.includes(a.id) ? "checked" : ""} />` +
-          `${escapeHtml(acctName(a))}${a.subtype || a.type ? `<span class="kind">${escapeHtml(titleCase(a.subtype || a.type))}</span>` : ""}</label>`
+          `<label><input type="checkbox" data-acct="${a.id}" ${state.accounts.includes(a.id) ? "checked" : ""} />` +
+          `${escapeHtml(acctName(a))}${a.subtype || a.type ? `<span class="kind">${escapeHtml(titleCase(a.subtype || a.type))}</span>` : ""}</label>` +
+          // card members on a multi-card account (e.g. Amex authorized users), indented under it
+          (a.card_members || []).map(m => {
+            const key = cardKey(a.id, m.name);
+            return `<label class="sub"><input type="checkbox" data-card="${escapeAttr(key)}" ${state.cards.includes(key) ? "checked" : ""} />` +
+              `${escapeHtml(memberName(m.name))}<span class="kind">${m.count}</span></label>`;
+          }).join("")
         ).join("");
     }).join("");
   }
@@ -453,12 +466,19 @@ function populateAccountFilter() {
 }
 
 function renderAccountControls() {
-  const chosen = (ACCOUNTS || []).filter(a => state.accounts.includes(a.id));
+  const byId = new Map((ACCOUNTS || []).map(a => [a.id, a]));
+  const labels = [
+    ...state.accounts.filter(id => byId.has(id)).map(id => acctName(byId.get(id))),
+    ...state.cards.map(k => {
+      const id = Number(k.slice(0, k.indexOf(":"))), name = k.slice(k.indexOf(":") + 1);
+      return `${byId.has(id) ? acctName(byId.get(id)) : `Account #${id}`} · ${memberName(name || null)}`;
+    }),
+  ];
   const btn = document.getElementById("acctBtn");
-  btn.textContent = !chosen.length ? "All cards & accounts" : chosen.length === 1 ? acctName(chosen[0]) : `${chosen.length} accounts`;
-  btn.title = chosen.length ? `Accounts: ${chosen.map(acctName).join(", ")}` : "";
-  btn.classList.toggle("active", chosen.length > 0);
-  document.getElementById("acctClear").disabled = !chosen.length;
+  btn.textContent = !labels.length ? "All cards & accounts" : labels.length === 1 ? labels[0] : `${labels.length} selected`;
+  btn.title = labels.length ? `Cards & accounts: ${labels.join(", ")}` : "";
+  btn.classList.toggle("active", labels.length > 0);
+  document.getElementById("acctClear").disabled = !labels.length;
 }
 
 function setAccounts(ids) {
@@ -507,6 +527,7 @@ function txnHTML(t) {
     `<button type="button" class="tag addtag" data-addtag aria-label="Add a tag to ${escapeAttr(merchant)}">+ tag</button>`;
   // name each row's person only when there's more than one (or it's someone since removed)
   const meta = USERS.length > 1 || !USERS.some(u => u.key === t.owner) ? [`<span>${escapeHtml(labelOf(t.owner))}</span>`] : [];
+  if (t.account_owner) meta.push(`<span title="Card member">${escapeHtml(t.account_owner)}</span>`);
   if (t.category) meta.push(`<span>${escapeHtml(titleCase(t.category))}</span>`);
   if (t.pending) meta.push(`<span class="chip pending">Pending</span>`);
   return `
@@ -702,11 +723,20 @@ document.getElementById("bankOpts").addEventListener("change", () => {
 });
 document.getElementById("bankClear").addEventListener("click", () => setBanks([]));
 // card/account filter
-document.getElementById("acctOpts").addEventListener("change", () => {
-  state.accounts = [...document.querySelectorAll("#acctOpts input:checked")].map(b => Number(b.value));
+document.getElementById("acctOpts").addEventListener("change", e => {
+  // A whole account and its card members are alternatives: ticking one unticks the other.
+  const box = e.target.closest("input[type=checkbox]");
+  if (box?.checked && box.dataset.acct) {
+    for (const m of document.querySelectorAll(`#acctOpts input[data-card^="${box.dataset.acct}:"]`)) m.checked = false;
+  } else if (box?.checked && box.dataset.card) {
+    const whole = document.querySelector(`#acctOpts input[data-acct="${box.dataset.card.slice(0, box.dataset.card.indexOf(":"))}"]`);
+    if (whole) whole.checked = false;
+  }
+  state.accounts = [...document.querySelectorAll("#acctOpts input[data-acct]:checked")].map(b => Number(b.dataset.acct));
+  state.cards = [...document.querySelectorAll("#acctOpts input[data-card]:checked")].map(b => b.dataset.card);
   renderAccountControls(); load();
 });
-document.getElementById("acctClear").addEventListener("click", () => setAccounts([]));
+document.getElementById("acctClear").addEventListener("click", () => { state.cards = []; setAccounts([]); });
 document.getElementById("start").addEventListener("change", e => { state.start = e.target.value; load(); });
 document.getElementById("end").addEventListener("change", e => { state.end = e.target.value; load(); });
 

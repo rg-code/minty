@@ -37,7 +37,7 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
         console, with the owner's go-ahead. Verified: every count is 0, and both migrations are still
         recorded. The Sandbox keys are still set, until the switch below.
   - [x] **Production** (by 2026-09-30, as reported by the owner): switched to `PLAID_ENV=production`
-        and linked **4 real banks, all under Me** (none under Spouse). The owner is now testing it.
+        and linked real banks, all under Me (none under Spouse); **8 banks** as of 2026-10-06. The owner is now testing it.
   - [x] **CPU on the free plan:** the owner reports no "Exceeded CPU" on the Worker dashboard during
         the first real syncs (2026-09-30).
   - Spouse slot: nothing is linked under it. Its `PLAID_*_SPOUSE_*` secrets held the owner's
@@ -66,7 +66,12 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
      automations without AI) and A4 (AI-powered automations).
 2. **Keep testing production:** new transactions arriving hourly, the Banks and Cards & accounts
    filters, tags, and Setup checks.
-   - **Amex authorized-user cards (stage 1, 2026-10-06):** Minty now keeps Plaid's
+   - **Amex authorized-user cards: Amex does send card members.** After the owner reset Amex's
+     sync position (2026-10-06), Setup checks showed "card member on 93 of 200 transactions
+     (15 card members)" while the history was still re-downloading. **Stage 2** adds the filter:
+     each card member is listed under its Amex card in **Cards & accounts**, rows show the card
+     member, and `/transactions` takes `card=<account_id>:<member>`.
+   - **Stage 1 (2026-10-06):** Minty now keeps Plaid's
      `account_owner` (the card member on multi-card accounts), which it used to drop. After a day
      of new Amex transactions, check whether Amex fills it in: open a few Amex transactions (their
      detail shows "Card member"), or run `SELECT account_owner, count(*) FROM transactions GROUP BY 1;`
