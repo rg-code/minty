@@ -1,6 +1,6 @@
 # Plan: an optional finance agent for Minty
 
-**Status: the next step (2026-09-30); decisions pending (§9).** Nothing is built yet. Written 2026-09-29.
+**Status: decisions made (2026-10-06, §10); next is A0 (§8.1).** Nothing is built yet. Written 2026-09-29.
 
 Goal: an optional "Ask Minty" assistant that works on the household's own transactions, with
 the household's choice of model provider (OpenRouter, OpenAI, Anthropic, …). For example:
@@ -16,6 +16,19 @@ Facts checked on 2026-09-29 (re-check in A0):
   request, and no wall-time limit while the client stays connected. The limits page doesn't list
   Durable Objects on the Free plan, so this design doesn't rely on them.
   ([limits](https://developers.cloudflare.com/workers/platform/limits/))
+
+Checked on 2026-10-06:
+- OpenRouter lists 17 free models (`:free`) that support tool calling, e.g. Gemma 4 26B/31B,
+  Nemotron 3 Super/Ultra, Inkling. Free models allow **20 requests/minute** and **50 requests/day**
+  (1,000/day once an account has bought 10+ credits).
+  ([models API](https://openrouter.ai/api/v1/models), [limits](https://openrouter.ai/docs/api-reference/limits))
+- OpenRouter's account settings decide whether requests may go to providers that **train on your
+  data**, with separate settings for free and paid models. Whether the free tool-calling models are
+  available with training off isn't documented; A0 tests it.
+  ([privacy](https://openrouter.ai/docs/features/privacy-and-logging))
+- A ChatGPT Plus or Claude Pro **subscription can't be used by other apps** and doesn't include
+  API access. Minty can use an **API key** (platform.openai.com, console.anthropic.com), which is
+  billed per use, separately; neither has a free API tier.
 
 ## 1. Core idea
 
@@ -63,7 +76,10 @@ adapters:
 | OpenAI-compatible | **OpenRouter** (Claude, GPT, Gemini, Llama… with one key), OpenAI, Workers AI | OpenRouter: real sign-in (PKCE) or a pasted key; OpenAI: pasted key |
 | Anthropic Messages | Anthropic directly | pasted key |
 
-**How keys are stored (decision 1):**
+**Chosen (§10):** OpenRouter's free models by default; a household's own OpenAI or Anthropic API
+key as an option (paid per use, so off by default and always under the daily caps).
+
+**How keys are stored (decision 1; chosen: A):**
 - **A. One key for the household, as a Worker secret** (like the Plaid keys). Matches today's
   rule that secrets never pass through the browser or the database. Simplest.
 - **B. Each person signs in to OpenRouter.** Minty sends the browser to OpenRouter, and the
@@ -92,7 +108,7 @@ anything that deletes, and web browsing.
 
 ```
 User: "subset all transactions on Amex card ending in 1234 at store XYZ in the last 10 days"
- system prompt: today = 2026-09-29, timezone, people = Me, Spouse, rules
+ system prompt: today, timezone, people (from MINTY_USERS), rules
  step 1  model → list_accounts()                       → [{id:7, "Amex Blue Cash", mask:"1234"}, …]
  step 2  model → find_merchants("XYZ")                  → [{"XYZ Store #88", n:6}, {"XYZ.com", n:2}]
  step 3  model → search_transactions({account_ids:[7], merchant:"XYZ",
@@ -148,25 +164,41 @@ Setup checks gain agent lines, and each new setting gets a default and a line in
 
 | Phase | What | Done when |
 |---|---|---|
-| **A0 Spikes** | Measure CPU per step on the free plan against real OpenRouter calls; confirm tool calling on 2–3 cheap models; settle the decisions below | Numbers recorded in this doc |
-| **A1 Query layer, no AI** | The query functions behind `search_transactions`, `summarize` and `find_merchants`, result sets, `/?set=` in the dashboard, CSV export. Useful even with the agent off | Tests pass with a real local D1 |
-| **A2 Read-only agent** | Adapters, `/agent/step`, chat panel, budgets, Setup checks; tests with a **fake model**, like the fake Plaid used today | The example works end to end on test data (local seed data, or Sandbox) |
-| **A3 Writes** | `tag_transactions` with preview and Confirm, saved subsets | Tagging a result set needs a confirm, and it's tested |
-| **A4 Sign-in** | OpenRouter PKCE per person (option B), direct Anthropic and OpenAI keys | Sign in, use, revoke |
+| **A0 Spikes** | See §8.1: pick a free model by testing tool calling on synthetic data, check it works with training disallowed, and estimate CPU per step | Results recorded in this doc |
+| **A1 Query layer, no AI** | Extend `/transactions` (already filters by banks and cards since #18/#19) with amount range, category and pending; add totals by group, merchant matching, result sets, `/?set=` in the dashboard and CSV export. Useful even with the agent off | Tests pass with a real local D1 |
+| **A2 Agent with tagging** | OpenAI-compatible adapter (OpenRouter, OpenAI), `/agent/step`, chat panel, budgets, Setup checks, and `tag_transactions` with preview + **Confirm** (decision 3). Tests with a **fake model**, like the fake Plaid used today | The example works end to end on test data, and tagging needs a confirm |
+| **A3 Anthropic adapter** | A household's own Anthropic API key (decision 2) | Same tests pass with the Anthropic adapter |
+| **A4 Per-person sign-in** | Deferred: decision 1 chose a household secret | — |
 | **A5 Optional** | Streamed replies, AI Gateway, the free Workers AI model, and an MCP server offering the same tools to Claude Desktop and similar apps | Separate go-aheads |
+
+### 8.1 A0 in detail (proposed; needs a go-ahead)
+
+1. **Fewer steps per question.** At 50 free requests a day, every step counts. Put the account
+   list (bank, name, mask, person) in the system prompt, and let `search_transactions` match
+   merchants loosely, so the example takes 2 requests (search, then answer) instead of 4.
+2. **Spike script `scripts/agent-spike.ts`, run by the owner** (it reads the OpenRouter key from
+   `.dev.vars`, which Claude never reads). It uses **synthetic demo data only**: no real
+   transactions leave the machine. It asks a fixed set of questions (the Amex example, an
+   ambiguous one, a totals one, a tagging one) on 2–3 free models and reports, per model: whether
+   it chose the right tools with valid arguments, steps used, latency and tokens. Run with the
+   account's "may train on inputs" setting **off**, to learn which free models still work.
+   About 40 requests in total, inside one day's free allowance.
+3. **CPU estimate:** time the Worker-side part of one step (build the prompt, parse a model reply,
+   run a tool on local D1) in workerd with canned replies. Confirm on the live Worker's Metrics
+   after A2, with the agent switched on only there.
+4. Record the chosen default model, the numbers and any design changes here.
 
 **Rule updates (need approval, applied in A2):** CLAUDE.md gains the agent rules: tools are the
 only way the model reaches data, no model-written SQL, writes need confirmation, and whichever
 key-storage option is chosen.
 
-## 9. Decisions needed before A1
+## 9. Decisions (made 2026-10-06; see §10)
 
-1. **Keys:** A, one household secret (simplest, matches today's rules), or B, each person signs in
-   to OpenRouter (keys encrypted in D1)? Or A first, B later?
-2. **Default provider:** OpenRouter (one key, many models; recommended), or a direct provider?
-3. **Writes:** may the agent tag transactions after you confirm, or read-only at first?
-4. **Plan:** stay on the free plan (the step-by-step design is built for it), or allow Workers
-   Paid ($5/month) if the A0 CPU measurements are tight?
+1. **Keys:** A, one household secret.
+2. **Provider:** OpenRouter's free models by default, plus a household's own OpenAI or Anthropic
+   API key as an option.
+3. **Writes:** tagging with preview + Confirm from the first agent release (A2).
+4. **Plan:** free Workers plan only. If steps don't fit, redesign rather than upgrade.
 
 ## 10. Decision log
 
@@ -175,3 +207,14 @@ key-storage option is chosen.
 - **2026-09-30:** chosen as the next step, now that the household runs on Plaid production
   (4 banks linked). The owner reports no CPU overruns from the hourly sync on the free plan.
   A0 still has to measure agent steps, which are a different workload. §9 decisions still pending.
+- **2026-10-06: the four decisions** (owner):
+  1. Keys: **one household secret** (Worker secret), like the Plaid keys. Per-person OpenRouter
+     sign-in is deferred.
+  2. Provider: **OpenRouter free models** by default, plus **existing OpenAI or Anthropic API
+     keys** as an option for households that have them. Subscriptions (ChatGPT Plus, Claude Pro)
+     can't be used; API keys are billed per use, so they stay optional and under the daily caps.
+  3. Writes: **tagging with Confirm from the start**, so A2 includes `tag_transactions`.
+  4. **Free Workers plan only**: if A0 shows steps don't fit, shrink them rather than upgrade.
+  - Consequences: the 50-requests/day free limit makes steps per question the main budget (§8.1
+    step 1), and the training setting for free models is a privacy question A0 must answer before
+    any real transaction is sent.
