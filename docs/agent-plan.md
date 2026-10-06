@@ -26,9 +26,20 @@ Checked on 2026-10-06:
   data**, with separate settings for free and paid models. Whether the free tool-calling models are
   available with training off isn't documented; A0 tests it.
   ([privacy](https://openrouter.ai/docs/features/privacy-and-logging))
-- A ChatGPT Plus or Claude Pro **subscription can't be used by other apps** and doesn't include
-  API access. Minty can use an **API key** (platform.openai.com, console.anthropic.com), which is
-  billed per use, separately; neither has a free API tier.
+- A ChatGPT Plus or Claude Pro **subscription isn't API access.** Minty can use an **API key**
+  (platform.openai.com, console.anthropic.com), billed per use, separately from any subscription;
+  neither has a free API tier.
+  - **Anthropic:** since February 2026 its terms prohibit using Claude subscription logins (OAuth
+    tokens) in third-party tools, enforced from April 2026 (with later partial reversals).
+    ([The Register](https://www.theregister.com/software/2026/02/20/anthropic-clarifies-ban-on-third-party-tool-access-to-claude/5014546),
+    [VentureBeat](https://venturebeat.com/technology/anthropic-cuts-off-the-ability-to-use-claude-subscriptions-with-openclaw-and))
+  - **OpenAI:** "Sign in with ChatGPT" (DevDay, 2026-09-29) lets Plus/Pro plans pay for usage in
+    participating apps, with a weekly per-app cap. It's a limited preview for 16 partners; others
+    apply via an interest form. Minty can't use it today.
+    ([The New Stack](https://thenewstack.io/sign-in-with-chatgpt/),
+    [interest form](https://openai.com/form/sign-in-with-chatgpt-interest/))
+  - Subscription bridges (CLIProxyAPI, codex-lb and similar) are **not supported**: see §10,
+    2026-10-06 (revised).
 
 ## 1. Core idea
 
@@ -76,8 +87,14 @@ adapters:
 | OpenAI-compatible | **OpenRouter** (Claude, GPT, Gemini, Llama… with one key), OpenAI, Workers AI | OpenRouter: real sign-in (PKCE) or a pasted key; OpenAI: pasted key |
 | Anthropic Messages | Anthropic directly | pasted key |
 
-**Chosen (§10):** OpenRouter's free models by default; a household's own OpenAI or Anthropic API
-key as an option (paid per use, so off by default and always under the daily caps).
+**Chosen (§10, revised):** three providers from the first release, each with its own household
+secret and no OpenRouter involvement for the direct ones:
+- `openrouter` (`OPENROUTER_API_KEY`): free models, the $0 option;
+- `openai` (`OPENAI_API_KEY`): OpenAI's API directly;
+- `anthropic` (`ANTHROPIC_API_KEY`): Anthropic's Messages API directly.
+
+`AGENT_PROVIDER` picks one and `AGENT_MODEL` the model. Direct keys are paid per use, so the daily
+caps always apply.
 
 **How keys are stored (decision 1; chosen: A):**
 - **A. One key for the household, as a Worker secret** (like the Plaid keys). Matches today's
@@ -166,8 +183,8 @@ Setup checks gain agent lines, and each new setting gets a default and a line in
 |---|---|---|
 | **A0 Spikes** | See §8.1: pick a free model by testing tool calling on synthetic data, check it works with training disallowed, and estimate CPU per step | Results recorded in this doc |
 | **A1 Query layer, no AI** | Extend `/transactions` (already filters by banks and cards since #18/#19) with amount range, category and pending; add totals by group, merchant matching, result sets, `/?set=` in the dashboard and CSV export. Useful even with the agent off | Tests pass with a real local D1 |
-| **A2 Agent with tagging** | OpenAI-compatible adapter (OpenRouter, OpenAI), `/agent/step`, chat panel, budgets, Setup checks, and `tag_transactions` with preview + **Confirm** (decision 3). Tests with a **fake model**, like the fake Plaid used today | The example works end to end on test data, and tagging needs a confirm |
-| **A3 Anthropic adapter** | A household's own Anthropic API key (decision 2) | Same tests pass with the Anthropic adapter |
+| **A2 Agent with tagging** | Both adapters from the start (OpenAI-compatible for OpenRouter and OpenAI; Anthropic Messages for Anthropic), `/agent/step`, chat panel, budgets, Setup checks, and `tag_transactions` with preview + **Confirm** (decision 3). Tests with a **fake model** for each adapter's wire format, like the fake Plaid used today | The example works end to end on test data with each provider, and tagging needs a confirm |
+| **A3 "Sign in with ChatGPT"** | Only if OpenAI opens it beyond its partner preview, and it works for self-hosted apps: use a Plus/Pro plan under its per-app cap | Separate go-ahead |
 | **A4 Per-person sign-in** | Deferred: decision 1 chose a household secret | — |
 | **A5 Optional** | Streamed replies, AI Gateway, the free Workers AI model, and an MCP server offering the same tools to Claude Desktop and similar apps | Separate go-aheads |
 
@@ -195,8 +212,8 @@ key-storage option is chosen.
 ## 9. Decisions (made 2026-10-06; see §10)
 
 1. **Keys:** A, one household secret.
-2. **Provider:** OpenRouter's free models by default, plus a household's own OpenAI or Anthropic
-   API key as an option.
+2. **Provider (revised):** OpenRouter (free models), OpenAI and Anthropic, all from the first
+   release; the direct ones need no OpenRouter account. No subscription bridges.
 3. **Writes:** tagging with preview + Confirm from the first agent release (A2).
 4. **Plan:** free Workers plan only. If steps don't fit, redesign rather than upgrade.
 
@@ -218,3 +235,19 @@ key-storage option is chosen.
   - Consequences: the 50-requests/day free limit makes steps per question the main budget (§8.1
     step 1), and the training setting for free models is a privacy question A0 must answer before
     any real transaction is sent.
+- **2026-10-06 (revised, owner): direct OpenAI and Anthropic keys from the start**, with no
+  OpenRouter involvement, alongside OpenRouter's free models. A2 therefore ships both adapters;
+  the old A3 (Anthropic adapter) is folded into A2.
+  - **Subscription bridges are not supported** (CLIProxyAPI, codex-lb and similar, which reuse a
+    Codex or Claude Code subscription login and expose it as an API, sometimes spreading load
+    across several accounts):
+    - Anthropic's terms prohibit subscription logins in third-party tools. Using a ChatGPT
+      consumer session this way, or pooling accounts, is against OpenAI's terms. Both risk the
+      account being suspended.
+    - They're a separate always-on server holding the subscription login. The Worker can't reach
+      one on a home PC, so it would have to be exposed to the internet, against Minty's no-server,
+      no-public-endpoint goals.
+    - They depend on internal interfaces that change without notice.
+    - The household's financial data would pass through extra software.
+  - **Watch:** OpenAI's official "Sign in with ChatGPT" is the legitimate route to subscription
+    usage. Revisit (A3) if it opens to apps like Minty.
