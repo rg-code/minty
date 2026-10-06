@@ -124,6 +124,29 @@ export async function status(env: Env, config: Config, email: string): Promise<R
           fix: "Link them again from Add account." });
   }
 
+  // Card members (Plaid's account_owner) per bank, so a household can see whether a multi-card
+  // account (e.g. Amex authorized-user cards) reports who made each charge. Shown for American
+  // Express and for any bank where Plaid sends it. Informational: never a warning, because Plaid
+  // fills it in only for some accounts.
+  const { results: members } = await env.DB.prepare(
+    `SELECT i.id, i.institution_name AS name, count(t.id) AS n, count(t.account_owner) AS with_member,
+            count(DISTINCT t.account_owner) AS distinct_members
+     FROM items i JOIN accounts a ON a.item_id = i.id LEFT JOIN transactions t ON t.account_id = a.id
+     WHERE i.status IN ('good', 'login_required')
+     GROUP BY i.id
+     HAVING with_member > 0 OR i.institution_name LIKE 'American Express%'
+     ORDER BY i.id`,
+  ).all<{ id: number; name: string | null; n: number; with_member: number; distinct_members: number }>()
+    .catch(() => ({ results: [] as { id: number; name: string | null; n: number; with_member: number; distinct_members: number }[] }));
+  for (const m of members) {
+    const bank = m.name || `Bank #${m.id}`;
+    const txns = `${m.n} transaction${m.n === 1 ? "" : "s"}`;
+    add({ id: `card_members_${m.id}`, ok: true, level: "warn",
+          message: m.with_member
+            ? `${bank}: card member on ${m.with_member} of ${txns} (${m.distinct_members} card member${m.distinct_members === 1 ? "" : "s"}).`
+            : `${bank}: no card members on its ${txns} yet. Plaid fills this in only for some accounts, such as Amex authorized-user cards.` });
+  }
+
   const last = await env.DB.prepare("SELECT max(updated_at) AS t FROM items WHERE status IN ('good', 'login_required') AND txn_cursor IS NOT NULL")
     .first<{ t: string | null }>().catch(() => null);
   if (last?.t) {

@@ -70,7 +70,11 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
      `account_owner` (the card member on multi-card accounts), which it used to drop. After a day
      of new Amex transactions, check whether Amex fills it in: open a few Amex transactions (their
      detail shows "Card member"), or run `SELECT account_owner, count(*) FROM transactions GROUP BY 1;`
-     in the D1 console. If it's filled in, stage 2 re-downloads that card's history (resetting
+     in the D1 console. **+ Add user → Setup checks** also shows a line per Amex bank: "card member
+     on X of Y transactions". To check older transactions without waiting for new ones, reset that
+     bank's sync position in the D1 console (`UPDATE items SET txn_cursor = NULL WHERE id = <id>;`,
+     owner's go-ahead): the next hourly sync re-downloads its history, about 100 transactions per
+     run on the free plan, with card members included. If it's filled in, stage 2 re-downloads that card's history (resetting
      that bank's sync position, with the owner's go-ahead) and adds per-card-member filtering.
    - **Each new bank uses a Plaid Trial slot for good** (10 per credential set), so link only
      banks you'll keep.
