@@ -139,7 +139,7 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
     SELECT t.id, t.owner, t.account_id, t.plaid_txn_id,
            t.amount_cents / 100.0 AS amount,
            t.currency, t.date, t.datetime, t.name, t.merchant_name, t.category,
-           t.pending, t.pending_txn_id,
+           t.pending, t.pending_txn_id, t.account_owner,
            (SELECT json_group_array(tag) FROM
               (SELECT tag FROM transaction_tags tt WHERE tt.transaction_id = t.id ORDER BY tt.position)) AS tags,
            a.name    AS account_name,

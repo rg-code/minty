@@ -64,6 +64,26 @@ describe("syncItem", () => {
       .toEqual([{ plaid_txn_id: "x", amount_cents: 30, pending: 0 }, { plaid_txn_id: "y", amount_cents: -245001, pending: 1 }]);
   });
 
+  it("stores Plaid's account_owner (the card member on multi-card accounts), and updates it on modify", async () => {
+    const item = await addItem();
+    plaid.syncPages.push(page("c1", false, { accounts: [account("a1")], added: [
+      txn("main", "a1", { account_owner: "ALEX MORGAN" }),
+      txn("au", "a1", { account_owner: "SAM MORGAN -1013" }),
+      txn("none", "a1"),                                         // most banks leave it out
+      txn("nul", "a1", { account_owner: null }),
+    ] }));
+    await syncItem(E, config, item, { pages: 1 });
+    expect(await rows("SELECT plaid_txn_id, account_owner FROM transactions ORDER BY plaid_txn_id")).toEqual([
+      { plaid_txn_id: "au", account_owner: "SAM MORGAN -1013" },
+      { plaid_txn_id: "main", account_owner: "ALEX MORGAN" },
+      { plaid_txn_id: "none", account_owner: null },
+      { plaid_txn_id: "nul", account_owner: null },
+    ]);
+    plaid.syncPages.push(page("c2", false, { accounts: [account("a1")], modified: [txn("none", "a1", { account_owner: "SAM MORGAN -1013" })] }));
+    await syncItem(E, config, (await itemById(item.id))!, { pages: 1 });
+    expect((await rows("SELECT account_owner FROM transactions WHERE plaid_txn_id = 'none'"))[0].account_owner).toBe("SAM MORGAN -1013");
+  });
+
   it("never touches user tags when Plaid modifies a transaction", async () => {
     const item = await addItem();
     plaid.syncPages.push(page("c1", false, { accounts: [account("a1")], added: [txn("t1", "a1")] }));
