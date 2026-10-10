@@ -149,10 +149,27 @@ describe("items, accounts, capacity", () => {
     const r = await call("/items");
     const text = await r.text();
     expect(JSON.parse(text)).toEqual([
-      { id: 1, owner: "me", plaid_account: "me_primary", institution_name: "Chase", status: "good", updated_at: "2026-09-01T00:00:00.000Z" },
-      { id: 2, owner: "spouse", plaid_account: "spouse_primary", institution_name: "Ally", status: "good", updated_at: "2026-09-01T00:00:00.000Z" },
+      { id: 1, owner: "me", plaid_account: "me_primary", institution_name: "Chase", status: "good", updated_at: "2026-09-01T00:00:00.000Z",
+        health: expect.objectContaining({ state: "stalled", level: "warn" }) },
+      { id: 2, owner: "spouse", plaid_account: "spouse_primary", institution_name: "Ally", status: "good", updated_at: "2026-09-01T00:00:00.000Z",
+        health: expect.objectContaining({ state: "stalled", level: "warn" }) },
     ]);
     expect(text).not.toMatch(/gAAAA|access_token/);
+  });
+
+  it("/health lists banks needing attention, most serious first, and whether sync runs", async () => {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE items SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), txn_cursor = 'c' WHERE id = 1"),
+      env.DB.prepare("UPDATE items SET status = 'login_required', last_error = 'ITEM_LOGIN_REQUIRED' WHERE id = 2"),
+    ]);
+    const { status, body } = await getJson("/health");
+    expect(status).toBe(200);
+    expect(body.sync).toEqual({ ok: true, message: "Last sync within the hour." });
+    expect(body.banks).toEqual([{ id: 2, owner: "spouse", institution_name: "Ally",
+      health: expect.objectContaining({ state: "reconnect", level: "error", action: "reconnect", message: "Ally needs you to sign in again." }) }]);
+    await env.DB.prepare("UPDATE items SET status = 'good', updated_at = '2026-09-01T00:00:00.000Z' WHERE id = 2").run();
+    await env.DB.prepare("UPDATE items SET sync_start_cursor = '' WHERE id = 1").run();
+    expect((await getJson("/health")).body.banks.map((b: any) => [b.id, b.health.state])).toEqual([[2, "stalled"], [1, "downloading"]]);
   });
 
   it("lists accounts with dollar balances, optionally per owner", async () => {

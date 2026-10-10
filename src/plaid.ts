@@ -16,10 +16,18 @@ export class PlaidError extends Error {
     public errorCode: string,
     public requestId: string | undefined,
     message: string,
+    /** Plaid's own description (display_message, else error_message), at most 200 characters.
+     * Generic text about the error; shown on the dashboard, never logged. */
+    public plaidMessage: string | null = null,
   ) {
     super(message);
   }
 }
+
+export const plaidMessageOf = (e: { display_message?: unknown; error_message?: unknown } | null | undefined): string | null => {
+  const m = e?.display_message || e?.error_message;
+  return typeof m === "string" && m.trim() ? m.trim().slice(0, 200) : null;
+};
 
 export interface PlaidResult<T> {
   body: T;
@@ -54,7 +62,7 @@ function errorFrom(res: Response, path: string, text: string): PlaidError {
   try { parsed = JSON.parse(text); } catch { /* not JSON */ }
   return new PlaidError(res.status, String(parsed.error_type ?? "API_ERROR"),
     String(parsed.error_code ?? (res.ok ? "NON_JSON_RESPONSE" : "UNKNOWN")), parsed.request_id,
-    `Plaid ${path}: ${parsed.error_code ?? res.status}`);
+    `Plaid ${path}: ${parsed.error_code ?? res.status}`, plaidMessageOf(parsed));
 }
 
 export async function plaidPost<T>(env: Env, creds: Creds, path: string, body: Record<string, unknown>): Promise<PlaidResult<T>> {
@@ -93,8 +101,11 @@ const PERMANENT = new Set([
  * limit, PRODUCT_NOT_READY right after linking, network): keep the status and retry next run.
  * (Marking every failure 'error' would stop syncing that item for good.) */
 export function statusForError(e: unknown): "login_required" | "error" | null {
-  if (!(e instanceof PlaidError)) return null;
-  if (LOGIN_REQUIRED.has(e.errorCode)) return "login_required";
-  if (PERMANENT.has(e.errorCode)) return "error";
+  return e instanceof PlaidError ? statusForCode(e.errorCode) : null;
+}
+
+export function statusForCode(code: string): "login_required" | "error" | null {
+  if (LOGIN_REQUIRED.has(code)) return "login_required";
+  if (PERMANENT.has(code)) return "error";
   return null;
 }

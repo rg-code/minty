@@ -5,9 +5,10 @@ import { AUD, accessToken, call, otherKey } from "./helpers";
 // The Cloudflare Access gate on every API route. Fails closed: missing settings refuse everything.
 
 const GATED: Array<[string, string]> = [
-  ["GET", "/users"], ["GET", "/items"], ["GET", "/accounts"], ["GET", "/capacity"],
+  ["GET", "/users"], ["GET", "/items"], ["GET", "/health"], ["GET", "/accounts"], ["GET", "/capacity"],
   ["GET", "/transactions"], ["GET", "/tags"], ["PUT", "/transactions/1/tags"],
   ["POST", "/link/token"], ["POST", "/link/exchange"], ["POST", "/link/token/update"],
+  ["POST", "/link/reconnected"],
 ];
 
 describe("Access gate", () => {

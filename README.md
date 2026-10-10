@@ -16,7 +16,9 @@ web browser.
   are tracked and applied automatically on every deploy.
 - **Sync**: an hourly cron trigger pulls new transactions with Plaid's cursor-based
   `/transactions/sync`, and a 10-minute one continues banks still downloading their history.
-  Linking a bank starts its first sync right away. There is no sync HTTP
+  Linking a bank starts its first sync right away. A daily check asks Plaid how each connection
+  is. Any bank that stops syncing, needs signing in again, or has consent ending soon shows in
+  a status strip on the dashboard, with what went wrong and what to do. There is no sync HTTP
   endpoint and no webhooks.
 - **Deploys**: Cloudflare Workers Builds runs `npm run deploy` on every push to `main`
   (apply D1 migrations, then deploy). GitHub Actions only runs tests.

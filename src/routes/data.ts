@@ -1,6 +1,7 @@
 import type { Env } from "../env";
 import { type Config, isConfigured } from "../config";
 import { HttpError, dateParam, intParam, json, unprocessable } from "../http";
+import { bankHealth, bankRows, syncHealth } from "../health";
 
 /** Read API for the pages in public/, plus tag editing. */
 
@@ -25,11 +26,24 @@ export async function users(env: Env, config: Config): Promise<Response> {
   })));
 }
 
-export async function items(env: Env): Promise<Response> {
-  const { results } = await env.DB.prepare(
-    "SELECT id, owner, plaid_account, institution_name, status, updated_at FROM items ORDER BY owner, id",
-  ).all();
-  return json(results);
+export async function items(env: Env, config: Config): Promise<Response> {
+  const now = Date.now();
+  return json((await bankRows(env)).map((r) => ({
+    id: r.id, owner: r.owner, plaid_account: r.plaid_account, institution_name: r.institution_name,
+    status: r.status, updated_at: r.updated_at, health: bankHealth(env, config, r, now),
+  })));
+}
+
+/** GET /health: what the dashboard's status strip shows. Banks that need attention (or are still
+ * downloading), most serious first, plus whether sync runs at all. */
+export async function health(env: Env, config: Config): Promise<Response> {
+  const now = Date.now();
+  const rows = await bankRows(env);
+  const rank = { error: 0, warn: 1, info: 2 } as const;
+  const banks = rows.map((r) => ({ id: r.id, owner: r.owner, institution_name: r.institution_name, health: bankHealth(env, config, r, now) }))
+    .filter((b) => b.health.level)
+    .sort((a, b) => rank[a.health.level!] - rank[b.health.level!] || a.id - b.id);
+  return json({ sync: syncHealth(env, config, rows, now), banks });
 }
 
 export async function accounts(env: Env, url: URL): Promise<Response> {

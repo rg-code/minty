@@ -47,6 +47,24 @@ describe("static pages", () => {
     expect(head).toMatch(/<script>[^<]*minty-theme[^<]*<\/script>\s*<style>/);   // no light flash
   });
 
+  it("dashboard shows a status strip from /health that names the problem and offers the fix", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('id="health"');
+    expect(html).toContain('fetch("/health")');
+    expect(html).toContain('href="/connect#reconnect">Reconnect');
+    expect(html).toContain('href="/connect">Link again');
+    expect(html).toContain("p.error_code");                        // Plaid's code and message, small
+    expect(html).toMatch(/setInterval\(\(\) => \{ if \(!document.hidden\) loadHealth\(\)/);
+    expect(html).toContain('stalled: "not syncing"');              // the bank filter says so too
+    expect(html).not.toMatch(/dismiss/i);                          // stays until fixed
+  });
+
+  it("connect page reconnects every bank the dashboard sends there, then re-checks it", async () => {
+    const { html } = await page("/connect");
+    expect(html).toContain('i.health?.action === "reconnect"');
+    expect(html).toContain('fetch("/link/reconnected"');
+  });
+
   it("connect page sends the institution name and can reconnect login_required banks", async () => {
     const { html } = await page("/connect");
     expect(html).toContain('id="reconnect"');
@@ -71,5 +89,6 @@ describe("static pages", () => {
     const r = await SELF.fetch("https://minty.example.workers.dev/transactions");
     expect(r.status).toBe(403);
     expect((await SELF.fetch("https://minty.example.workers.dev/healthz")).status).toBe(200);
+    expect((await SELF.fetch("https://minty.example.workers.dev/health")).status).toBe(403);   // in run_worker_first
   });
 });
