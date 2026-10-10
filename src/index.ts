@@ -6,11 +6,11 @@ import * as data from "./routes/data";
 import * as link from "./routes/link";
 import * as setup from "./routes/status";
 import { PlaidError } from "./plaid";
-import { runSyncAll } from "./sync";
+import { CATCH_UP_CRON, runSyncAll } from "./sync";
 
 /** Minty Worker. API paths are listed in wrangler.jsonc assets.run_worker_first; everything
  * else is served straight from public/. /healthz is the only path outside the Access check.
- * Sync runs only from the cron trigger (scheduled below); there is deliberately no HTTP sync endpoint. */
+ * Sync runs only from the cron triggers (scheduled below); there is deliberately no HTTP sync endpoint. */
 
 type Handler = (c: {
   env: Env; config: Config; request: Request; url: URL; params: string[]; ctx: ExecutionContext; email: string;
@@ -75,8 +75,11 @@ export default {
     }
   },
 
-  async scheduled(_controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    const results = await runSyncAll(env);
-    console.log("scheduled sync complete", JSON.stringify(results));   // item id -> result; no data
+  async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
+    const updatesOnly = controller.cron === CATCH_UP_CRON;      // the 10-minute catch-up
+    const results = await runSyncAll(env, undefined, { updatesOnly });
+    if (!updatesOnly || Object.keys(results).length) {          // quiet when nothing is downloading
+      console.log(updatesOnly ? "catch-up sync complete" : "scheduled sync complete", JSON.stringify(results));   // item id -> result; no data
+    }
   },
 } satisfies ExportedHandler<Env>;

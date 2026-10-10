@@ -1,6 +1,6 @@
 # Minty status and to-do
 
-Handoff notes for continuing on another machine. Last updated 2026-10-06.
+Handoff notes for continuing on another machine. Last updated 2026-10-10.
 Household-specific values (the workers.dev address, Access team and AUD, email addresses)
 are deliberately **not** in this public repo. They're in the owner's Cloudflare dashboard.
 
@@ -9,7 +9,7 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 - **Code:** Minty is Cloudflare-only: phases P0–P4 are on `main`. P4 removed the Python/Docker
   app (its last version is tagged `python-app-final`) and moved the pages to `public/`.
   CI (vitest in workerd + typecheck) runs on every PR.
-  - Tests: 170 Worker.
+  - Tests: 187 Worker.
   - Since then: filter by bank (#18) and by card/account (#19), and one person by default with
     the person switch only for two or more (#20).
   - Plan and decision log: [serverless-plan.md](serverless-plan.md) §8.
@@ -66,6 +66,20 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
      automations without AI) and A4 (AI-powered automations).
 2. **Keep testing production:** new transactions arriving hourly, the Banks and Cards & accounts
    filters, tags, and Setup checks.
+   - **Sync stall fixed (2026-10-10, migration 0004).** Wells Fargo and Citibank had stopped
+     after their first page (Sep 30, at link time), and Amex on Oct 7 after ~9 pages of its
+     re-downloaded history (newest transaction Sep 29). All three were still `good`, so nothing
+     warned. Cause: `TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION` was retried from the run's
+     cursor instead of the update's first cursor, which fails forever. They also slowed the
+     other five banks to about one sync every 5 hours. Details: serverless-plan.md §8, 2026-10-10.
+     - **After it deploys, check:** within an hour or two, the three restart their downloads from the
+       beginning on their own (no D1 reset needed). Setup checks then show "downloading its
+       history, N transactions so far", and the 10-minute catch-up trigger moves each along a
+       page at a time (check **Settings → Trigger events** lists both crons). Then their
+       transactions after Sep 29 should appear. A bank that stops syncing now gets its own
+       "no successful sync for N hours (last error: …)" line.
+     - If a long history (Amex) keeps restarting before it finishes, make the catch-up more
+       frequent (e.g. every 2 minutes: `CATCH_UP_CRON` in `src/sync.ts` and `wrangler.jsonc`).
    - **Amex authorized-user cards: Amex does send card members.** After the owner reset Amex's
      sync position (2026-10-06), Setup checks showed "card member on 93 of 200 transactions
      (15 card members)" while the history was still re-downloading. **Stage 2 is merged (#25):**

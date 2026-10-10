@@ -4,7 +4,7 @@ import { createExecutionContext, createScheduledController, waitOnExecutionConte
 import worker from "../src/index";
 import { loadConfig } from "../src/config";
 import { fernetEncrypt } from "../src/fernet";
-import { runSyncAll, syncItem, type ItemRow } from "../src/sync";
+import { CATCH_UP_CRON, runSyncAll, syncItem, type ItemRow } from "../src/sync";
 import type { Env } from "../src/env";
 import { FakePlaid, account, page, plaidError, txn } from "./fake-plaid";
 
@@ -17,14 +17,17 @@ async function wipe() {
   await env.DB.batch(["transaction_tags", "transactions", "accounts", "items"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
 }
 
-async function addItem(o: { owner?: string; plaid_account?: string; cursor?: string | null; status?: string; token?: string; updated_at?: string } = {}): Promise<ItemRow> {
+async function addItem(o: { owner?: string; plaid_account?: string; cursor?: string | null; start?: string | null; status?: string;
+                              token?: string; updated_at?: string; attempted_at?: string } = {}): Promise<ItemRow> {
   const enc = o.token ?? await fernetEncrypt("access-sandbox-secret", E.TOKEN_ENC_KEY!);
   return (await env.DB.prepare(
-    `INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, txn_cursor, status, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`,
-  ).bind(o.owner ?? "me", o.plaid_account ?? "me_backup", `item-${crypto.randomUUID()}`, enc, o.cursor ?? null,
-    o.status ?? "good", o.updated_at ?? "2026-09-01T00:00:00.000Z").first<ItemRow>())!;
+    `INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, txn_cursor, sync_start_cursor, status, updated_at, attempted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+  ).bind(o.owner ?? "me", o.plaid_account ?? "me_backup", `item-${crypto.randomUUID()}`, enc, o.cursor ?? null, o.start ?? null,
+    o.status ?? "good", o.updated_at ?? "2026-09-01T00:00:00.000Z", o.attempted_at ?? null).first<ItemRow>())!;
 }
+
+const mutation = () => plaidError("TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION", 400, "TRANSACTIONS_ERROR");
 
 const rows = async (sql: string) => (await env.DB.prepare(sql).all<any>()).results;
 const itemById = async (id: number) => env.DB.prepare("SELECT * FROM items WHERE id = ?").bind(id).first<any>();
@@ -138,8 +141,7 @@ describe("syncItem", () => {
 
   it("restarts pagination from the loop's first cursor on TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION", async () => {
     const item = await addItem({ cursor: "c0" });
-    plaid.syncPages.push(page("c1", true), plaidError("TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION", 400, "TRANSACTIONS_ERROR"),
-      page("c1b", true), page("c2", false));
+    plaid.syncPages.push(page("c1", true), mutation(), page("c1b", true), page("c2", false));
     expect(await syncItem(E, config, item, { pages: 10 })).toBe("good");
     expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["c0", "c1", "c0", "c1b"]);
   });
@@ -209,6 +211,84 @@ describe("syncItem", () => {
   });
 });
 
+describe("updates spread over several runs (TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION)", () => {
+  it("keeps the cursor an update began from until it's caught up", async () => {
+    const item = await addItem({ cursor: "c5" });
+    plaid.syncPages.push(page("c6", true), page("c7", true), page("c8", false));
+    expect(await syncItem(E, config, item, { pages: 1 })).toBe("partial");
+    expect(await itemById(item.id)).toMatchObject({ txn_cursor: "c6", sync_start_cursor: "c5" });
+    expect(await syncItem(E, config, (await itemById(item.id))!, { pages: 1 })).toBe("partial");
+    expect(await itemById(item.id)).toMatchObject({ txn_cursor: "c7", sync_start_cursor: "c5" });
+    expect(await syncItem(E, config, (await itemById(item.id))!, { pages: 1 })).toBe("good");
+    expect(await itemById(item.id)).toMatchObject({ txn_cursor: "c8", sync_start_cursor: null });
+  });
+
+  it("records the first history download as starting from the beginning ('')", async () => {
+    const item = await addItem();
+    plaid.syncPages.push(page("c1", true));
+    await syncItem(E, config, item, { pages: 1 });
+    expect(await itemById(item.id)).toMatchObject({ txn_cursor: "c1", sync_start_cursor: "" });
+  });
+
+  it("restarts a history download from the beginning when Plaid's data changed between runs", async () => {
+    const item = await addItem();
+    plaid.syncPages.push(page("c1", true, { accounts: [account("a1")], added: [txn("old", "a1")] }));
+    expect(await syncItem(E, config, item, { pages: 1 })).toBe("partial");          // run 1, e.g. at link time
+    plaid.syncPages.push(mutation(), page("r1", true, { accounts: [account("a1")], added: [txn("old", "a1")] }),
+      page("r2", false, { accounts: [account("a1")], added: [txn("new", "a1")] }));
+    expect(await syncItem(E, config, (await itemById(item.id))!, { pages: 10 })).toBe("good");   // run 2
+    expect(plaid.calls.map((c) => c.body.cursor)).toEqual([undefined, "c1", undefined, "r1"]);
+    expect(await itemById(item.id)).toMatchObject({ txn_cursor: "r2", sync_start_cursor: null, last_error: null, status: "good" });
+    expect(await rows("SELECT plaid_txn_id FROM transactions ORDER BY plaid_txn_id")).toEqual([{ plaid_txn_id: "new" }, { plaid_txn_id: "old" }]);
+  });
+
+  it("restarts a later update from its own start, not from the beginning", async () => {
+    const item = await addItem({ cursor: "c6", start: "c5" });
+    plaid.syncPages.push(mutation(), page("c6b", false));
+    expect(await syncItem(E, config, item, { pages: 10 })).toBe("good");
+    expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["c6", "c5"]);
+  });
+
+  it("restarts from the beginning when the start isn't on record (downloads from before migration 0004)", async () => {
+    const item = await addItem({ cursor: "stuck-mid-download" });
+    plaid.syncPages.push(mutation(), page("r1", false));
+    expect(await syncItem(E, config, item, { pages: 10 })).toBe("good");
+    expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["stuck-mid-download", undefined]);
+  });
+
+  it("saves the restart point when the run's budget ends at the error", async () => {
+    const item = await addItem({ cursor: "c1", start: "" });
+    plaid.syncPages.push(mutation());
+    expect(await syncItem(E, config, item, { pages: 1 })).toBe("partial");
+    expect(await itemById(item.id)).toMatchObject({ txn_cursor: null, sync_start_cursor: "",
+      last_error: "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION", status: "good" });
+    plaid.syncPages.push(page("r1", false));
+    expect(await syncItem(E, config, (await itemById(item.id))!, { pages: 1 })).toBe("good");
+    expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["c1", undefined]);
+  });
+
+  it("restarts at most once per run, then records the error and leaves the last successful sync alone", async () => {
+    const item = await addItem({ cursor: "c1", start: "" });
+    plaid.syncPages.push(mutation(), mutation());
+    expect(await syncItem(E, config, item, { pages: 10 })).toBe("retry");
+    expect(plaid.calls).toHaveLength(2);
+    const after = await itemById(item.id);
+    expect(after).toMatchObject({ status: "good", updated_at: "2026-09-01T00:00:00.000Z",
+      last_error: "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION", txn_cursor: null, sync_start_cursor: "" });
+    expect(after.attempted_at).toBeTruthy();
+    expect(after.last_error_at).toBeTruthy();
+  });
+
+  it("records other failures without retrying them in the same run", async () => {
+    const item = await addItem({ cursor: "c1" });
+    plaid.syncPages.push(plaidError("INTERNAL_SERVER_ERROR", 500, "API_ERROR"));
+    expect(await syncItem(E, config, item, { pages: 10 })).toBe("retry");
+    expect(plaid.calls).toHaveLength(1);
+    expect(await itemById(item.id)).toMatchObject({ txn_cursor: "c1", last_error: "INTERNAL_SERVER_ERROR",
+      updated_at: "2026-09-01T00:00:00.000Z" });
+  });
+});
+
 describe("syncItem with more slots", () => {
   it("syncs an item on a third slot with that slot's keys, and skips it once the slot is removed", async () => {
     const e = { ...E, PLAID_SLOTS: "primary,backup,extra1", PLAID_CLIENT_ID_ME_EXTRA1: "cid_me_extra1", PLAID_SECRET_ME_EXTRA1: "s" };
@@ -250,5 +330,51 @@ describe("runSyncAll / cron", () => {
     await worker.scheduled(createScheduledController({ cron: "17 * * * *" }), E, ctx);
     await waitOnExecutionContext(ctx);
     expect((await itemById(item.id)).txn_cursor).toBe("c1");
+  });
+
+  it("puts a bank that failed behind the others, so it can't hold them up", async () => {
+    const stuck = await addItem({ cursor: "mid", updated_at: "2026-09-01T00:00:00.000Z" });
+    const ok = await addItem({ cursor: "k1", updated_at: "2026-09-02T00:00:00.000Z" });
+    plaid.syncPages.push(plaidError("INTERNAL_SERVER_ERROR", 500, "API_ERROR"));
+    expect(await runSyncAll(E, { pages: 1 })).toEqual({ [stuck.id]: "retry" });
+    plaid.syncPages.push(page("k2", false));
+    expect(await runSyncAll(E, { pages: 1 })).toEqual({ [ok.id]: "good" });           // ok goes first now
+  });
+
+  it("syncs caught-up banks before unfinished downloads in the hourly sweep", async () => {
+    const downloading = await addItem({ cursor: "d1", start: "", attempted_at: "2026-09-01T00:00:00.000Z" });
+    const caughtUp = await addItem({ cursor: "k1", attempted_at: "2026-09-05T00:00:00.000Z" });
+    plaid.syncPages.push(page("k2", false), page("d2", false));
+    expect(await runSyncAll(E, { pages: 10 })).toEqual({ [caughtUp.id]: "good", [downloading.id]: "good" });
+    expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["k1", "d1"]);   // caught-up first, though attempted later
+  });
+
+  it("catch-up runs only continue unfinished downloads", async () => {
+    await addItem({ cursor: "k1" });
+    const downloading = await addItem({ cursor: "d1", start: "" });
+    plaid.syncPages.push(page("d2", false));
+    expect(await runSyncAll(E, { pages: 10 }, { updatesOnly: true })).toEqual({ [downloading.id]: "good" });
+    expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["d1"]);
+    plaid.calls = [];
+    expect(await runSyncAll(E, { pages: 10 }, { updatesOnly: true })).toEqual({});   // caught up: no Plaid calls
+    expect(plaid.calls).toEqual([]);
+  });
+
+  it("the catch-up trigger syncs only downloads; the hourly one syncs every bank", async () => {
+    const caughtUp = await addItem({ cursor: "k1" });
+    const downloading = await addItem({ cursor: "d1", start: "" });
+    const run = async (cron: string, e: Env = E) => {
+      const ctx = createExecutionContext();
+      await worker.scheduled(createScheduledController({ cron }), e, ctx);
+      await waitOnExecutionContext(ctx);
+    };
+    plaid.syncPages.push(page("d2", true));
+    await run(CATCH_UP_CRON, { ...E, SYNC_MAX_PAGES_PER_RUN: "1" });
+    expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["d1"]);
+    plaid.syncPages.push(page("k2", false), page("d3", false));
+    await run("17 * * * *");
+    expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["d1", "k1", "d2"]);
+    expect((await itemById(caughtUp.id)).txn_cursor).toBe("k2");
+    expect((await itemById(downloading.id))).toMatchObject({ txn_cursor: "d3", sync_start_cursor: null });
   });
 });

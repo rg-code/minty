@@ -145,6 +145,30 @@ describe("GET /status", () => {
     expect(byId((await getJson("/status")).body.checks).sync).toMatchObject({ ok: true, message: "Last sync within the hour." });
   });
 
+  it("flags a bank that stopped syncing while the others carry on, with its last error", async () => {
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 3.6e6).toISOString();
+    await env.DB.prepare(
+      `INSERT INTO items (id, owner, plaid_account, plaid_item_id, access_token_enc, institution_name, txn_cursor, sync_start_cursor,
+                          status, updated_at, last_error) VALUES
+       (1, 'me', 'me_primary', 'stuck', 'x', 'American Express', 'mid', '', 'good', ?1, 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION'),
+       (2, 'me', 'me_primary', 'fine', 'x', 'Chase', 'c', NULL, 'good', ?2, NULL),
+       (3, 'me', 'me_primary', 'dl', 'x', 'Citibank Online', 'c', '', 'good', ?2, NULL),
+       (4, 'me', 'me_primary', 'relogin', 'x', 'Ally', 'c', NULL, 'login_required', ?1, NULL),
+       (5, 'me', 'me_primary', 'quiet', 'x', NULL, 'c', NULL, 'good', ?1, NULL)`).bind(hoursAgo(80), hoursAgo(0.2)).run();
+    await env.DB.prepare(`INSERT INTO accounts (id, owner, item_id, plaid_account_id) VALUES (30, 'me', 3, 'acct-30')`).run();
+    await env.DB.prepare(`INSERT INTO transactions (owner, account_id, plaid_txn_id, date) VALUES ('me', 30, 't1', '2026-09-01'), ('me', 30, 't2', '2026-09-02')`).run();
+    const c = byId((await getJson("/status")).body.checks);
+    expect(c.bank_stalled_1).toMatchObject({ ok: false, level: "warn",
+      message: "American Express: no successful sync for 80 hours (last error: TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION) (0 transactions so far)." });
+    expect(c.bank_stalled_5.message).toBe("Bank #5: no successful sync for 80 hours (0 transactions so far).");
+    expect(c.bank_downloading_3).toMatchObject({ ok: true,
+      message: "Citibank Online: downloading its history, 2 transactions so far. Newer transactions appear once it's done." });
+    expect(c.bank_stalled_2).toBeUndefined();
+    expect(c.bank_downloading_2).toBeUndefined();
+    expect(c.bank_stalled_4).toBeUndefined();                        // already under "sign in again"
+    expect(c.sync.ok).toBe(true);                                    // the overall check alone missed this
+  });
+
   it("flags the local dev Access bypass", async () => {
     const c = byId((await getJson("/status", { token: null, host: "http://localhost:8787",
       envOverrides: { MINTY_DEV_NO_AUTH: "1", ACCESS_TEAM_DOMAIN: "", ACCESS_AUD: "" } })).body.checks);

@@ -60,8 +60,10 @@
     }
   ],
 
-  // Hourly sync (UTC), off the top of the hour. The only way sync runs: no HTTP endpoint.
-  "triggers": { "crons": ["17 * * * *"] },
+  // Sync (UTC), the only way it runs: no HTTP endpoint. Hourly for every bank, off the top of
+  // the hour; plus every 10 minutes for banks partway through a download (src/sync.ts
+  // CATCH_UP_CRON, which must match), which does nothing once every bank is caught up.
+  "triggers": { "crons": ["17 * * * *", "*/10 * * * *"] },
 
   "observability": { "enabled": true }
 }
