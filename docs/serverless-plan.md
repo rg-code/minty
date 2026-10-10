@@ -180,3 +180,21 @@ GitHub Actions runs **only tests** on pull requests. That's a normal CI use, all
   uses a fresh `TOKEN_ENC_KEY`, starts on Plaid Sandbox, and P4 shrinks to retiring the
   Python app. `SETUP.md`'s "moving from the Docker version" note stays for anyone who did
   run it.
+- **2026-10-10: a history download that spans runs must restart from where it began.**
+  - *The problem:* in production, Wells Fargo and Citi stopped after their first page (at link
+    time) and Amex after ~9 pages of re-downloaded history, all still marked `good`. Plaid's data
+    changed between runs (`TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION`), and Plaid says to
+    restart the whole update from its first cursor. Sync retried from that run's cursor instead,
+    which fails every time. Each stuck bank also spent 3 of the run's 10 calls, so the five
+    healthy banks got one page per hour between them.
+  - *The fix (migration 0004):* `items.sync_start_cursor` keeps the cursor an update began from
+    ('' = the first history download) until it's caught up, and the error restarts from there
+    (once per run). Downloads stuck from before 0004 have no start on record and restart from
+    the beginning. Sweeps go caught-up banks first, then least recently *attempted*
+    (`attempted_at`), so a failing bank can't hold up the others. `last_error` feeds a per-bank
+    Setup check.
+  - *Faster downloads:* a second cron trigger, every 10 minutes (`CATCH_UP_CRON`), continues
+    only unfinished downloads (one page each run, same budget), so a two-year history takes
+    hours, not days. That leaves Plaid less time to change it partway through. Once every bank
+    is caught up, it makes no Plaid calls. If a long history still keeps restarting, the next
+    step is a more frequent catch-up (e.g. every 2 minutes).

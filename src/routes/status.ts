@@ -8,7 +8,7 @@ import { json } from "../http";
  * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql"];
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql"];
 
 const STALE_SYNC_HOURS = 3;          // cron runs hourly; allow a couple of misses
 
@@ -145,6 +145,32 @@ export async function status(env: Env, config: Config, email: string): Promise<R
           message: m.with_member
             ? `${bank}: card member on ${m.with_member} of ${txns} (${m.distinct_members} card member${m.distinct_members === 1 ? "" : "s"}).`
             : `${bank}: no card members on its ${txns} yet. Plaid fills this in only for some accounts, such as Amex authorized-user cards.` });
+  }
+
+  // Per bank: a history download still in progress, or a bank that has stopped syncing while the
+  // others carry on (the overall "Last sync" below only looks at the most recent bank). Banks that
+  // need signing in again or can't sync are already flagged above.
+  const { results: banks } = await env.DB.prepare(
+    `SELECT i.id, i.institution_name AS name, i.plaid_account, i.updated_at, i.last_error,
+            i.sync_start_cursor IS NOT NULL AS downloading,
+            (SELECT count(*) FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE a.item_id = i.id) AS n
+     FROM items i WHERE i.status = 'good' ORDER BY i.id`,
+  ).all<{ id: number; name: string | null; plaid_account: string; updated_at: string; last_error: string | null; downloading: number; n: number }>()
+    .catch(() => ({ results: [] as { id: number; name: string | null; plaid_account: string; updated_at: string; last_error: string | null; downloading: number; n: number }[] }));
+  for (const b of banks) {
+    if (stranded.some((r) => r.plaid_account === b.plaid_account)) continue;
+    const bank = b.name || `Bank #${b.id}`;
+    const hours = (Date.now() - Date.parse(b.updated_at)) / 3.6e6;
+    const txns = `${b.n} transaction${b.n === 1 ? "" : "s"}`;
+    if (hours > STALE_SYNC_HOURS) {
+      add({ id: `bank_stalled_${b.id}`, ok: false, level: "warn",
+            message: `${bank}: no successful sync for ${Math.round(hours)} hours` +
+                     (b.last_error ? ` (last error: ${b.last_error})` : "") + ` (${txns} so far).`,
+            fix: "Minty retries on its own. If this lasts more than a day, check the Worker's logs (Workers & Pages → minty → Logs)." });
+    } else if (b.downloading) {
+      add({ id: `bank_downloading_${b.id}`, ok: true, level: "warn",
+            message: `${bank}: downloading its history, ${txns} so far. Newer transactions appear once it's done.` });
+    }
   }
 
   const last = await env.DB.prepare("SELECT max(updated_at) AS t FROM items WHERE status IN ('good', 'login_required') AND txn_cursor IS NOT NULL")

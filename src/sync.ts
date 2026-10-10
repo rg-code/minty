@@ -16,11 +16,22 @@ import { PlaidError, plaidPostText, statusForError } from "./plaid";
  *    are tiny once caught up; a new bank's full history fills in over many runs. On Workers Paid
  *    (30 s CPU) raise both, e.g. 20000000 bytes / 50 pages.
  *  - A per-run page budget bounds Plaid calls and D1 queries; when it runs out the next run
- *    resumes from the stored cursor. Transaction tags (transaction_tags) are never touched. */
+ *    resumes from the stored cursor. Transaction tags (transaction_tags) are never touched.
+ *  - So one update (e.g. a bank's first two years of history) can span many runs, and Plaid's data
+ *    may change in between: TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION. Plaid says to restart
+ *    the whole update from the cursor it began with, so items.sync_start_cursor keeps that cursor
+ *    until the update is caught up. Restarting from this run's cursor instead fails every time.
+ *  - Two cron triggers: the hourly sweep of every bank, and a 10-minute catch-up that only
+ *    continues unfinished updates, so a long history finishes in hours, leaving Plaid little
+ *    time to change it mid-download. */
 
 export const PAGE_SIZE = 100;            // ~150 KiB of full-detail transactions; small steps for the byte budget
 export const DEFAULT_PAGES_PER_RUN = 10;
 export const DEFAULT_BYTES_PER_RUN = 150_000;
+
+/** The catch-up trigger (wrangler.jsonc "triggers"): only banks partway through an update. Any
+ * other cron, i.e. the hourly "17 * * * *", sweeps every bank. */
+export const CATCH_UP_CRON = "*/10 * * * *";
 
 export type ItemResult = "good" | "partial" | "login_required" | "error" | "retry" | "skipped";
 
@@ -35,8 +46,11 @@ export interface ItemRow {
   plaid_account: string;
   access_token_enc: string;
   txn_cursor: string | null;
+  sync_start_cursor: string | null;
   status: string;
 }
+
+const MUTATION = "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION";
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
@@ -92,9 +106,25 @@ const DELETE_REMOVED = `
   DELETE FROM transactions
   WHERE plaid_txn_id IN (SELECT value ->> 'transaction_id' FROM json_each(${PAGE}, '$.removed'))`;
 
+// ?2 = the cursor this page was requested with ('' = none). While has_more, sync_start_cursor
+// keeps the cursor the update began from; it's cleared once the update is caught up.
 const ADVANCE_CURSOR = `
-  UPDATE items SET txn_cursor = ${PAGE} ->> '$.next_cursor', status = 'good', updated_at = ${NOW}
+  UPDATE items SET txn_cursor = ${PAGE} ->> '$.next_cursor', status = 'good', updated_at = ${NOW},
+    attempted_at = ${NOW}, last_error = NULL, last_error_at = NULL,
+    sync_start_cursor = CASE WHEN ${PAGE} ->> '$.has_more' THEN coalesce(sync_start_cursor, ?2) END
   WHERE id = ?1 AND EXISTS (SELECT 1 FROM sync_pages WHERE item_id = ?1)`;
+
+// Restart an update from where it began (?2; '' = the very beginning), saved so that a run whose
+// budget ends right here resumes from the restart point, not the rejected cursor.
+const RESTART_UPDATE = `
+  UPDATE items SET txn_cursor = NULLIF(?2, ''), sync_start_cursor = ?2,
+    attempted_at = ${NOW}, last_error = ?3, last_error_at = ${NOW}
+  WHERE id = ?1`;
+
+// A failed attempt: ?2 = new status (NULL keeps it), ?3 = an error code (never data).
+const RECORD_FAILURE = `
+  UPDATE items SET status = coalesce(?2, status), attempted_at = ${NOW}, last_error = ?3, last_error_at = ${NOW}
+  WHERE id = ?1`;
 
 const PAGE_INFO = `SELECT ${PAGE} ->> '$.next_cursor' AS next_cursor, ${PAGE} ->> '$.has_more' AS has_more
                    WHERE EXISTS (SELECT 1 FROM sync_pages WHERE item_id = ?1)`;
@@ -128,13 +158,15 @@ export async function syncItem(env: Env, config: Config, item: ItemRow, budget: 
   } catch (e) {
     if (!(e instanceof FernetError)) throw e;
     console.error(`sync: item ${item.id}: access token doesn't decrypt with TOKEN_ENC_KEY`);
-    await setStatus(env, item.id, "error");
+    await recordFailure(env, item.id, "error", "TOKEN_DOES_NOT_DECRYPT");
     return "error";
   }
 
-  const loopStart = item.txn_cursor ?? "";
-  let cursor = loopStart;
-  let restarts = 0;
+  let cursor = item.txn_cursor ?? "";
+  // The cursor the current update began from ('' = the first history download), or null when the
+  // stored cursor is caught up. Kept in step with items.sync_start_cursor.
+  let start = item.sync_start_cursor;
+  let restarted = false;
   while (canSpend(budget)) {
     budget.pages--;
     let page: string;
@@ -142,20 +174,23 @@ export async function syncItem(env: Env, config: Config, item: ItemRow, budget: 
       page = await plaidPostText(env, creds, "/transactions/sync",
         { access_token: accessToken, cursor: cursor || undefined, count: PAGE_SIZE });
     } catch (e) {
-      if (e instanceof PlaidError && e.errorCode === "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION" && restarts < 2) {
-        // Plaid: restart pagination from the cursor this loop began with. Upserts are idempotent.
-        restarts++;
-        cursor = loopStart;
+      const code = e instanceof PlaidError ? e.errorCode : "REQUEST_FAILED";
+      console.error(`sync: item ${item.id}: ${e instanceof PlaidError ? `${code} (request ${e.requestId ?? "?"})` : String(e)}`);
+      if (code === MUTATION && !restarted) {
+        // Plaid: restart the whole update from the cursor it began with, not from this page. With
+        // no start on record (an item mid-download from before migration 0004), that's the
+        // beginning: a caught-up cursor can't be mid-update. Upserts are idempotent.
+        restarted = true;
+        cursor = start ?? "";
+        start = cursor;
+        await env.DB.prepare(RESTART_UPDATE).bind(item.id, cursor, code).run();
         continue;
       }
+      // Anything else, or a second mutation this run: try again next run. Only item-level errors
+      // change the status.
       const status = statusForError(e);
-      const code = e instanceof PlaidError ? `${e.errorCode} (request ${e.requestId ?? "?"})` : String(e);
-      console.error(`sync: item ${item.id}: ${code}`);
-      if (status) {
-        await setStatus(env, item.id, status);
-        return status;
-      }
-      return "retry";
+      await recordFailure(env, item.id, status, code);
+      return status ?? "retry";
     }
 
     if (budget.bytes !== undefined) budget.bytes -= page.length;
@@ -166,37 +201,46 @@ export async function syncItem(env: Env, config: Config, item: ItemRow, budget: 
         env.DB.prepare(UPSERT_ACCOUNTS).bind(item.id, item.owner),
         env.DB.prepare(UPSERT_TRANSACTIONS).bind(item.id, item.owner),
         env.DB.prepare(DELETE_REMOVED).bind(item.id),
-        env.DB.prepare(ADVANCE_CURSOR).bind(item.id),
+        env.DB.prepare(ADVANCE_CURSOR).bind(item.id, cursor),
         env.DB.prepare(PAGE_INFO).bind(item.id),
         env.DB.prepare(UNSTAGE_PAGE).bind(item.id),
       ]);
       info = results[5].results[0] as typeof info;
     } catch (e) {
       console.error(`sync: item ${item.id}: saving a page failed: ${e instanceof Error ? e.message : e}`);
+      await recordFailure(env, item.id, null, "SAVING_A_PAGE_FAILED").catch(() => {});
       return "retry";
     }
     if (!info) {
       console.error(`sync: item ${item.id}: Plaid returned a page that isn't valid sync JSON; will retry`);
+      await recordFailure(env, item.id, null, "INVALID_SYNC_PAGE");
       return "retry";
     }
+    start = info.has_more ? start ?? cursor : null;
     cursor = info.next_cursor;
     if (!info.has_more) return "good";
   }
   return "partial";
 }
 
-async function setStatus(env: Env, itemId: number, status: string): Promise<void> {
-  await env.DB.prepare(`UPDATE items SET status = ?, updated_at = ${NOW} WHERE id = ?`).bind(status, itemId).run();
+async function recordFailure(env: Env, itemId: number, status: string | null, code: string): Promise<void> {
+  await env.DB.prepare(RECORD_FAILURE).bind(itemId, status, code).run();
 }
 
-/** Sweep every syncable Item, least recently updated first, within one run's budget.
- * Called only by the cron trigger (scheduled handler) — there is no HTTP sync endpoint. */
+/** Sweep every syncable Item within one run's budget: caught-up banks first (one small page each),
+ * then unfinished updates, each group least recently attempted first, so a failing bank goes to
+ * the back instead of holding up the others. updatesOnly (the catch-up cron): only banks partway
+ * through an update. Called only by the cron triggers (scheduled handler); there is no HTTP sync
+ * endpoint. */
 export async function runSyncAll(
   env: Env, budget: Budget = { pages: pagesPerRun(env), bytes: bytesPerRun(env) },
+  opts: { updatesOnly?: boolean } = {},
 ): Promise<Record<number, ItemResult>> {
   const config = loadConfig(env);
   const { results: items } = await env.DB.prepare(
-    "SELECT * FROM items WHERE status IN ('good', 'login_required') ORDER BY updated_at, id",
+    `SELECT * FROM items WHERE status IN ('good', 'login_required')
+     ${opts.updatesOnly ? "AND sync_start_cursor IS NOT NULL" : ""}
+     ORDER BY sync_start_cursor IS NOT NULL, coalesce(attempted_at, updated_at), id`,
   ).all<ItemRow>();
   const out: Record<number, ItemResult> = {};
   for (const item of items) {

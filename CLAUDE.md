@@ -17,7 +17,8 @@ Design history and decisions: `docs/serverless-plan.md`.
 - Cloudflare Worker (TypeScript, `src/`) + D1 (SQLite, `d1/migrations/`), one deployment
   per household. Pages are static files in `public/` (Workers assets); API paths are listed in
   `wrangler.jsonc` `assets.run_worker_first` and run through the Worker.
-- Financial data: Plaid (Trial plan). Sync runs from an hourly cron trigger.
+- Financial data: Plaid (Trial plan). Sync runs from an hourly cron trigger,
+  plus a 10-minute catch-up trigger for banks partway through a history download.
 - Access: Cloudflare Access at the edge, plus a login-token check in the Worker.
 - Each household deploys its own fork with Cloudflare Workers Builds (`npm run deploy`);
   onboarding is `SETUP.md`. Development with `wrangler dev` on any machine (Node 22+).
@@ -41,7 +42,7 @@ Design history and decisions: `docs/serverless-plan.md`.
 - Plaid access tokens are stored Fernet-encrypted (`src/fernet.ts`, `TOKEN_ENC_KEY`).
   Never log, print, or return decrypted tokens.
 - Transaction sync is cursor-based and incremental.
-- There is NO HTTP sync endpoint, by design. Sync runs only from the cron trigger
+- There is NO HTTP sync endpoint, by design. Sync runs only from the cron triggers
   (`/link/exchange` starts the first sync of a new Item internally). Do not add one.
 - Auth: Cloudflare Access guards the hostname; every API route also re-validates the
   Access JWT (`src/access.ts`) and applies the optional `ALLOWED_LOGINS` allow-list.
@@ -66,7 +67,8 @@ Design history and decisions: `docs/serverless-plan.md`.
 - Run locally: `npm run dev` then http://localhost:8787 (passes `--var MINTY_DEV_NO_AUTH:1`,
   which skips Cloudflare Access and is only honoured for localhost requests)
 - Local cron sync (`npm run dev` enables the trigger):
-  `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=17+*+*+*+*"`
+  `curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=17+*+*+*+*"` (catch-up only:
+  `cron=*/10+*+*+*+*`)
 - Deploy: `npm run deploy` (`scripts/deploy.mjs`, run by Workers Builds on push to `main`):
   migrate then deploy, or deploy first on the very first run (it creates D1).
 - Plaid Sandbox end-to-end: `node scripts/sandbox-e2e.ts` against `npm run dev`. It reads
@@ -86,7 +88,9 @@ Design history and decisions: `docs/serverless-plan.md`.
   sized from measurements against the free plan's 10 ms CPU limit (docs/serverless-plan.md §8).
   Don't add per-row work or JSON.parse on the page path, and never bind pages as bytes
   (18 ms per page). Transient Plaid errors retry next run; only item-level errors change
-  `items.status`.
+  `items.status`. An update spanning runs keeps the cursor it began from
+  (`items.sync_start_cursor`); `TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION` restarts from there,
+  never from the run's own cursor (that fails forever).
 - Fernet reference vectors (`test/fixtures/fernet-vectors.json`, test key only) pin the
   encryption to the reference implementation. Don't regenerate them casually.
 
