@@ -6,7 +6,7 @@ import * as data from "./routes/data";
 import * as link from "./routes/link";
 import * as setup from "./routes/status";
 import { PlaidError } from "./plaid";
-import { CATCH_UP_CRON, runSyncAll } from "./sync";
+import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 
 /** Minty Worker. API paths are listed in wrangler.jsonc assets.run_worker_first; everything
  * else is served straight from public/. /healthz is the only path outside the Access check.
@@ -19,7 +19,8 @@ type Handler = (c: {
 const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["GET", /^\/status$/, ({ env, config, email }) => setup.status(env, config, email)],
   ["GET", /^\/users$/, ({ env, config }) => data.users(env, config)],
-  ["GET", /^\/items$/, ({ env }) => data.items(env)],
+  ["GET", /^\/items$/, ({ env, config }) => data.items(env, config)],
+  ["GET", /^\/health$/, ({ env, config }) => data.health(env, config)],
   ["GET", /^\/accounts$/, ({ env, url }) => data.accounts(env, url)],
   ["GET", /^\/capacity$/, ({ env, config }) => data.capacity(env, config)],
   ["GET", /^\/transactions$/, ({ env, url }) => data.transactions(env, url)],
@@ -31,6 +32,7 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["POST", /^\/link\/token$/, ({ env, config, request }) => link.createLinkToken(env, config, request)],
   ["POST", /^\/link\/exchange$/, ({ env, config, request, ctx }) => link.exchange(env, config, request, ctx)],
   ["POST", /^\/link\/token\/update$/, ({ env, config, request }) => link.updateMode(env, config, request)],
+  ["POST", /^\/link\/reconnected$/, ({ env, config, request }) => link.reconnected(env, config, request)],
 ];
 
 export default {
@@ -80,6 +82,14 @@ export default {
     const results = await runSyncAll(env, undefined, { updatesOnly });
     if (!updatesOnly || Object.keys(results).length) {          // quiet when nothing is downloading
       console.log(updatesOnly ? "catch-up sync complete" : "scheduled sync complete", JSON.stringify(results));   // item id -> result; no data
+    }
+    if (!updatesOnly) {
+      // After sync, so a failed check never costs a sync; each bank about once a day.
+      const checked = await checkConnections(env).catch((e) => {
+        console.error("connection check failed:", e instanceof Error ? e.message : e);
+        return {};
+      });
+      if (Object.keys(checked).length) console.log("connection check", JSON.stringify(checked));   // item id -> Plaid code or null
     }
   },
 } satisfies ExportedHandler<Env>;

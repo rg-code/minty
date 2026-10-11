@@ -43,6 +43,7 @@
       "/status",
       "/users",
       "/items",
+      "/health",
       "/accounts",
       "/capacity",
       "/transactions",

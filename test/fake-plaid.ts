@@ -13,6 +13,7 @@ export class FakePlaid {
   replies: Record<string, Reply> = {
     "/link/token/create": { body: { link_token: "link-sandbox-abc", expiration: "2026-09-25T00:00:00Z" } },
     "/item/public_token/exchange": { body: { access_token: "access-sandbox-secret", item_id: "plaid-item-1" } },
+    "/item/get": { body: { item: { item_id: "plaid-item-1", error: null, consent_expiration_time: null }, request_id: "req-get" } },
   };
 
   install(): this {

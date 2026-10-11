@@ -198,3 +198,18 @@ GitHub Actions runs **only tests** on pull requests. That's a normal CI use, all
     hours, not days. That leaves Plaid less time to change it partway through. Once every bank
     is caught up, it makes no Plaid calls. If a long history still keeps restarting, the next
     step is a more frequent catch-up (e.g. every 2 minutes).
+- **2026-10-10: bank problems are shown, never silent (migration 0005).** The stall above went
+  unnoticed for 10 days because nothing outside Setup checks said so.
+  - `src/health.ts` gives each bank one verdict (reconnect, broken, stranded, stalled, consent
+    ending, downloading, ok) from what sync records, with Plaid's codes in plain words
+    (`MEANING`) plus Plaid's own message (`last_error_message`, ≤200 chars). `/items`, the new
+    `/health` (the dashboard's status strip) and `/status` all use it. Transient errors show
+    only once a bank hasn't synced for 3 hours; sign-in and permanent errors show at once.
+  - **Daily connection check:** the hourly run calls Plaid `/item/get` for one bank (least
+    recently checked, each about once a day), after sync. It catches a connection Plaid already
+    knows is broken, and records `consent_expires_at`, so the strip warns 7 days before an OAuth
+    bank's consent ends. One small call per hour: well inside the free plan's CPU and
+    subrequest limits.
+  - After Link update mode, the connect page calls `POST /link/reconnected`, which runs that
+    check right away, so the warning clears without waiting a day. It never syncs.
+  - Not done: email or push alerts (they'd need an outbound mail setup).

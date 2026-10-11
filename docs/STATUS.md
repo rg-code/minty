@@ -9,7 +9,7 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 - **Code:** Minty is Cloudflare-only: phases P0–P4 are on `main`. P4 removed the Python/Docker
   app (its last version is tagged `python-app-final`) and moved the pages to `public/`.
   CI (vitest in workerd + typecheck) runs on every PR.
-  - Tests: 187 Worker.
+  - Tests: 219 Worker.
   - Since then: filter by bank (#18) and by card/account (#19), and one person by default with
     the person switch only for two or more (#20).
   - Plan and decision log: [serverless-plan.md](serverless-plan.md) §8.
@@ -80,6 +80,14 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
        "no successful sync for N hours (last error: …)" line.
      - If a long history (Amex) keeps restarting before it finishes, make the catch-up more
        frequent (e.g. every 2 minutes: `CATCH_UP_CRON` in `src/sync.ts` and `wrangler.jsonc`).
+     - **Deployed 2026-10-10 17:29 UTC and working:** Wells Fargo caught up at 18:20 (124
+       transactions, newest Oct 6). Citibank restarted at 19:17 and Amex at 20:17, and the
+       10-minute catch-up then moved them along (Citibank 800 transactions by 20:30).
+   - **Bank problems now show on the dashboard (migration 0005).** A status strip under the
+     header lists every bank that needs attention, with what went wrong in plain words,
+     Plaid's own message, and a Reconnect / Link-again button. It stays until the problem is
+     fixed. Setup checks show the same lines. A daily `/item/get` check per bank catches broken
+     connections early and warns 7 days before an OAuth bank's consent ends.
    - **Amex authorized-user cards: Amex does send card members.** After the owner reset Amex's
      sync position (2026-10-06), Setup checks showed "card member on 93 of 200 transactions
      (15 card members)" while the history was still re-downloading. **Stage 2 is merged (#25):**

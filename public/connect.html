@@ -62,6 +62,7 @@
   .reconnect .title { font-weight:600; color:var(--err); margin-bottom:6px; }
   .reconnect .line { display:flex; justify-content:space-between; align-items:center; gap:10px; }
   .reconnect .line + .line { margin-top:6px; }
+  .reconnect .why { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
   .reconnect button { font:inherit; font-size:12.5px; font-weight:600; padding:5px 10px; border-radius:8px; cursor:pointer;
                       border:1px solid var(--hairline); background:var(--surface); color:var(--ink); }
   .reconnect button:disabled { opacity:.45; cursor:not-allowed; }
@@ -132,16 +133,22 @@ document.getElementById("owners").addEventListener("click", e => {
   renderOwners(); renderCapacity();
 });
 
-// Banks that need you to sign in again (status login_required): repair them with Link update mode.
+// Banks that need you to sign in again, or whose consent through Plaid ends soon (the dashboard's
+// "Reconnect" links here): repair them with Link update mode.
 async function loadReconnect() {
   const box = document.getElementById("reconnect");
   let items = [];
-  try { const r = await fetch("/items"); if (r.ok) items = (await r.json()).filter(i => i.status === "login_required"); } catch {}
+  try {
+    const r = await fetch("/items");
+    if (r.ok) items = (await r.json()).filter(i => i.health?.action === "reconnect" || i.status === "login_required");
+  } catch {}
   box.hidden = !items.length;
   const label = k => USERS.find(u => u.key === k)?.label ?? k;
   box.innerHTML = items.length ? `<div class="title">Needs you to sign in again</div>` + items.map(i =>
-    `<div class="line"><span>${esc(i.institution_name || "Bank")} · ${esc(label(i.owner))}</span>` +
+    `<div class="line"><span>${esc(i.institution_name || "Bank")} · ${esc(label(i.owner))}` +
+    `${i.health?.detail ? `<span class="why">${esc(i.health.detail)}</span>` : ""}</span>` +
     `<button type="button" data-reconnect="${i.id}">Reconnect</button></div>`).join("") : "";
+  if (items.length && location.hash === "#reconnect") box.scrollIntoView({ block: "center" });
 }
 
 document.getElementById("reconnect").addEventListener("click", async e => {
@@ -252,7 +259,23 @@ function openLink(token, forOwner, plaidAccount, receivedRedirectUri, updateItem
     onSuccess: async (public_token, metadata) => {
       if (updateItemId !== null) {
         LINK_KEYS.forEach(k => localStorage.removeItem(k));
-        setStatus("Reconnected. It will refresh on the next hourly sync.", "ok");
+        setStatus("Reconnected. Checking the connection with Plaid…");
+        try {
+          // Plaid's view of the connection now, so the dashboard's warning clears right away.
+          const res = await fetch("/link/reconnected", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ item_id: updateItemId }),
+          });
+          if (!res.ok) throw new Error(await res.text());
+          const { health } = await res.json();
+          if (health.action === "reconnect" || health.action === "relink") {
+            setStatus(`${health.message} ${health.detail ?? ""}`.trim(), "err");
+          } else {
+            setStatus("Reconnected. New transactions arrive with the next hourly sync.", "ok");
+          }
+        } catch {
+          setStatus("Reconnected. It will refresh on the next hourly sync.", "ok");
+        }
         loadReconnect();
         return;
       }

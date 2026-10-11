@@ -32,6 +32,9 @@
     --warn-ink: #7a5c00;
     --warn-bg: #fff8e6;
     --warn-line: #f0e2b0;
+    --err-ink: #a51d1d;
+    --err-bg: #fff1f1;
+    --err-line: #f2b8b8;
     --pending-ink: #b08900;
     --pending-bg: #fdf9ec;
     --shadow: rgba(0,0,0,.06);
@@ -60,6 +63,9 @@
     --warn-ink: #f2d27a;
     --warn-bg: #2a2412;
     --warn-line: #5a4a18;
+    --err-ink: #ffb3b3;
+    --err-bg: #2c1517;
+    --err-line: #6b2a2e;
     --pending-ink: #f2c94c;
     --pending-bg: #2a2412;
     --shadow: rgba(0,0,0,.4);
@@ -192,6 +198,28 @@
 
   .empty, .banner { padding: 40px var(--pad); text-align: center; color: var(--muted); }
   .banner { padding: 10px var(--pad); background: var(--warn-bg); color: var(--warn-ink); border-bottom: 1px solid var(--warn-line); font-size: 13px; }
+
+  /* Status strip: banks that need attention (GET /health). Stays until the problem is fixed. */
+  .health { border-bottom: 1px solid var(--hairline); }
+  .health .hl { display: grid; grid-template-columns: 16px 1fr auto; gap: 2px 10px; align-items: start;
+                padding: 10px var(--pad); font-size: 13.5px; border-left: 3px solid transparent; }
+  .health .hl + .hl { border-top: 1px solid var(--hairline); }
+  .health .hl.error { background: var(--err-bg); color: var(--err-ink); border-left-color: var(--err-ink); }
+  .health .hl.warn { background: var(--warn-bg); color: var(--warn-ink); border-left-color: var(--warn-ink); }
+  .health .hl.info { background: var(--surface); color: var(--muted); }
+  .health .mark { font-weight: 700; line-height: 1.45; }
+  .health .msg { font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+  .health .what, .health .code { grid-column: 2; font-size: 12.5px; line-height: 1.45; overflow-wrap: anywhere; }
+  .health .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; opacity: .75; }
+  .health .act { grid-column: 3; grid-row: 1 / span 3; align-self: center; font: inherit; font-size: 12.5px; font-weight: 600;
+                 padding: 5px 10px; border-radius: 8px; border: 1px solid currentColor; color: inherit; text-decoration: none; white-space: nowrap; }
+  .health .act:hover { background: var(--surface); }
+  .health .more { display: block; width: 100%; text-align: left; font: inherit; font-size: 12.5px; padding: 8px var(--pad);
+                  background: var(--surface); color: var(--muted); border: 0; border-top: 1px solid var(--hairline); cursor: pointer; }
+  @media (max-width: 560px) {
+    .health .hl { grid-template-columns: 16px 1fr; }
+    .health .act { grid-column: 2; grid-row: auto; justify-self: start; margin-top: 6px; }
+  }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -251,6 +279,7 @@
 </header>
 
 <div id="banner" hidden class="banner"></div>
+<section id="health" class="health" hidden aria-live="polite" aria-label="Bank status"></section>
 <div class="totals" id="totals"></div>
 <main id="feed"><div class="empty">Loading…</div></main>
 
@@ -365,6 +394,50 @@ async function loadItems() {
 }
 
 const bankName = it => it.institution_name || `Bank #${it.id}`;
+const BANK_NOTES = { reconnect: "needs reconnect", broken: "sync error", stalled: "not syncing", stranded: "can't sync",
+                     expiring: "access ending", downloading: "downloading" };
+
+// --- status strip: every bank that needs attention, from GET /health. Never silent: a bank that
+// stops syncing shows here, with what went wrong and what to do, until it's fixed. ------------
+const HEALTH_SHOWN = 3;            // problems shown before "Show N more"
+let healthOpen = false;
+
+async function loadHealth() {
+  const box = document.getElementById("health");
+  let h;
+  try {
+    const r = await fetch("/health");
+    if (!r.ok) throw new Error(r.status);
+    h = await r.json();
+  } catch { box.hidden = true; return; }      // offline preview: the sample-data banner says so
+  const who = b => USERS.length > 1 ? ` (${labelOf(b.owner)})` : "";
+  const problems = [];
+  if (h.sync && !h.sync.ok) problems.push({ level: "error", message: h.sync.message, fix: h.sync.fix });
+  for (const b of h.banks) if (b.health.level !== "info") problems.push({ ...b.health, message: b.health.message + who(b) });
+  const downloads = h.banks.filter(b => b.health.level === "info");
+
+  const line = p => {
+    const code = p.error_code ? escapeHtml(p.error_code) + (p.plaid_message ? ` · “${escapeHtml(p.plaid_message)}”` : "") : "";
+    const what = [p.detail, p.fix].filter(Boolean).map(escapeHtml).join(" ");
+    const act = p.action === "reconnect" ? `<a class="act" href="/connect#reconnect">Reconnect</a>`
+              : p.action === "relink" ? `<a class="act" href="/connect">Link again</a>` : "";
+    return `<div class="hl ${p.level}" role="${p.level === "error" ? "alert" : "status"}">
+      <span class="mark" aria-hidden="true">${p.level === "error" ? "✕" : "!"}</span>
+      <span class="msg">${escapeHtml(p.message)}</span>${act}
+      ${what ? `<span class="what">${what}</span>` : ""}${code ? `<span class="code">${code}</span>` : ""}</div>`;
+  };
+  const shown = healthOpen ? problems : problems.slice(0, HEALTH_SHOWN);
+  let html = shown.map(line).join("");
+  if (problems.length > shown.length) html += `<button type="button" class="more" id="healthMore">Show ${problems.length - shown.length} more</button>`;
+  if (downloads.length) {
+    html += `<div class="hl info" role="status"><span class="mark" aria-hidden="true">↓</span><span class="msg">Downloading history: ${
+      downloads.map(b => escapeHtml(b.health.message.replace(/: downloading its history \((.*)\)\.$/, " ($1)")) + escapeHtml(who(b))).join(", ")
+    }</span><span class="what">Newer transactions appear once each download is done.</span></div>`;
+  }
+  box.innerHTML = html;
+  box.hidden = !html;
+  document.getElementById("healthMore")?.addEventListener("click", () => { healthOpen = true; loadHealth(); });
+}
 
 function visibleBanks() {
   return (ITEMS || []).filter(it => state.owner === "all" || it.owner === state.owner);
@@ -381,7 +454,7 @@ function populateBankFilter() {
     html = owners.filter(o => banks.some(b => b.owner === o)).map(o =>
       `<div class="optgroup"><span class="dot" style="background:${colorOf(o)}"></span>${escapeHtml(labelOf(o))}</div>` +
       banks.filter(b => b.owner === o).map(b => {
-        const note = b.status === "login_required" ? "needs reconnect" : b.status === "error" ? "sync error" : "";
+        const note = BANK_NOTES[b.health?.state] ?? (b.status === "login_required" ? "needs reconnect" : b.status === "error" ? "sync error" : "");
         return `<label><input type="checkbox" value="${b.id}" ${state.banks.includes(b.id) ? "checked" : ""} />` +
           `${escapeHtml(bankName(b))}${note ? `<span class="note">${note}</span>` : ""}</label>`;
       }).join("")).join("");
@@ -769,7 +842,8 @@ const SAMPLE = [
   });
 })();
 
-loadUsers().then(() => { loadItems(); loadAccounts(); load(); });
+loadUsers().then(() => { loadItems(); loadAccounts(); load(); loadHealth(); });
+setInterval(() => { if (!document.hidden) loadHealth(); }, 5 * 60 * 1000);   // downloads move every 10 minutes
 </script>
 </body>
 </html>

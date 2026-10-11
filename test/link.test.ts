@@ -218,3 +218,37 @@ describe("POST /link/token/update", () => {
     expect(text).not.toContain("access-sandbox-secret");
   });
 });
+
+describe("POST /link/reconnected", () => {
+  it("404s an unknown item", async () => {
+    expect((await post("/link/reconnected", { item_id: 42 })).status).toBe(404);
+  });
+
+  it("checks the connection right away, so the warning clears without waiting for the daily check", async () => {
+    const enc = await fernetEncrypt("access-sandbox-secret", KEY);
+    const { id } = (await env.DB.prepare(
+      `INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, institution_name, txn_cursor, status, last_error, consent_expires_at)
+       VALUES ('me', 'me_backup', 'i1', ?, 'Chase', 'c1', 'login_required', 'ITEM_LOGIN_REQUIRED', '2026-01-01T00:00:00Z') RETURNING id`,
+    ).bind(enc).first<{ id: number }>())!;
+    plaid.replies["/item/get"] = { body: { item: { error: null, consent_expiration_time: "2099-01-01T00:00:00Z" } } };
+    const r = await post("/link/reconnected", { item_id: id });
+    const text = await r.text();
+    expect(r.status).toBe(200);
+    expect(JSON.parse(text)).toMatchObject({ item_id: id, checked: true, health: { state: "ok" } });
+    expect(plaid.paths()).toEqual(["/item/get"]);                    // no transactions synced here
+    expect(plaid.calls[0].clientId).toBe("cid_me_backup");
+    expect(text).not.toContain("access-sandbox-secret");
+    const item = await env.DB.prepare("SELECT status, last_error, consent_expires_at FROM items WHERE id = ?").bind(id).first();
+    expect(item).toEqual({ status: "good", last_error: null, consent_expires_at: "2099-01-01T00:00:00Z" });
+  });
+
+  it("reports what's still wrong when Plaid says so", async () => {
+    const enc = await fernetEncrypt("access-sandbox-secret", KEY);
+    const { id } = (await env.DB.prepare(
+      "INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, status) VALUES ('me', 'me_primary', 'i2', ?, 'login_required') RETURNING id",
+    ).bind(enc).first<{ id: number }>())!;
+    plaid.replies["/item/get"] = { body: { item: { error: { error_code: "ITEM_LOCKED", error_message: "locked" } } } };
+    const { body } = await getJson("/link/reconnected", { method: "POST", body: JSON.stringify({ item_id: id }) });
+    expect(body.health).toMatchObject({ state: "reconnect", error_code: "ITEM_LOCKED", detail: expect.stringContaining("locked this login") });
+  });
+});

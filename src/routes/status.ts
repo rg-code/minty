@@ -3,14 +3,13 @@ import { type Config, keyState, secretNames } from "../config";
 import { fernetDecrypt, fernetEncrypt } from "../fernet";
 import { plaidHost } from "../plaid";
 import { json } from "../http";
+import { bankHealth, bankRows, syncHealth } from "../health";
 
 /** GET /status: setup checks for the household, shown on the /add-user page. Behind Access like
  * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql"];
-
-const STALE_SYNC_HOURS = 3;          // cron runs hourly; allow a couple of misses
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql"];
 
 interface Check { id: string; ok: boolean; level: "error" | "warn"; message: string; fix?: string }
 
@@ -88,10 +87,6 @@ export async function status(env: Env, config: Config, email: string): Promise<R
   const { results: counts } = await env.DB.prepare("SELECT status, count(*) AS n FROM items GROUP BY status")
     .all<{ status: string; n: number }>().catch(() => ({ results: [] as { status: string; n: number }[] }));
   const byStatus = Object.fromEntries(counts.map((r) => [r.status, r.n]));
-  if (byStatus.login_required) {
-    add({ id: "items_login", ok: false, level: "warn", message: `${byStatus.login_required} bank(s) need you to sign in again.`,
-          fix: "Open Add account and use Reconnect." });
-  }
   // Plaid keys for someone who isn't in MINTY_USERS (e.g. set up for a second person who was never
   // added): they're never used, so say so rather than leave them silently ignored.
   const known = new Set([...config.users.keys()].map((k) => k.toUpperCase()));
@@ -119,10 +114,6 @@ export async function status(env: Env, config: Config, email: string): Promise<R
     add({ id: "items_stranded", ok: false, level: "error", message: `${total} bank(s) can't sync: ${why}.`,
           fix: "Restore that person / slot and its keys. Banks stay with the Plaid account they were linked under." });
   }
-  if (byStatus.error) {
-    add({ id: "items_error", ok: false, level: "warn", message: `${byStatus.error} bank(s) stopped syncing with a permanent Plaid error.`,
-          fix: "Link them again from Add account." });
-  }
 
   // Card members (Plaid's account_owner) per bank, so a household can see whether a multi-card
   // account (e.g. Amex authorized-user cards) reports who made each charge. Shown for American
@@ -147,41 +138,19 @@ export async function status(env: Env, config: Config, email: string): Promise<R
             : `${bank}: no card members on its ${txns} yet. Plaid fills this in only for some accounts, such as Amex authorized-user cards.` });
   }
 
-  // Per bank: a history download still in progress, or a bank that has stopped syncing while the
-  // others carry on (the overall "Last sync" below only looks at the most recent bank). Banks that
-  // need signing in again or can't sync are already flagged above.
-  const { results: banks } = await env.DB.prepare(
-    `SELECT i.id, i.institution_name AS name, i.plaid_account, i.updated_at, i.last_error,
-            i.sync_start_cursor IS NOT NULL AS downloading,
-            (SELECT count(*) FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE a.item_id = i.id) AS n
-     FROM items i WHERE i.status = 'good' ORDER BY i.id`,
-  ).all<{ id: number; name: string | null; plaid_account: string; updated_at: string; last_error: string | null; downloading: number; n: number }>()
-    .catch(() => ({ results: [] as { id: number; name: string | null; plaid_account: string; updated_at: string; last_error: string | null; downloading: number; n: number }[] }));
-  for (const b of banks) {
-    if (stranded.some((r) => r.plaid_account === b.plaid_account)) continue;
-    const bank = b.name || `Bank #${b.id}`;
-    const hours = (Date.now() - Date.parse(b.updated_at)) / 3.6e6;
-    const txns = `${b.n} transaction${b.n === 1 ? "" : "s"}`;
-    if (hours > STALE_SYNC_HOURS) {
-      add({ id: `bank_stalled_${b.id}`, ok: false, level: "warn",
-            message: `${bank}: no successful sync for ${Math.round(hours)} hours` +
-                     (b.last_error ? ` (last error: ${b.last_error})` : "") + ` (${txns} so far).`,
-            fix: "Minty retries on its own. If this lasts more than a day, check the Worker's logs (Workers & Pages → minty → Logs)." });
-    } else if (b.downloading) {
-      add({ id: `bank_downloading_${b.id}`, ok: true, level: "warn",
-            message: `${bank}: downloading its history, ${txns} so far. Newer transactions appear once it's done.` });
-    }
+  // Per bank, the same verdict the dashboard shows (src/health.ts): sign in again, broken,
+  // stalled, consent ending soon, or still downloading. Stranded banks are listed above.
+  const rows = await bankRows(env).catch(() => []);
+  for (const r of rows) {
+    const h = bankHealth(env, config, r);
+    if (!h.level || h.state === "stranded") continue;
+    const detail = [h.detail, h.error_code && `(${h.error_code}${h.plaid_message ? `: ${h.plaid_message}` : ""})`].filter(Boolean).join(" ");
+    add({ id: `bank_${h.state}_${r.id}`, ok: h.level === "info", level: h.level === "error" ? "error" : "warn",
+          message: [h.message, detail].filter(Boolean).join(" "), ...(h.fix ? { fix: h.fix } : {}) });
   }
 
-  const last = await env.DB.prepare("SELECT max(updated_at) AS t FROM items WHERE status IN ('good', 'login_required') AND txn_cursor IS NOT NULL")
-    .first<{ t: string | null }>().catch(() => null);
-  if (last?.t) {
-    const hours = (Date.now() - Date.parse(last.t)) / 3.6e6;
-    add(hours > STALE_SYNC_HOURS
-      ? { id: "sync", ok: false, level: "warn", message: `No successful sync for ${Math.round(hours)} hours.`,
-          fix: "Check the Worker's cron trigger and logs (Workers & Pages → minty → Logs)." }
-      : { id: "sync", ok: true, level: "warn", message: `Last sync ${hours < 1 ? "within the hour" : `${Math.round(hours)} h ago`}.` });
-  }
+  const sync = syncHealth(env, config, rows);
+  if (sync) add({ id: "sync", level: "warn", ...sync });
 
   return json({ backend: "workers", plaid_env: plaidEnv, checks, items: byStatus });
 }

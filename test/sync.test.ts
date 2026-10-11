@@ -4,7 +4,7 @@ import { createExecutionContext, createScheduledController, waitOnExecutionConte
 import worker from "../src/index";
 import { loadConfig } from "../src/config";
 import { fernetEncrypt } from "../src/fernet";
-import { CATCH_UP_CRON, runSyncAll, syncItem, type ItemRow } from "../src/sync";
+import { CATCH_UP_CRON, checkConnections, checkItem, runSyncAll, syncItem, type ItemRow } from "../src/sync";
 import type { Env } from "../src/env";
 import { FakePlaid, account, page, plaidError, txn } from "./fake-plaid";
 
@@ -373,8 +373,110 @@ describe("runSyncAll / cron", () => {
     expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["d1"]);
     plaid.syncPages.push(page("k2", false), page("d3", false));
     await run("17 * * * *");
-    expect(plaid.calls.map((c) => c.body.cursor)).toEqual(["d1", "k1", "d2"]);
+    expect(plaid.calls.filter((c) => c.path === "/transactions/sync").map((c) => c.body.cursor)).toEqual(["d1", "k1", "d2"]);
+    expect(plaid.paths().at(-1)).toBe("/item/get");                  // then one connection check
     expect((await itemById(caughtUp.id)).txn_cursor).toBe("k2");
     expect((await itemById(downloading.id))).toMatchObject({ txn_cursor: "d3", sync_start_cursor: null });
+  });
+});
+
+describe("error text for the dashboard", () => {
+  it("keeps Plaid's message with the code, preferring its display_message, and clears both on success", async () => {
+    const item = await addItem({ cursor: "c1" });
+    plaid.syncPages.push({ status: 400, body: { error_type: "ITEM_ERROR", error_code: "ITEM_LOGIN_REQUIRED", request_id: "r",
+      error_message: "the login details of this item have changed", display_message: "Please sign in again." } });
+    expect(await syncItem(E, config, item, { pages: 1 })).toBe("login_required");
+    expect(await itemById(item.id)).toMatchObject({ status: "login_required", last_error: "ITEM_LOGIN_REQUIRED", last_error_message: "Please sign in again." });
+    plaid.syncPages.push(page("c2", false));
+    await syncItem(E, config, (await itemById(item.id))!, { pages: 1 });
+    expect(await itemById(item.id)).toMatchObject({ status: "good", last_error: null, last_error_message: null, last_error_at: null });
+  });
+
+  it("caps Plaid's message at 200 characters", async () => {
+    const item = await addItem({ cursor: "c1" });
+    plaid.syncPages.push({ status: 500, body: { error_type: "API_ERROR", error_code: "INTERNAL_SERVER_ERROR", error_message: "x".repeat(500) } });
+    await syncItem(E, config, item, { pages: 1 });
+    expect((await itemById(item.id)).last_error_message).toHaveLength(200);
+  });
+});
+
+describe("daily connection check (/item/get)", () => {
+  const itemGet = (item: Record<string, unknown>) => ({ body: { item: { item_id: "x", error: null, consent_expiration_time: null, ...item } } });
+
+  it("records the consent end of a healthy bank, with the bank's own keys", async () => {
+    const item = await addItem({ plaid_account: "me_primary" });
+    plaid.replies["/item/get"] = itemGet({ consent_expiration_time: "2027-04-01T00:00:00Z" });
+    expect(await checkItem(E, config, item)).toBeNull();
+    expect(plaid.calls[0]).toMatchObject({ path: "/item/get", clientId: "cid_me_primary", body: { access_token: "access-sandbox-secret" } });
+    const after = await itemById(item.id);
+    expect(after).toMatchObject({ consent_expires_at: "2027-04-01T00:00:00Z", status: "good" });
+    expect(after.checked_at).toBeTruthy();
+  });
+
+  it("puts a reconnected bank back to good", async () => {
+    const item = await addItem({ status: "login_required" });
+    await env.DB.prepare("UPDATE items SET last_error = 'ITEM_LOGIN_REQUIRED', last_error_message = 'm' WHERE id = ?").bind(item.id).run();
+    expect(await checkItem(E, config, (await itemById(item.id))!)).toBeNull();
+    expect(await itemById(item.id)).toMatchObject({ status: "good", last_error: null, last_error_message: null });
+  });
+
+  it("keeps a sync error on a healthy-looking bank (sync clears it once it works)", async () => {
+    const item = await addItem();
+    await env.DB.prepare("UPDATE items SET last_error = 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION' WHERE id = ?").bind(item.id).run();
+    await checkItem(E, config, (await itemById(item.id))!);
+    expect((await itemById(item.id)).last_error).toBe("TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION");
+  });
+
+  it("catches a broken connection before a sync fails", async () => {
+    const item = await addItem();
+    plaid.replies["/item/get"] = itemGet({ error: { error_code: "ITEM_LOGIN_REQUIRED", error_message: "the login details of this item have changed", display_message: null } });
+    expect(await checkItem(E, config, item)).toBe("ITEM_LOGIN_REQUIRED");
+    expect(await itemById(item.id)).toMatchObject({ status: "login_required", last_error: "ITEM_LOGIN_REQUIRED",
+      last_error_message: "the login details of this item have changed" });
+  });
+
+  it("records a transient error Plaid reports without changing the status", async () => {
+    const item = await addItem();
+    plaid.replies["/item/get"] = itemGet({ error: { error_code: "INSTITUTION_DOWN", error_message: "this institution is not currently responding" } });
+    expect(await checkItem(E, config, item)).toBe("INSTITUTION_DOWN");
+    expect(await itemById(item.id)).toMatchObject({ status: "good", last_error: "INSTITUTION_DOWN" });
+  });
+
+  it("marks a bank Plaid no longer knows as error, and retries a transient failure next run", async () => {
+    const gone = await addItem();
+    plaid.replies["/item/get"] = plaidError("ITEM_NOT_FOUND");
+    expect(await checkItem(E, config, gone)).toBe("ITEM_NOT_FOUND");
+    expect(await itemById(gone.id)).toMatchObject({ status: "error", last_error: "ITEM_NOT_FOUND" });
+    const flaky = await addItem();
+    plaid.replies["/item/get"] = plaidError("INTERNAL_SERVER_ERROR", 500, "API_ERROR");
+    expect(await checkItem(E, config, flaky)).toBe("retry");
+    expect(await itemById(flaky.id)).toMatchObject({ status: "good", checked_at: null, last_error: null });
+  });
+
+  it("skips banks it can't check", async () => {
+    expect(await checkItem(E, config, await addItem({ owner: "alex", plaid_account: "alex_primary" }))).toBe("skipped");
+    expect(await checkItem(E, config, await addItem({ token: await fernetEncrypt("x", "dGhpcy1pcy1hbm90aGVyLXRlc3Qta2V5LTMyYnl0ZXM=") }))).toBe("skipped");
+    expect(plaid.calls).toEqual([]);
+  });
+
+  it("checks one bank per run, least recently checked first, each about once a day", async () => {
+    const recent = await addItem();
+    const old = await addItem();
+    const never = await addItem();
+    await addItem({ status: "error" });
+    await env.DB.prepare("UPDATE items SET checked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 hours') WHERE id = ?").bind(recent.id).run();
+    await env.DB.prepare("UPDATE items SET checked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 hours') WHERE id = ?").bind(old.id).run();
+    expect(await checkConnections(E)).toEqual({ [never.id]: null });
+    expect(await checkConnections(E)).toEqual({ [old.id]: null });
+    expect(await checkConnections(E)).toEqual({});                   // recent was checked an hour ago
+    expect(plaid.calls).toHaveLength(2);
+  });
+
+  it("doesn't run from the catch-up trigger", async () => {
+    await addItem({ cursor: "k1" });
+    const ctx = createExecutionContext();
+    await worker.scheduled(createScheduledController({ cron: CATCH_UP_CRON }), E, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(plaid.calls).toEqual([]);
   });
 });

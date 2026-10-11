@@ -126,18 +126,20 @@ describe("GET /status", () => {
     expect(bad).toMatchObject({ ok: false, level: "error" });
   });
 
-  it("counts banks needing attention and warns when sync is stale", async () => {
+  it("lists each bank needing attention, the same way the dashboard does, and warns when sync is stale", async () => {
     await env.DB.prepare(
-      `INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, txn_cursor, status, updated_at) VALUES
-       ('me', 'me_primary', 'a', 'x', 'c', 'good', '2026-01-01T00:00:00.000Z'),
-       ('me', 'me_primary', 'b', 'x', 'c', 'login_required', '2026-01-01T00:00:00.000Z'),
-       ('me', 'me_primary', 'c', 'x', 'c', 'error', '2026-01-01T00:00:00.000Z')`).run();
+      `INSERT INTO items (id, owner, plaid_account, plaid_item_id, access_token_enc, institution_name, txn_cursor, status, updated_at, last_error, last_error_message) VALUES
+       (1, 'me', 'me_primary', 'a', 'x', 'Chase', 'c', 'good', '2026-01-01T00:00:00.000Z', NULL, NULL),
+       (2, 'me', 'me_primary', 'b', 'x', 'Ally', 'c', 'login_required', '2026-01-01T00:00:00.000Z', 'ITEM_LOGIN_REQUIRED', 'the login details of this item have changed'),
+       (3, 'me', 'me_primary', 'c', 'x', 'Citi', 'c', 'error', '2026-01-01T00:00:00.000Z', 'ITEM_NOT_FOUND', NULL)`).run();
     const body = (await getJson("/status")).body;
     const c = byId(body.checks);
     expect(body.items).toEqual({ good: 1, login_required: 1, error: 1 });
-    expect(c.items_login.message).toMatch(/1 bank\(s\) need you to sign in again/);
-    expect(c.items_error.ok).toBe(false);
-    expect(c.sync).toMatchObject({ ok: false, message: expect.stringMatching(/No successful sync for \d+ hours/) });
+    expect(c.bank_reconnect_2).toMatchObject({ ok: false, level: "error", fix: expect.stringContaining("Reconnect"),
+      message: "Ally needs you to sign in again. The bank wants you to sign in again, e.g. after a password change or a new security check. (ITEM_LOGIN_REQUIRED: the login details of this item have changed)" });
+    expect(c.bank_broken_3).toMatchObject({ ok: false, level: "error", message: expect.stringContaining("Citi stopped syncing and won't retry.") });
+    expect(c.bank_stalled_1).toMatchObject({ ok: false, level: "warn", message: expect.stringMatching(/^Chase hasn't synced for \d+ days \(last successful sync Jan 1\)\. No sync attempt has failed/) });
+    expect(c.sync).toMatchObject({ ok: false, message: expect.stringMatching(/No bank has synced for \d+ days/) });
   });
 
   it("shows a recent sync as healthy", async () => {
@@ -159,13 +161,13 @@ describe("GET /status", () => {
     await env.DB.prepare(`INSERT INTO transactions (owner, account_id, plaid_txn_id, date) VALUES ('me', 30, 't1', '2026-09-01'), ('me', 30, 't2', '2026-09-02')`).run();
     const c = byId((await getJson("/status")).body.checks);
     expect(c.bank_stalled_1).toMatchObject({ ok: false, level: "warn",
-      message: "American Express: no successful sync for 80 hours (last error: TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION) (0 transactions so far)." });
-    expect(c.bank_stalled_5.message).toBe("Bank #5: no successful sync for 80 hours (0 transactions so far).");
+      message: expect.stringMatching(/^American Express hasn't synced for 3 days \(last successful sync \w+ \d+\)\. Plaid's data changed during the download, so Minty restarts it automatically\. \(TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION\)$/) });
+    expect(c.bank_stalled_5.message).toMatch(/^Bank #5 hasn't synced for 3 days/);
     expect(c.bank_downloading_3).toMatchObject({ ok: true,
-      message: "Citibank Online: downloading its history, 2 transactions so far. Newer transactions appear once it's done." });
-    expect(c.bank_stalled_2).toBeUndefined();
-    expect(c.bank_downloading_2).toBeUndefined();
-    expect(c.bank_stalled_4).toBeUndefined();                        // already under "sign in again"
+      message: "Citibank Online: downloading its history (2 transactions so far). Newer transactions appear once it's done." });
+    expect(Object.keys(c).filter((k) => k.endsWith("_2"))).toEqual([]);               // healthy: nothing
+    expect(c.bank_reconnect_4).toBeDefined();                        // sign in again, not "stalled"
+    expect(c.bank_stalled_4).toBeUndefined();
     expect(c.sync.ok).toBe(true);                                    // the overall check alone missed this
   });
 

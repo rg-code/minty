@@ -44,6 +44,11 @@ Design history and decisions: `docs/serverless-plan.md`.
 - Transaction sync is cursor-based and incremental.
 - There is NO HTTP sync endpoint, by design. Sync runs only from the cron triggers
   (`/link/exchange` starts the first sync of a new Item internally). Do not add one.
+  `/link/reconnected` only re-checks a connection with Plaid's `/item/get`; it never syncs.
+- Sync problems are never silent: every failure is recorded on the item (`last_error`,
+  `last_error_message`), and `src/health.ts` turns it into the one verdict the dashboard's
+  status strip (`/health`) and Setup checks (`/status`) both show. New failure modes get a
+  plain-words entry in its `MEANING` table.
 - Auth: Cloudflare Access guards the hostname; every API route also re-validates the
   Access JWT (`src/access.ts`) and applies the optional `ALLOWED_LOGINS` allow-list.
   **Missing `ACCESS_TEAM_DOMAIN` / `ACCESS_AUD` means everything is refused.** `/healthz`
