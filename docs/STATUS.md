@@ -92,7 +92,7 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 2. **ABC ("All but coupon clipping"): track card credits.** A page listing every monthly,
    quarterly, semi-annual and annual credit on the household's cards, with what's been used and
    what's still open, checked against the statement credits in the transactions. **Built in
-   #30** (design agreed 2026-10-12; [abc.md](abc.md)); after merging, look at `/abc` and check
+   #30** (design agreed 2026-10-12; [abc.md](abc.md)); after merging, open the ABC popup on the dashboard and check
    CPU on the Worker's Metrics for `/benefits`. Refresh the benefit list when issuers change
    credits (`src/benefits/catalog.ts`, `CHECKED`).
 3. **The finance agent ("Ask Minty").** Plan: [agent-plan.md](agent-plan.md); its to-do list is
