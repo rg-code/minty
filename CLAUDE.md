@@ -101,6 +101,11 @@ Design history and decisions: `docs/serverless-plan.md`.
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).
   `/benefits` keeps string matching in SQL (rows come back tagged), because a cold isolate has
   10 ms of CPU.
+- **D1 rows read are a daily budget** (free plan: 5,000,000 a day, then every read fails until
+  00:00 UTC). A full scan of `transactions` is ~7,000 rows. Joining a `json_each` list against
+  transactions reads them once per list entry, which is what blew the budget on 2026-10-12.
+  Every page-facing route has a budget in `test/reads.test.ts`: keep new queries index-driven and
+  add a line there. Check `rows_read` before running ad-hoc remote queries over transactions.
 - Fernet reference vectors (`test/fixtures/fernet-vectors.json`, test key only) pin the
   encryption to the reference implementation. Don't regenerate them casually.
 

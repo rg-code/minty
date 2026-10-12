@@ -40,11 +40,22 @@ open. It's checked against the statement credits in the transactions. Built 2026
 - **Card years:** periods start in the month of the first annual fee, or as chosen.
 - **Totals:** a period counts in the year it starts in. Locked credits count once unlocked, and
   Global Entry (every 4 years) is shown separately.
-- **Free plan:** SQL returns only matching rows, each tagged with the patterns it matched
-  (`json_each`, one bound parameter: an `OR` per pattern exceeds SQLite's expression-depth limit
-  of 100). So the Worker does no string matching. Measured on the household's data: 271 rows,
-  about 7 ms CPU on a cold isolate and 2 ms warm. Dates compare as strings, since `localeCompare`
-  loads ICU on a cold isolate.
+- **Free plan:** D1 bills rows read (5,000,000 a day on the free plan), and the Worker has 10 ms
+  of CPU.
+  - `/benefits` reads each transaction of the cards ABC tracks exactly once, through
+    `idx_txn_account`. SQLite tags each row with the patterns it matched, so the Worker does no
+    string matching. The patterns are inlined as one balanced expression of `CASE … LIKE …`
+    terms.
+  - The first version joined a `json_each` list of patterns instead. That read every transaction
+    once per pattern: **463,000 rows a request**, which used up the day's 5,000,000 in about ten
+    opens (2026-10-12).
+  - A chain of 100+ `OR`s or `||`s hits SQLite's expression-depth limit of 100, hence the
+    balanced tree.
+  - Each card's first transaction is one read on `idx_txn_account_date`.
+  - Annual fees come from the same pass.
+  - About 2,700 rows a request on a 7,000-transaction household, which `test/reads.test.ts`
+    holds it to. CPU is about 7 ms cold and 2 ms warm. Dates compare as strings, since
+    `localeCompare` loads ICU on a cold isolate.
 
 ## Updating the list
 

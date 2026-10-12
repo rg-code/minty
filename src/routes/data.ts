@@ -60,12 +60,25 @@ export async function accounts(env: Env, url: URL): Promise<Response> {
   // Card members (Plaid's account_owner) on multi-card accounts, e.g. Amex authorized-user cards,
   // most-used first. Only accounts that have any; their transactions without one are listed as
   // { name: null } so they can be picked too.
-  const { results: members } = await env.DB.prepare(
-    `SELECT account_id, account_owner AS name, count(*) AS count FROM transactions
-     WHERE account_id IN (SELECT DISTINCT account_id FROM transactions WHERE account_owner IS NOT NULL)
-     GROUP BY account_id, account_owner
-     ORDER BY account_id, account_owner IS NULL, count DESC, account_owner`,
-  ).all<{ account_id: number; name: string | null; count: number }>();
+  // Reads only rows that have a card member (SQLite uses the partial index idx_txn_member), then one count per
+  // account that has any: scanning every transaction twice on each dashboard load added up.
+  const [named, totals] = await env.DB.batch([
+    env.DB.prepare(
+      `SELECT account_id, account_owner AS name, count(*) AS count FROM transactions
+       WHERE account_owner IS NOT NULL GROUP BY account_id, account_owner`),
+    env.DB.prepare(
+      `SELECT a.account_id, (SELECT count(*) FROM transactions t WHERE t.account_id = a.account_id) AS count
+       FROM (SELECT DISTINCT account_id FROM transactions WHERE account_owner IS NOT NULL) a`),
+  ]);
+  type Member = { account_id: number; name: string | null; count: number };
+  const named_ = named.results as unknown as Member[];
+  const members: Member[] = [...named_];
+  for (const t of totals.results as unknown as { account_id: number; count: number }[]) {
+    const withName = named_.filter((m) => m.account_id === t.account_id).reduce((n, m) => n + m.count, 0);
+    if (t.count > withName) members.push({ account_id: t.account_id, name: null, count: t.count - withName });
+  }
+  members.sort((a, z) => a.account_id - z.account_id || Number(a.name === null) - Number(z.name === null) || z.count - a.count
+    || (a.name ?? "").localeCompare(z.name ?? ""));
   return json(rows.map((a) => ({
     ...a,
     card_members: members.filter((m) => m.account_id === a.id).map(({ name, count }) => ({ name, count })),
