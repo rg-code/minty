@@ -1,6 +1,6 @@
 # Plan: an optional finance agent for Minty
 
-**Status: decisions made (2026-10-06, §10); next is A0 (§8.1).** Nothing is built yet. Written 2026-09-29.
+**Status: decisions made (2026-10-06, §10); next is A0 (§8.1). To-do list: §11.** Nothing is built yet. Written 2026-09-29.
 
 Goal: an optional "Ask Minty" assistant that works on the household's own transactions, with
 the household's choice of model provider (OpenRouter, OpenAI, Anthropic, …). For example:
@@ -357,3 +357,74 @@ key-storage option is chosen.
     than billed when used up) and is tested in A0 alongside OpenRouter's free models.
   - Needs approval in A3: automations may add tags (add-only, labelled), as a separate step after
     the sync, which itself still never writes tags.
+
+## 11. To-do (2026-10-12)
+
+Each phase ends with a PR the owner reviews. ✋ = needs the owner (a go-ahead, a key, or a run).
+
+**A0: spikes (§8.1)**
+- [ ] ✋ Go-ahead on §8.1.
+- [ ] Re-check the facts at the top of this doc: OpenRouter's free tool-calling models and limits,
+      its training/privacy settings, Workers AI models and pricing, Workers Free limits.
+- [ ] ✋ Owner prepares, in `.dev.vars` (Claude adds the placeholders to `.dev.vars.example`):
+      - an OpenRouter key, with the "may train on inputs" setting **off**;
+      - a Cloudflare account ID and an API token limited to Workers AI;
+      - optionally OpenAI / Anthropic API keys.
+- [ ] Claude writes `scripts/agent-spike.ts`:
+      - synthetic data only, reusing `scripts/seed.mjs`;
+      - draft tool schemas (`list_accounts`, `find_merchants`, `search_transactions`, `summarize`,
+        `tag_transactions`);
+      - the fixed questions: the Amex example, an ambiguous one, a totals one, a tagging one, and
+        the ~30-transaction automation batch;
+      - runners for 2–3 OpenRouter free models, 1–2 Workers AI models, and the direct keys if set;
+      - a report per model: right tools, valid arguments, steps, latency, tokens or Neurons.
+- [ ] Claude writes a CPU benchmark in workerd with canned model replies: build the prompt, parse
+      a reply, run a tool on local D1.
+- [ ] ✋ Owner runs the spike (~40 requests, inside one day's free allowance) and shares the report.
+- [ ] Record the results, the default provider and model (chat and automations), and any design
+      changes in §8.1 and §10.
+
+**A1: query layer, no AI** (useful with the agent off)
+- [ ] `/transactions`: amount range, category and pending filters.
+- [ ] Totals by merchant, category, day, month or account.
+- [ ] Merchant matching (similar names, counts, last date).
+- [ ] Result sets (migration: `agent_result_sets`, `agent_result_items`), `/?set=<id>` in the
+      dashboard, and CSV export.
+- [ ] Tests on local D1.
+
+**A2: the agent, with tagging**
+- [ ] ✋ Approve the CLAUDE.md agent rules (§8.1): tools are the only way to the data, no
+      model-written SQL, writes need a Confirm, keys are a household secret.
+- [ ] Settings `AGENT_ENABLED` (off by default), `AGENT_PROVIDER`, `AGENT_MODEL`,
+      `AGENT_MAX_STEPS`, `AGENT_DAILY_TOKEN_BUDGET`: code defaults, `wrangler.jsonc` header lines and
+      Setup checks. Key placeholders in `.dev.vars.example`. The Workers AI binding in
+      `wrangler.jsonc` (no per-household value).
+- [ ] Migration: `agent_conversations`, `agent_messages`, `agent_usage`.
+- [ ] Adapters: OpenAI-compatible (OpenRouter, OpenAI), Anthropic Messages, Workers AI.
+- [ ] `POST /agent/step` (one model call per request), the tools, the step, token and row caps,
+      and bank text treated as untrusted.
+- [ ] Chat panel: messages, result tables, "Open in dashboard", and Confirm / Cancel for
+      `tag_transactions`.
+- [ ] A fake model for each adapter's wire format, like the fake Plaid; the §5 example end to end.
+- [ ] ✋ Turn it on in production and check CPU on the Worker's Metrics.
+
+**A3: inbox and automations, no AI**
+- [ ] ✋ Approve the tag-source rule change (§4.1).
+- [ ] Migration: `automations`, `automation_runs`, `inbox_items`, `transaction_tags.source`.
+- [ ] Triggers (new transactions, pending posts, schedules), exact filters, and actions (add tags,
+      inbox notes, totals), run in the hourly cron after the sync.
+- [ ] The inbox: a bell with an unread count, notes with links, mark as read, 90-day cleanup.
+- [ ] An automation form, and `create_automation` / `list_automations` / pause / delete in the
+      agent, with Confirm.
+
+**A4: AI-powered automations**
+- [ ] AI instructions as conditions, AI reviews and write-ups, suggested tags waiting for a
+      Confirm, and the `AUTOMATION_AI_RUNS_PER_DAY` budget.
+
+**Ties to other work**
+- ABC (card credits, STATUS.md) gives the agent a natural tool ("which credits are still open
+  this quarter?") and an automation ("tell me about credits that expire this month, unused").
+  Add both once ABC and A3 exist.
+
+**Later:** A5 "Sign in with ChatGPT" (if it opens up), A6 per-person sign-in (deferred), A7
+streamed replies, AI Gateway and an MCP server. Each needs its own go-ahead.
