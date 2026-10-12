@@ -1,6 +1,6 @@
 # Minty status and to-do
 
-Handoff notes for continuing on another machine. Last updated 2026-10-10.
+Handoff notes for continuing on another machine. Last updated 2026-10-12.
 Household-specific values (the workers.dev address, Access team and AUD, email addresses)
 are deliberately **not** in this public repo. They're in the owner's Cloudflare dashboard.
 
@@ -11,7 +11,9 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
   CI (vitest in workerd + typecheck) runs on every PR.
   - Tests: 219 Worker.
   - Since then: filter by bank (#18) and by card/account (#19), and one person by default with
-    the person switch only for two or more (#20).
+    the person switch only for two or more (#20). Card members on multi-card accounts (#23–#25).
+    The sync-stall fix and 10-minute catch-up (#27). Bank problems on the dashboard and a daily
+    Plaid connection check (#28).
   - Plan and decision log: [serverless-plan.md](serverless-plan.md) §8.
 - **The owner's household deployment (in progress):**
   - [x] Imported `rg-code/minty` via Workers & Pages → Import a repository. Name `minty`, deploy
@@ -37,7 +39,7 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
         console, with the owner's go-ahead. Verified: every count is 0, and both migrations are still
         recorded. The Sandbox keys are still set, until the switch below.
   - [x] **Production** (by 2026-09-30, as reported by the owner): switched to `PLAID_ENV=production`
-        and linked real banks, all under Me (none under Spouse); **8 banks** as of 2026-10-06. The owner is now testing it.
+        and linked real banks, all under Me (none under Spouse): **8 banks, 28 accounts**.
   - [x] **CPU on the free plan:** the owner reports no "Exceeded CPU" on the Worker dashboard during
         the first real syncs (2026-09-30).
   - Spouse slot: nothing is linked under it. Its `PLAID_*_SPOUSE_*` secrets held the owner's
@@ -54,74 +56,70 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
   `/status` flags half-set keys and banks stranded on a removed slot. With the default, adding
   the `…_BACKUP` secrets gives each person 20 bank logins.
 
+## Recently done
+
+- **Sync stall fixed (#27, migration 0004; deployed 2026-10-10).** Wells Fargo and Citibank had
+  stopped after their first page at link time (Sep 30), and Amex on Oct 7 partway through its
+  history. All three were still `good`, so nothing warned. Cause:
+  `TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION` was retried from the run's cursor instead of the
+  update's first cursor, which fails forever. They also slowed the other five banks to about
+  one sync every 5 hours. Now `items.sync_start_cursor` remembers where an update began, and a
+  10-minute catch-up trigger continues unfinished downloads. **All 8 banks were caught up by
+  2026-10-11 03:17 UTC** (Amex 907 → 2,333 transactions, newest Oct 9). Details: serverless-plan.md
+  §8, 2026-10-10.
+- **Bank problems are never silent (#28, migration 0005; deployed 2026-10-11).** A status strip
+  under the dashboard header lists every bank that needs attention: what went wrong in plain
+  words, Plaid's own message, and a Reconnect / Link-again button. It stays until the problem is
+  fixed, and Setup checks show the same lines (`src/health.ts`). A daily `/item/get` check per
+  bank catches broken connections early and records consent end dates. Citibank, Navy Federal
+  and Amex end on **2027-09-30**, so the strip warns from about 2027-09-23. Reconnecting renews
+  them.
+- **Amex card members (#23–#25):** Amex sends the card member (15 of them), and each is listed
+  under its Amex card in **Cards & accounts**, with `/transactions` taking
+  `card=<account_id>:<member>`.
+
 ## To do, in order
 
-1. **Next: the finance agent ("Ask Minty").** Plan: [agent-plan.md](agent-plan.md).
-   - Decisions made (2026-10-06): household secret; providers OpenRouter free models, Workers AI,
-     and own OpenAI/Anthropic API keys; tagging with Confirm from the start; free plan only;
-     automations (exact rules or AI judgement) with a **dashboard inbox**.
-   - Next: **A0** (agent-plan.md §8.1): a spike script the owner runs on synthetic data to pick a
-     free model and check it works with "train on inputs" off, plus a CPU estimate per step.
-   - Then A1 (the query layer, useful even without AI), A2 (the agent, with tagging), A3 (inbox +
-     automations without AI) and A4 (AI-powered automations).
-2. **Keep testing production:** new transactions arriving hourly, the Banks and Cards & accounts
-   filters, tags, and Setup checks.
-   - **Sync stall fixed (2026-10-10, migration 0004).** Wells Fargo and Citibank had stopped
-     after their first page (Sep 30, at link time), and Amex on Oct 7 after ~9 pages of its
-     re-downloaded history (newest transaction Sep 29). All three were still `good`, so nothing
-     warned. Cause: `TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION` was retried from the run's
-     cursor instead of the update's first cursor, which fails forever. They also slowed the
-     other five banks to about one sync every 5 hours. Details: serverless-plan.md §8, 2026-10-10.
-     - **After it deploys, check:** within an hour or two, the three restart their downloads from the
-       beginning on their own (no D1 reset needed). Setup checks then show "downloading its
-       history, N transactions so far", and the 10-minute catch-up trigger moves each along a
-       page at a time (check **Settings → Trigger events** lists both crons). Then their
-       transactions after Sep 29 should appear. A bank that stops syncing now gets its own
-       "no successful sync for N hours (last error: …)" line.
-     - If a long history (Amex) keeps restarting before it finishes, make the catch-up more
-       frequent (e.g. every 2 minutes: `CATCH_UP_CRON` in `src/sync.ts` and `wrangler.jsonc`).
-     - **Deployed 2026-10-10 17:29 UTC and working:** Wells Fargo caught up at 18:20 (124
-       transactions, newest Oct 6). Citibank restarted at 19:17 and Amex at 20:17, and the
-       10-minute catch-up then moved them along (Citibank 800 transactions by 20:30).
-   - **Bank problems now show on the dashboard (migration 0005).** A status strip under the
-     header lists every bank that needs attention, with what went wrong in plain words,
-     Plaid's own message, and a Reconnect / Link-again button. It stays until the problem is
-     fixed. Setup checks show the same lines. A daily `/item/get` check per bank catches broken
-     connections early and warns 7 days before an OAuth bank's consent ends.
-   - **Amex authorized-user cards: Amex does send card members.** After the owner reset Amex's
-     sync position (2026-10-06), Setup checks showed "card member on 93 of 200 transactions
-     (15 card members)" while the history was still re-downloading. **Stage 2 is merged (#25):**
-     each card member is listed under its Amex card in **Cards & accounts**, rows show the card
-     member, and `/transactions` takes `card=<account_id>:<member>`. If some of the 15 turn out to
-     be one person in different formats, a later change could merge or rename them.
-   - **Deploys:** #25's merge didn't start a Cloudflare build (the live Worker stayed on #24), so
-     the next merge to `main` redeployed it. If a merge doesn't show up live, check **Workers &
-     Pages → minty → Builds** (or Deployments) for a missing or failed build of that commit, and
-     retry it; merging any change to `main` also triggers a fresh build of the latest code.
-   - **Stage 1 (2026-10-06):** Minty now keeps Plaid's
-     `account_owner` (the card member on multi-card accounts), which it used to drop. After a day
-     of new Amex transactions, check whether Amex fills it in: open a few Amex transactions (their
-     detail shows "Card member"), or run `SELECT account_owner, count(*) FROM transactions GROUP BY 1;`
-     in the D1 console. **+ Add user → Setup checks** also shows a line per Amex bank: "card member
-     on X of Y transactions". To check older transactions without waiting for new ones, reset that
-     bank's sync position in the D1 console (`UPDATE items SET txn_cursor = NULL WHERE id = <id>;`,
-     owner's go-ahead): the next hourly sync re-downloads its history, about 100 transactions per
-     run on the free plan, with card members included. If it's filled in, stage 2 re-downloads that card's history (resetting
-     that bank's sync position, with the owner's go-ahead) and adds per-card-member filtering.
+1. **Quick checks after the Oct 10–11 deploys:**
+   - Look at the dashboard's status strip in light, dark and phone views (not checked visually
+     yet: no screenshots were possible). It's empty while every bank is healthy.
+   - **Barclays and Taekus:** their newest transactions are Jun 5 and Sep 23 although both sync
+     hourly, and Barclays has exactly 100 transactions. If those cards are still in use,
+     something is off; if not, nothing to do.
+   - **CPU** (**Worker → Metrics**, "Exceeded CPU"), especially around the Oct 10–11 catch-up.
+   - **Amex card members:** if some of the 15 are one person in different formats, a later change
+     could merge or rename them.
+2. **ABC ("All but coupon clipping"): track card credits.** A page listing every monthly,
+   quarterly, semi-annual and annual credit on the household's cards, with what's been used and
+   what's still open, checked against the statement credits in the transactions. Proposed
+   2026-10-12; design waiting for the owner's go-ahead.
+3. **The finance agent ("Ask Minty").** Plan: [agent-plan.md](agent-plan.md); its to-do list is
+   §11 there. Decisions are made (2026-10-06): household secret; OpenRouter free models, Workers AI,
+   and the household's own OpenAI/Anthropic keys; tagging with Confirm from the start; free plan
+   only; automations with a **dashboard inbox**. **Next: A0** (§8.1), which needs the owner's
+   go-ahead and a few keys in `.dev.vars`.
+4. **Optional tidy-up:**
+   - Delete the unused `PLAID_*_SPOUSE_*` secrets (Setup checks flag them), and set `MINTY_USERS` =
+     `me:<Your name>` to show your name. Keep the key `me`: your banks are stored under it.
+   - `npx wrangler logout` on machines that don't need Cloudflare access.
+   - Plaid Sandbox end-to-end (the owner runs it because it reads `.dev.vars`):
+     `node scripts/sandbox-e2e.ts` against `npm run dev`.
+5. **Ongoing:**
+   - **Keep Cloudflare's "Update your Wrangler configuration" prompt unapplied.** `keep_vars`
+     already preserves dashboard variables across deploys, and copying them into `wrangler.jsonc`
+     would publish the household's emails and Access IDs in this public repo.
    - **Each new bank uses a Plaid Trial slot for good** (10 per credential set), so link only
      banks you'll keep.
-   - Optional: delete the unused Spouse secrets, and set `MINTY_USERS` = `me:<Your name>` to show
-     your name. Keep the key `me`: your banks are stored under it.
-3. **Keep Cloudflare's "Update your Wrangler configuration" prompt unapplied.** `keep_vars` already
-   preserves dashboard variables across deploys, and copying them into `wrangler.jsonc` would
-   publish the household's emails and Access IDs in this public repo.
-4. **Glance at CPU now and then** (**Worker → Metrics**, "Exceeded CPU" on cron runs), especially
-   after linking a bank with a long history. An overrun is safe: each page commits with its cursor
-   and the run retries next hour. If they become frequent, lower `SYNC_MAX_BYTES_PER_RUN`, or move
-   to Workers Paid and raise it (e.g. 20000000 bytes and 50 pages).
-5. **Plaid Sandbox end-to-end** (optional; the owner runs it because it reads `.dev.vars`):
-   `node scripts/sandbox-e2e.ts` against `npm run dev`.
-6. **Onboard friends** from SETUP.md (fork → import → …) and fix anything they trip on.
+   - **Deploys:** if a merge doesn't show up live, check **Workers & Pages → minty → Builds** for
+     a missing or failed build of that commit, and retry it (#25's merge didn't start one).
+   - **CPU now and then**, especially after linking a bank with a long history. An overrun is
+     safe (each page commits with its cursor). If they become frequent, lower
+     `SYNC_MAX_BYTES_PER_RUN`, or move to Workers Paid and raise it (e.g. 20000000 bytes / 50 pages).
+6. **Later:**
+   - Onboard friends from SETUP.md (fork → import → …) and fix anything they trip on.
+   - Email or push alerts for bank problems (they'd need an outbound mail setup).
+   - Several Plaid Trial accounts per person is a Plaid ToS gray area; one paid Plaid account per
+     person is the cleaner long-term option. Deferred, not forgotten.
 
 ## Picking up on a new machine
 
