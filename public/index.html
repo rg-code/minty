@@ -79,7 +79,7 @@
   }
   .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 
-  header {
+  body > header {
     padding: var(--pad); border-bottom: 1px solid var(--hairline);
     background: var(--surface); position: sticky; top: 0; z-index: 10;
   }
@@ -221,7 +221,9 @@
     .health .act { grid-column: 2; grid-row: auto; justify-self: start; margin-top: 6px; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  button.addlink { background: none; border: 0; padding: 0; font-family: inherit; cursor: pointer; }
 </style>
+<link rel="stylesheet" href="/abc.css" />
 </head>
 <body>
 <header>
@@ -229,6 +231,8 @@
     <h1>Minty</h1>
     <span class="sub" id="count">—</span>
     <nav class="links">
+      <button type="button" class="addlink" id="abcOpen" aria-haspopup="dialog" data-open-abc
+              title="All but coupon clipping: your cards' credits, used and still open">ABC</button>
       <a class="addlink" href="/connect">+ Add account</a>
       <a class="addlink" href="/add-user">+ Add user</a>
     </nav>
@@ -280,6 +284,19 @@
 
 <div id="banner" hidden class="banner"></div>
 <section id="health" class="health" hidden aria-live="polite" aria-label="Bank status"></section>
+
+<!-- ABC: card credits, in a popup (public/abc.js, public/abc.css). /?abc opens it. -->
+<dialog id="abc" class="abc" aria-labelledby="abcTitle" tabindex="-1">
+  <form method="dialog" class="abc-close"><button aria-label="Close" title="Close">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button></form>
+  <header>
+    <h2 id="abcTitle">ABC</h2>
+    <span class="sub">All but coupon clipping: every credit on your cards, used and still open.</span>
+    <select id="abcYear" aria-label="Year" hidden></select>
+  </header>
+  <div id="abcMain"></div>
+</dialog>
 <div class="totals" id="totals"></div>
 <main id="feed"><div class="empty">Loading…</div></main>
 
@@ -845,5 +862,6 @@ const SAMPLE = [
 loadUsers().then(() => { loadItems(); loadAccounts(); load(); loadHealth(); });
 setInterval(() => { if (!document.hidden) loadHealth(); }, 5 * 60 * 1000);   // downloads move every 10 minutes
 </script>
+<script src="/abc.js" defer></script>
 </body>
 </html>

@@ -20,6 +20,10 @@ web browser.
   is. Any bank that stops syncing, needs signing in again, or has consent ending soon shows in
   a status strip on the dashboard, with what went wrong and what to do. There is no sync HTTP
   endpoint and no webhooks.
+- **ABC ("All but coupon clipping")**: a popup on the dashboard listing every monthly,
+  quarterly and annual credit on your cards (Amex Platinum, Business Platinum and Business Gold,
+  Citi Strata Premier, Altitude Reserve), with what's used and what's still open, checked
+  against the statement credits. See `docs/abc.md`.
 - **Deploys**: Cloudflare Workers Builds runs `npm run deploy` on every push to `main`
   (apply D1 migrations, then deploy). GitHub Actions only runs tests.
 

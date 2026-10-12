@@ -1,0 +1,82 @@
+/* ABC popup on the dashboard (public/abc.js). Same handling as Inkling's dialogs: a native
+   <dialog>, rounded, over a blurred backdrop. Colours come from the dashboard's own tokens. */
+dialog.abc {
+  --ok: var(--in); --err: var(--out); --warn: var(--pending-ink); --track: var(--hairline);
+  border: 1px solid var(--hairline); border-radius: 18px; padding: 24px clamp(16px, 3vw, 28px) 28px;
+  width: calc(100% - 32px); max-width: 980px; max-height: min(90vh, 920px); overflow: auto;
+  background: var(--bg); color: var(--ink); box-shadow: 0 24px 64px -16px rgb(0 0 0 / 0.3);
+  font-size: 14px; line-height: 1.45;
+}
+dialog.abc::backdrop { background: rgb(0 0 0 / 0.3); backdrop-filter: blur(4px); }
+dialog.abc:focus { outline: none; }
+@media (max-width: 560px) { dialog.abc { width: 100%; max-width: none; max-height: 100%; height: 100%; border-radius: 0; border: 0; } }
+
+.abc .abc-close { position: sticky; top: 0; float: right; margin: -8px -8px 0 8px; z-index: 1; }
+.abc .abc-close button { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--hairline); background: var(--surface);
+                         color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; }
+.abc .abc-close button:hover { color: var(--ink); }
+.abc .abc-close svg { width: 16px; height: 16px; }
+.abc header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding-right: 40px; }
+.abc h2 { font-size: 22px; margin: 0; letter-spacing: -0.02em; font-weight: 650; }
+.abc header .sub { color: var(--muted); font-size: 13.5px; flex: 1 1 260px; }
+.abc select { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px; padding: 4px 8px; }
+.abc h3 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 24px 0 8px; font-weight: 600; }
+.abc-muted { color: var(--muted); }
+.abc-msg { color: var(--muted); padding: 30px 0; text-align: center; }
+.abc-err { color: var(--err); }
+.abc-link { background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; font-size: 12.5px; text-decoration: underline; padding: 0; }
+.abc-link:hover { color: var(--ink); }
+
+.abc-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 18px 0 8px; }
+.abc-tile { background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px; padding: 12px 14px; }
+.abc-tile .k { font-size: 12px; color: var(--muted); }
+.abc-tile .v { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.abc-tile.used .v { color: var(--ok); } .abc-tile.open .v { color: var(--accent); }
+.abc-tile.pending .v { color: var(--warn); } .abc-tile.missed .v { color: var(--err); }
+.abc-tile .of { font-size: 12px; color: var(--muted); }
+@media (max-width: 640px) { .abc-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.abc-legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; margin-top: 8px; align-items: center; }
+.abc-legend .sq { width: 12px; height: 12px; display: inline-block; vertical-align: -2px; margin-right: 4px; }
+
+.abc-list { background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px; }
+.abc-list .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 14px; font-size: 13.5px; flex-wrap: wrap; }
+.abc-list .row + .row { border-top: 1px solid var(--hairline); }
+.abc-list .when { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.abc-card { background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px; margin-top: 14px; overflow: hidden; }
+.abc-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-bottom: 1px solid var(--hairline); }
+.abc-card .title { font-weight: 650; overflow-wrap: anywhere; }
+.abc-card .meta { color: var(--muted); font-size: 12.5px; flex: 1 1 200px; }
+.abc-card .sum { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.abc-card .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--muted); }
+
+.abc .ben { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 6px 16px; padding: 11px 14px; align-items: center; }
+.abc .ben + .ben { border-top: 1px solid var(--hairline); }
+.abc .ben .name { font-weight: 550; overflow-wrap: anywhere; }
+.abc .note { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
+.abc .note a { color: inherit; }
+.abc .note.abc-err { color: var(--err); }
+.abc .chip { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px;
+             background: var(--tag-bg); color: var(--muted); white-space: nowrap; }
+.abc .chip.warn { background: var(--warn-bg); color: var(--warn-ink); }
+.abc .now { font-size: 13px; font-variant-numeric: tabular-nums; }
+.abc .st { font-weight: 600; }
+.abc .st.used { color: var(--ok); } .abc .st.partial, .abc .st.pending { color: var(--warn); } .abc .st.missed { color: var(--err); }
+.abc .st.open { color: var(--accent); } .abc .st.locked, .abc .st.upcoming { color: var(--muted); }
+.abc .bar { height: 6px; background: var(--track); border-radius: 999px; overflow: hidden; margin: 5px 0 6px; }
+.abc .bar span { display: block; height: 100%; background: var(--ok); border-radius: 999px; }
+.abc .squares { display: flex; gap: 3px; flex-wrap: wrap; }
+.abc .sq { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--hairline); background: var(--surface); padding: 0; }
+.abc .sq.used { background: var(--ok); border-color: var(--ok); }
+.abc .sq.partial, .abc .sq.pending { background: var(--warn-bg); border-color: var(--warn); }
+.abc .sq.missed { background: var(--err-bg); border-color: var(--err); }
+.abc .sq.open { border-color: var(--accent); border-width: 2px; }
+.abc .sq.upcoming, .abc .sq.locked { opacity: .5; }
+.abc .sq.out { opacity: .35; }                  /* belongs to another year's totals */
+.abc button.sq { cursor: pointer; }
+.abc button.sq:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 640px) { .abc .ben { grid-template-columns: minmax(0, 1fr); } }
+
+.abc-foot { color: var(--muted); font-size: 12.5px; margin-top: 26px; }
+.abc-foot ul { margin: 6px 0 0; padding-left: 18px; }

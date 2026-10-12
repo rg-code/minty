@@ -49,6 +49,8 @@
       "/transactions",
       "/transactions/*",
       "/tags",
+      "/benefits",
+      "/benefits/*",
       "/link/*"
     ]
   },
