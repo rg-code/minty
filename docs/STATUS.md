@@ -91,8 +91,10 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
      could merge or rename them.
 2. **ABC ("All but coupon clipping"): track card credits.** A page listing every monthly,
    quarterly, semi-annual and annual credit on the household's cards, with what's been used and
-   what's still open, checked against the statement credits in the transactions. Proposed
-   2026-10-12; design waiting for the owner's go-ahead.
+   what's still open, checked against the statement credits in the transactions. **Built in
+   #30** (design agreed 2026-10-12; [abc.md](abc.md)); after merging, look at `/abc` and check
+   CPU on the Worker's Metrics for `/benefits`. Refresh the benefit list when issuers change
+   credits (`src/benefits/catalog.ts`, `CHECKED`).
 3. **The finance agent ("Ask Minty").** Plan: [agent-plan.md](agent-plan.md); its to-do list is
    §11 there. Decisions are made (2026-10-06): household secret; OpenRouter free models, Workers AI,
    and the household's own OpenAI/Anthropic keys; tagging with Confirm from the start; free plan
