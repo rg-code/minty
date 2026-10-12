@@ -47,6 +47,19 @@ describe("static pages", () => {
     expect(head).toMatch(/<script>[^<]*minty-theme[^<]*<\/script>\s*<style>/);   // no light flash
   });
 
+  it("serves the ABC page, fed by /benefits, and links to it from the dashboard", async () => {
+    const { status, html } = await page("/abc");
+    expect(status).toBe(200);
+    expect(html).toContain("<title>ABC · Minty</title>");
+    expect(html).toContain('fetch("/benefits"');
+    expect(html).toContain('"/benefits/marks"');
+    expect(html).toContain("/benefits/cards/");
+    expect(html).toContain('role="checkbox"');                      // ticks for credits outside the card
+    expect(html).not.toMatch(/Business Platinum|Resy|lululemon/);  // benefits come from the API, not the page
+    expect((await page("/")).html).toContain('href="/abc"');
+    expect((await SELF.fetch("https://minty.example.workers.dev/benefits")).status).toBe(403);   // in run_worker_first
+  });
+
   it("dashboard shows a status strip from /health that names the problem and offers the fix", async () => {
     const { html } = await page("/");
     expect(html).toContain('id="health"');

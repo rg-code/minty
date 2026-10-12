@@ -96,6 +96,11 @@ Design history and decisions: `docs/serverless-plan.md`.
   `items.status`. An update spanning runs keeps the cursor it began from
   (`items.sync_start_cursor`); `TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION` restarts from there,
   never from the run's own cursor (that fails forever).
+- ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
+  sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
+  credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).
+  `/benefits` keeps string matching in SQL (rows come back tagged), because a cold isolate has
+  10 ms of CPU.
 - Fernet reference vectors (`test/fixtures/fernet-vectors.json`, test key only) pin the
   encryption to the reference implementation. Don't regenerate them casually.
 

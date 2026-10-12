@@ -18,7 +18,10 @@ web browser.
   `/transactions/sync`, and a 10-minute one continues banks still downloading their history.
   Linking a bank starts its first sync right away. A daily check asks Plaid how each connection
   is. Any bank that stops syncing, needs signing in again, or has consent ending soon shows in
-  a status strip on the dashboard, with what went wrong and what to do. There is no sync HTTP
+  a status strip on the dashboard, with what went wrong and what to do.
+- **ABC ("All but coupon clipping")**: every monthly, quarterly and annual credit on your cards
+  (Amex Platinum, Business Platinum and Business Gold, Citi Strata Premier, Altitude Reserve),
+  with what's used and what's still open, checked against the statement credits. See `docs/abc.md`. There is no sync HTTP
   endpoint and no webhooks.
 - **Deploys**: Cloudflare Workers Builds runs `npm run deploy` on every push to `main`
   (apply D1 migrations, then deploy). GitHub Actions only runs tests.

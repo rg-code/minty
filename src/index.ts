@@ -3,6 +3,7 @@ import { checkAccess } from "./access";
 import { ConfigError, loadConfig, type Config } from "./config";
 import { HttpError, json, unprocessable } from "./http";
 import * as data from "./routes/data";
+import * as abc from "./routes/benefits";
 import * as link from "./routes/link";
 import * as setup from "./routes/status";
 import { PlaidError } from "./plaid";
@@ -25,6 +26,9 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["GET", /^\/capacity$/, ({ env, config }) => data.capacity(env, config)],
   ["GET", /^\/transactions$/, ({ env, url }) => data.transactions(env, url)],
   ["GET", /^\/tags$/, ({ env }) => data.listTags(env)],
+  ["GET", /^\/benefits$/, ({ env, url }) => abc.benefits(env, url)],
+  ["PUT", /^\/benefits\/cards\/(\d+)$/, ({ env, request, params }) => abc.setCard(env, request, Number(params[0]))],
+  ["PUT", /^\/benefits\/marks$/, ({ env, request, email }) => abc.setMark(env, request, email)],
   ["PUT", /^\/transactions\/([^/]+)\/tags$/, ({ env, request, params }) => {
     if (!/^\d+$/.test(params[0])) throw unprocessable("transaction id must be an integer");
     return data.setTags(env, request, Number(params[0]));
