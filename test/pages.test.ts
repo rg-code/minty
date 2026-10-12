@@ -47,16 +47,25 @@ describe("static pages", () => {
     expect(head).toMatch(/<script>[^<]*minty-theme[^<]*<\/script>\s*<style>/);   // no light flash
   });
 
-  it("serves the ABC page, fed by /benefits, and links to it from the dashboard", async () => {
-    const { status, html } = await page("/abc");
-    expect(status).toBe(200);
-    expect(html).toContain("<title>ABC · Minty</title>");
-    expect(html).toContain('fetch("/benefits"');
-    expect(html).toContain('"/benefits/marks"');
-    expect(html).toContain("/benefits/cards/");
-    expect(html).toContain('role="checkbox"');                      // ticks for credits outside the card
-    expect(html).not.toMatch(/Business Platinum|Resy|lululemon/);  // benefits come from the API, not the page
-    expect((await page("/")).html).toContain('href="/abc"');
+  it("opens ABC as a popup on the dashboard (a native dialog, like Inkling's), fed by /benefits", async () => {
+    const { html } = await page("/");
+    expect(html).toMatch(/<button type="button" class="addlink" id="abcOpen" aria-haspopup="dialog" data-open-abc/);
+    expect(html).toContain('<dialog id="abc" class="abc" aria-labelledby="abcTitle"');
+    expect(html).toContain('<form method="dialog" class="abc-close"><button aria-label="Close"');   // the × closes it
+    expect(html).toContain('<script src="/abc.js" defer></script>');
+    expect(html).toContain('<link rel="stylesheet" href="/abc.css" />');
+    expect(html).not.toContain('href="/abc"');                        // no separate page any more
+
+    const js = await page("/abc.js");
+    expect(js.status).toBe(200);
+    expect(js.html).toContain("dialog.showModal()");
+    expect(js.html).toContain("if (e.target === dialog) dialog.close()");   // a click outside closes it
+    expect(js.html).toContain('new URLSearchParams(location.search).has("abc")');   // /?abc opens it
+    expect(js.html).toContain('fetch("/benefits"');
+    expect(js.html).toContain('"/benefits/marks"');
+    expect(js.html).toContain('role="checkbox"');                    // ticks for credits outside the card
+    expect(js.html).not.toMatch(/Business Platinum|Resy|lululemon/); // benefits come from the API
+    expect((await page("/abc.css")).status).toBe(200);
     expect((await SELF.fetch("https://minty.example.workers.dev/benefits")).status).toBe(403);   // in run_worker_first
   });
 

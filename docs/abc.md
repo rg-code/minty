@@ -1,6 +1,6 @@
 # ABC ("All but coupon clipping"): card credits
 
-The **ABC** button on the dashboard opens `/abc`. For a year, it lists every monthly, quarterly,
+The **ABC** button on the dashboard opens a popup (`/?abc` opens it directly). For a year, it lists every monthly, quarterly,
 semi-annual and annual credit on the household's cards, with what's been used and what's still
 open. It's checked against the statement credits in the transactions. Built 2026-10-12.
 
@@ -15,7 +15,9 @@ open. It's checked against the statement credits in the transactions. Built 2026
   month, hidden) and `PUT /benefits/marks` (ticks).
 - Migration 0006: `card_products` and `benefit_marks`. Only the household's choices; no benefit
   data.
-- `public/abc.html`: the page.
+- `public/abc.js` and `public/abc.css`: the popup, a native `<dialog>` handled like Inkling's.
+  It opens with `showModal()`, and closes with its × button, Esc or a click outside. Its data is
+  reloaded each time it opens.
 
 ## Rules
 
