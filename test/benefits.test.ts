@@ -40,6 +40,10 @@ describe("catalog", () => {
         // no short word that could sit inside another one ("%oura%" in "Tourane")
         for (const c of [...(b.credit ?? []), ...(b.charge ?? [])]) expect(c, where).not.toMatch(/^%[a-z]{1,4}%$/i);
         if (b.after) expect(p.benefits.some((x) => x.id === b.after), where).toBe(true);
+        if (b.creditAsRefund) {
+          for (const n of b.creditAsRefund.names) expect(n, where).not.toContain("%");          // exact names only
+          expect(b.creditAsRefund.maxCents, where).toBeLessThanOrEqual(Math.round(b.amountCents * 1.2));
+        }
       }
     }
   });
@@ -153,12 +157,26 @@ describe("matching credits", () => {
   });
 
   it("says when a purchase got no credit: pending for 8 weeks, then missed with the charge shown", () => {
-    const rows = ["2026-02-28", "2026-08-28", "2026-09-29"].map((d) => txn(2, d, 13.86, "Walmart", "Walmart+"));
+    const rows = ["2026-02-28", "2026-08-28", "2026-09-29"].map((d) => txn(2, d, 13.86, "WMT PLUS", "Walmart+"));
     const w = benefit(run([card(2, "Charles Schwab Platinum Card®")], rows), 2, "walmart_plus");
     expect(period(w, "Feb 2026")).toMatchObject({ status: "missed", unpaid_cents: 1295, pending_cents: 0 });
     expect(period(w, "Aug 2026")).toMatchObject({ status: "pending", pending_cents: 1295 });
     expect(period(w, "Sep 2026")).toMatchObject({ status: "pending", pending_cents: 1295 });
     expect(period(w, "Jan 2026")).toMatchObject({ status: "missed", unpaid_cents: 0 });
+  });
+
+  it("counts Walmart+'s credit, which posts as a \"Walmart\" refund of the membership charge", () => {
+    const rows = [
+      txn(2, "2026-02-28", 13.86, "Walmart", "Walmart+"), txn(2, "2026-03-01", -13.86, "Walmart"),     // credited the next day
+      txn(2, "2026-04-28", 13.86, "Walmart", "Walmart"), txn(2, "2026-04-29", -13.86, "Walmart"),      // charge without "+"
+      txn(2, "2026-05-27", -13.86, "Walmart"), txn(2, "2026-05-28", 13.86, "WMT PLUS May 2026", "Walmart+"),   // credit first
+      txn(2, "2026-06-10", 45.12, "Walmart", "Walmart"), txn(2, "2026-06-12", -45.12, "Walmart"),     // a store refund: not the credit
+      txn(2, "2026-09-29", 13.86, "Walmart", "Walmart+"),
+    ];
+    const w = benefit(run([card(2, "Charles Schwab Platinum Card®")], rows), 2, "walmart_plus");
+    expect(["Feb 2026", "Mar 2026", "Apr 2026", "May 2026", "Jun 2026", "Sep 2026"].map((l) => [l, period(w, l).status])).toEqual([
+      ["Feb 2026", "used"], ["Mar 2026", "missed"], ["Apr 2026", "used"], ["May 2026", "used"], ["Jun 2026", "missed"], ["Sep 2026", "pending"]]);
+    expect(period(w, "Feb 2026").used_cents).toBe(1295);                                              // capped at $12.95 (+ tax was paid back too)
   });
 
   it("caps a credit at its amount and shows partial use", () => {

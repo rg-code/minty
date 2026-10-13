@@ -28,7 +28,9 @@ open. It's checked against the statement credits in the transactions. Built 2026
   positive row with a credit's description is that credit being reversed, so credits are
   netted. Money back at the merchant counts only for `merchantCredit` benefits (Hilton posts as
   "Hilton" −$50), and only when it doesn't equal an earlier purchase, which would make it a
-  refund.
+  refund. For `creditAsRefund` benefits, money back that is exactly the bare merchant name, up to
+  the credit plus tax, *is* the credit: Walmart+ posts it as "Walmart" for the membership charge.
+  A credit can post up to 3 days before its purchase (while the purchase is still pending).
 - **Which period:** a credit counts in the period of the purchase it paid back (at the benefit's
   `charge` merchants, within 60 days, in a period with room). Otherwise it counts in the period
   it posted, or the previous one if it posted in the first 15 days of a full period (Amex
