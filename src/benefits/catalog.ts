@@ -37,6 +37,10 @@ export interface Benefit {
   /** The credit posts under the merchant's own name (Hilton: "Hilton" -$50), so money back at
    * `charge` merchants counts as the credit, unless it equals an earlier purchase (a refund). */
   merchantCredit?: boolean;
+  /** The credit posts as a refund of the purchase itself, under the merchant's bare name
+   * (Walmart+: the membership charge, then "Walmart" for the same amount). Exact names, no %;
+   * only money back up to maxCents (the credit plus tax) counts. */
+  creditAsRefund?: { names: string[]; maxCents: number };
   /** Shares `credit` with another benefit and gets what's left once that one is full. */
   after?: string;
   decemberExtraCents?: number;       // Uber Cash: $20 more in December
@@ -104,8 +108,9 @@ const globalEntry = (amount: number, source: string, issuer = "Amex"): Benefit =
 const walmartPlus = (source: string): Benefit => ({
   id: "walmart_plus", name: "Walmart+ credit", amountCents: $(12.95), period: "monthly", basis: "calendar", how: "on_card", enroll: false,
   credit: ["%Walmart+%Credit%", "%Walmart Plus%Credit%", "%Walmart%Membership%Credit%"],
+  creditAsRefund: { names: ["Walmart"], maxCents: $(12.95 * 1.15) },
   charge: ["%Walmart+%", "%WMT PLUS%", "%Walmart Plus%", "%WALMART.COM MEMBERSHIP%"],
-  note: "A monthly (not annual) Walmart+ membership: $12.95 plus tax each month.",
+  note: "A monthly (not annual) Walmart+ membership: $12.95 plus tax each month. The credit shows as \"Walmart\" money back for the membership charge.",
   source,
 });
 const chatgpt: Benefit = {

@@ -224,12 +224,14 @@ const PENDING_DAYS = 56;        // Amex: credits can take up to 8 weeks
 
 interface Ledger { net: Map<string, number>; spend: Map<string, number>; unpaid: Map<string, number>; credits: TxnRow[] }
 
-const SPILL_DAYS = 15;           // Amex sometimes credits by statement month (two credits in May, none in April)
+const SPILL_DAYS = 15;
+const AHEAD_DAYS = 3;           // a credit can post while its purchase is still pending (Walmart+)           // Amex sometimes credits by statement month (two credits in May, none in April)
 const REFUND_DAYS = 120;
 
 function ledger(b: Benefit, rows: Tagged[], anniversary: number, cap = (start: string) => capFor(b, start)): Ledger {
-  const creditSet = ids(b.credit), chargeSet = ids(b.charge);
-  const labelled = creditSet.length ? rows.filter((t) => creditHit(t, creditSet)) : [];
+  const creditSet = ids(b.credit), chargeSet = ids(b.charge), refundSet = ids(b.creditAsRefund?.names);
+  const labelled = rows.filter((t) => (creditSet.length && creditHit(t, creditSet))
+    || (refundSet.length && t.amount_cents < 0 && -t.amount_cents <= b.creditAsRefund!.maxCents && creditHit(t, refundSet)));
   const labelledIds = new Set(labelled.map((t) => t.id));
   const atMerchant = chargeSet.length ? rows.filter((t) => !labelledIds.has(t.id) && chargeHit(t, chargeSet)) : [];
   const charges = atMerchant.filter((t) => t.amount_cents > 0);
@@ -261,7 +263,7 @@ function ledger(b: Benefit, rows: Tagged[], anniversary: number, cap = (start: s
       // the latest purchase before it with something left to pay back, in a period that still
       // has room (otherwise June's credit could land on a May purchase May's credit already paid)
       for (const c of newestFirst) {
-        if (c.date > t.date) continue;
+        if (daysBetween(t.date, c.date) > AHEAD_DAYS) continue;    // can post just before its purchase
         if (daysBetween(c.date, t.date) > MATCH_DAYS) break;
         const ps = periodStart(c.date, b, anniversary);
         if (left.get(c.id)! > 0 && (ps === target || room(ps))) {
@@ -422,7 +424,7 @@ export function scope(cards: CardRow[]): { accountIds: number[]; patterns: numbe
     ids.add(c.id);
     for (const p of candidates) {
       for (const e of p.creditEvidence ?? []) pats.add(idx.get(e)!);
-      for (const b of p.benefits) for (const x of [...(b.credit ?? []), ...(b.charge ?? [])]) pats.add(idx.get(x)!);
+      for (const b of p.benefits) for (const x of [...(b.credit ?? []), ...(b.charge ?? []), ...(b.creditAsRefund?.names ?? [])]) pats.add(idx.get(x)!);
     }
   }
   return { accountIds: [...ids].sort((a, b) => a - b), patterns: [...pats].sort((a, b) => a - b) };
@@ -433,7 +435,7 @@ export function allPatterns(): string[] {
   const s = new Set<string>();
   for (const p of PRODUCTS) {
     for (const e of p.creditEvidence ?? []) s.add(e);
-    for (const b of p.benefits) for (const x of [...(b.credit ?? []), ...(b.charge ?? [])]) s.add(x);
+    for (const b of p.benefits) for (const x of [...(b.credit ?? []), ...(b.charge ?? []), ...(b.creditAsRefund?.names ?? [])]) s.add(x);
   }
   return [...s];
 }
