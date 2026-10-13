@@ -24,9 +24,10 @@ Plaid is never called, and everything resets on reload.
 
 ## The data
 
-`demo/data.ts`: a made-up household, Alex and Sam, from last January 1 to today, generated in the
-browser relative to the visitor's date (the same for a given day). About 1,200 transactions:
-everyday spending, bills and pay, and card credits planted so ABC shows used, partly used,
+`demo/data.ts`: a made-up household, Alex and Sam, generated in the browser relative to the
+visitor's date (the same for a given day). About 500 transactions, kept small so the demo starts
+fast: everyday spending, bills and pay for the last 160 days, and card credits back to last
+January 1, planted so ABC shows used, partly used,
 missed, open and tick-box credits on an Amex Platinum, an Amex Business Gold and a Citi Strata
 Premier. One bank (Ally) has access through Plaid that ends in 5 days, so the health strip has
 something to show.

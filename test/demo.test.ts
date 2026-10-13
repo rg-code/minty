@@ -27,9 +27,9 @@ describe("demo data", () => {
     expect(data.users).toBe("me:Alex,spouse:Sam");
   });
 
-  it("stays small, so the demo starts fast", () => {
+  it("stays small (about 500 transactions), so the demo starts fast", () => {
     expect(data.transactions.length).toBeGreaterThan(400);
-    expect(data.transactions.length).toBeLessThan(2000);
+    expect(data.transactions.length).toBeLessThan(600);
   });
 
   it("is the same for the same day", () => {

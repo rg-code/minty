@@ -29,7 +29,7 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   const Y = now.getUTCFullYear(), M = now.getUTCMonth(), D = now.getUTCDate();
   const todayIso = iso(Y, M, D);
   const daysAgo = (n: number) => iso(Y, M, D - n);
-  const DAYS = daysBetween(iso(Y - 1, 0, 1), todayIso) + 1;        // everything goes back to last January 1
+  const DAYS = 160;                                                 // everyday spending and bills; card credits go back to last January
   const nowIso = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * 60_000).toISOString();
 
   const items: DemoData["items"] = [], accounts: DemoData["accounts"] = [], transactions: DemoData["transactions"] = [];
