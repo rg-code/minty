@@ -95,6 +95,28 @@ describe("static pages", () => {
     expect((await SELF.fetch("https://minty.example.workers.dev/sync-request")).status).toBe(403);   // in run_worker_first
   });
 
+  it("installs as an app: manifest (fetched with the Access cookie), icons, a shell-only service worker", async () => {
+    for (const path of ["/", "/connect", "/add-user"]) {
+      const { html } = await page(path);
+      expect(html, path).toContain('<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />');
+      expect(html, path).toContain('<meta name="apple-mobile-web-app-capable" content="yes" />');
+    }
+    const m = JSON.parse((await page("/manifest.webmanifest")).html);
+    expect(m).toMatchObject({ name: "Minty", start_url: "/", scope: "/", display: "standalone" });
+    const sizes = m.icons.map((i: any) => `${i.sizes}:${i.purpose}`);
+    expect(sizes).toEqual(expect.arrayContaining(["192x192:any", "512x512:any", "512x512:maskable"]));
+    for (const i of m.icons) expect((await SELF.fetch(`https://minty.example.workers.dev${i.src}`)).status, i.src).toBe(200);
+    const sw = (await page("/sw.js")).html;
+    expect(sw).toContain("const SHELL = [");
+    expect(sw).toContain('if (e.request.method !== "GET" || !isShell(url)) return;');      // the API is never cached
+    expect(sw).not.toMatch(/"\/(transactions|accounts|items|benefits|health|status)"/);
+    const dash = (await page("/")).html;
+    expect(dash).toContain('navigator.serviceWorker.register("/sw.js")');
+    expect(dash).toContain('addEventListener("beforeinstallprompt"');
+    expect(dash).toContain("SamsungBrowser");                                            // sent to Chrome, as in GRAZE
+    expect(dash).toContain("package=com.android.chrome");
+  });
+
   it("dashboard has a Dates menu with quick ranges, like the other filters", async () => {
     const { html } = await page("/");
     expect(html).toContain('id="dateBtn"');

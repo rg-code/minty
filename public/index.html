@@ -7,6 +7,12 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials" />
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#171a21" media="(prefers-color-scheme: dark)" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Minty" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 <script>
   // Set the theme before first paint (no flash). Saved choice wins; otherwise follow the OS.
   document.documentElement.dataset.theme = localStorage.getItem("minty-theme")
@@ -109,6 +115,20 @@
   .moreload { display: block; margin: 18px auto 0; font: inherit; font-size: 13.5px; padding: 8px 16px; border-radius: 999px;
               border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); cursor: pointer; }
   .moreload:hover { border-color: var(--muted); }
+  /* "Install Minty as an app" (see setUpInstall below) */
+  .installbar { display: flex; align-items: center; gap: 12px; padding: 10px var(--pad); background: var(--surface);
+                border-bottom: 1px solid var(--hairline); font-size: 13.5px; }
+  .installbar[hidden], .installbar [hidden] { display: none; }   /* .pill sets display, which would beat [hidden] */
+  .installbar .txt { flex: 1; color: var(--muted); }
+  .installbar .txt strong { color: var(--ink); font-weight: 600; }
+  .installbar a.pill { text-decoration: none; }
+  .installno { border: 0; background: none; color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; padding: 4px; }
+  .installno:hover { color: var(--ink); }
+  @media (max-width: 640px) {   /* on a phone: a card pinned to the bottom, where install prompts usually are */
+    .installbar { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 30; flex-wrap: wrap;
+                  border: 1px solid var(--hairline); border-radius: 14px; box-shadow: 0 10px 30px -8px var(--shadow), 0 2px 8px var(--shadow); }
+    .installbar .txt { flex-basis: calc(100% - 42px); }
+  }
   h1.brand .wordmark { height: 27px; width: auto; display: block; margin-top: 2px; }
   .sub { color: var(--muted); font-size: 13px; }
   .links { margin-left: auto; display: flex; gap: 16px; }
@@ -348,6 +368,13 @@
 
 <div id="banner" hidden class="banner"></div>
 <section id="health" class="health" hidden aria-live="polite" aria-label="Bank status"></section>
+<div id="install" class="installbar" hidden role="region" aria-label="Install Minty">
+  <img src="/favicon.svg" alt="" width="30" height="30" />
+  <div class="txt"><strong>Install Minty as an app</strong> <span id="installHow">It opens full-screen from your home screen, like any other app.</span></div>
+  <button type="button" class="pill" id="installBtn" hidden>Install</button>
+  <a class="pill" id="openInChrome" hidden>Open in Chrome</a>
+  <button type="button" class="installno" id="installNo">Not now</button>
+</div>
 
 <!-- ABC: card credits, in a popup (public/abc.js, public/abc.css). /?abc opens it. -->
 <dialog id="abc" class="abc" aria-labelledby="abcTitle" tabindex="-1">
@@ -975,6 +1002,52 @@ const SAMPLE = [
     if (!localStorage.getItem("minty-theme")) apply(e.matches ? "dark" : "light");
   });
 })();
+
+// --- Install as an app (the same handling as GRAZE). Chrome and Edge offer their own prompt,
+// behind an Install button; iPhones and iPads have none, so the bar says how; Samsung Internet
+// and other phone makers' browsers package an installed site as their own app with an
+// outdated Android target, which Google Play Protect blocks ("built for an older version of
+// Android"), so on those the bar explains and links Open in Chrome instead. "Not now" hides it
+// on this device for 30 days.
+const OWN_PACKAGE_BROWSER = /Android.*(SamsungBrowser|MiuiBrowser|HuaweiBrowser|HeyTapBrowser|VivoBrowser|OppoBrowser)/;
+function setUpInstall() {
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  if (standalone) return;
+  let later = 0;
+  try { later = Number(localStorage.getItem("minty-install-later")) || 0; } catch {}
+  const bar = document.getElementById("install"), how = document.getElementById("installHow");
+  const show = () => { if (Date.now() - later > 30 * 864e5) bar.hidden = false; };
+  document.getElementById("installNo").addEventListener("click", () => {
+    bar.hidden = true;
+    try { localStorage.setItem("minty-install-later", String(Date.now())); } catch {}
+  });
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) {
+    how.innerHTML = "In Safari, tap <strong>Share</strong>, then <strong>Add to Home Screen</strong>.";
+    return show();
+  }
+  if (OWN_PACKAGE_BROWSER.test(ua)) {
+    how.textContent = "This browser builds its own app package, which Google Play Protect blocks as made for an older Android. Open Minty in Chrome, then tap Install.";
+    const here = new URL(location.href), link = document.getElementById("openInChrome");
+    link.href = `intent://${here.host}${here.pathname}${here.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(here.href)};end`;
+    link.hidden = false;
+    return show();
+  }
+  let deferred = null;
+  addEventListener("beforeinstallprompt", e => {
+    e.preventDefault(); deferred = e;
+    document.getElementById("installBtn").hidden = false;
+    show();
+  });
+  document.getElementById("installBtn").addEventListener("click", async () => {
+    if (!deferred) return;
+    deferred.prompt(); await deferred.userChoice; deferred = null; bar.hidden = true;
+  });
+  addEventListener("appinstalled", () => { bar.hidden = true; });
+}
+setUpInstall();
+
 
 // --- Refresh: clicking the coin reloads everything now and asks for a sync with the banks. The
 // request only records it: the next cron run (within 10 minutes) syncs every bank, since sync
