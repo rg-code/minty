@@ -26,7 +26,7 @@ You'll need:
 1. Open https://github.com/rg-code/minty and click **Fork** → **Create fork**.
    Keep the name `minty`.
 
-Use a fork, not a download: it's how you get updates later (step 8).
+Use a fork, not a download: it's how you get updates later (step 9).
 
 ## 2. Deploy it to Cloudflare
 
@@ -154,7 +154,25 @@ variables `SYNC_MAX_BYTES_PER_RUN` = `20000000` and `SYNC_MAX_PAGES_PER_RUN` = `
 history arrives in an hour or two.) If a bank later needs you to sign in again, **+ Add account**
 shows it with a **Reconnect** button.
 
-## 8. Get updates
+## 8. Install it as an app (optional)
+
+Minty installs to your phone's home screen or your computer's dock and opens full-screen,
+like an app, with no app store.
+
+- **Android:** use **Chrome**. The dashboard offers **Install** (or use Chrome's menu ⋮ →
+  **Install app**). Samsung Internet and other phone makers' browsers build their own app
+  package, which Google Play Protect blocks ("built for an older version of Android"). On those,
+  Minty says so and offers **Open in Chrome** instead.
+- **iPhone / iPad:** in Safari, tap **Share → Add to Home Screen**. The installed app keeps its
+  own sign-in, separate from Safari, so you'll sign in once more there.
+- **Computer:** in Chrome or Edge, use the install icon in the address bar, or the dashboard's
+  **Install** button.
+
+The app caches only Minty's pages and icons, never your transactions: data always comes from
+your Cloudflare account. If a bank's sign-in (some use their own app or website) doesn't come
+back to the installed app, link that bank from the browser instead.
+
+## 9. Get updates
 
 When Minty gets improvements, open your fork on GitHub and click **Sync fork → Update branch**.
 Cloudflare redeploys automatically. Any database changes are applied as part of that deploy,

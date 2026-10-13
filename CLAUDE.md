@@ -105,6 +105,10 @@ Design history and decisions: `docs/serverless-plan.md`.
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).
   `/benefits` keeps string matching in SQL (rows come back tagged), because a cold isolate has
   10 ms of CPU.
+- Installable app (`public/manifest.webmanifest`, `public/sw.js`): the manifest link needs
+  `crossorigin="use-credentials"` or Access answers it with the sign-in page. The service worker
+  caches only the listed static shell files, never an API response (no financial data on the
+  device), and never caches a redirect (the Access sign-in).
 - **D1 rows read are a daily budget** (free plan: 5,000,000 a day, then every read fails until
   00:00 UTC). A full scan of `transactions` is ~7,000 rows. Joining a `json_each` list against
   transactions reads them once per list entry, which is what blew the budget on 2026-10-12.
