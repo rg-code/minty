@@ -167,7 +167,8 @@ and your settings, secrets and data are untouched.
   never sent to the browser.
 - **Never set `MINTY_DEV_NO_AUTH`.** It's a local development switch; Minty ignores it on a real
   address, but there's no reason to have it.
-- **Sync** runs every hour (at :17 UTC). There's no "sync now" button, by design.
+- **Sync** runs every hour (at :17 UTC). To get new data sooner, click the coin next to "minty" on the
+  dashboard: it reloads at once and asks for a sync, which runs within 10 minutes.
 - **Backups.** D1 keeps a point-in-time history (Time Travel) you can restore from:
   https://developers.cloudflare.com/d1/reference/time-travel/
 - **Optional settings** (Text variables):
