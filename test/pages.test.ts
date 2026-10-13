@@ -49,7 +49,8 @@ describe("static pages", () => {
 
   it("opens ABC as a popup on the dashboard (a native dialog, like Inkling's), fed by /benefits", async () => {
     const { html } = await page("/");
-    expect(html).toMatch(/<button type="button" class="addlink" id="abcOpen" aria-haspopup="dialog" data-open-abc/);
+    expect(html).toMatch(/<button type="button" class="pill" id="abcOpen" aria-haspopup="dialog" data-open-abc/);
+    expect(html).toMatch(/\.pill \{[^}]*border-radius: 999px[^}]*box-shadow:/);           // a raised pill, as on Inkling
     expect(html).toContain('<dialog id="abc" class="abc" aria-labelledby="abcTitle"');
     expect(html).toContain('<form method="dialog" class="abc-close"><button aria-label="Close"');   // the × closes it
     expect(html).toContain('<script src="/abc.js" defer></script>');
