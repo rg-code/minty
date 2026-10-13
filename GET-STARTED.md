@@ -7,11 +7,11 @@ More detail on any step: [SETUP.md](SETUP.md).
 
 ## 1. Make three free accounts
 
-| Account | Sign up | Why |
-|---|---|---|
-| GitHub | https://github.com/signup | Holds your copy of Minty's code |
-| Cloudflare | https://dash.cloudflare.com/sign-up | Runs Minty and stores your data |
-| Plaid | https://dashboard.plaid.com/signup | Connects to your banks (US/Canada). It checks your identity, usually quickly |
+| Account | Sign up | What | Why |
+|---|---|---|---|
+| GitHub | https://github.com/signup | Only a repository for Minty's code. Your transactions, accounts and other information never touch GitHub | Holds your copy of Minty's code |
+| Cloudflare | https://dash.cloudflare.com/sign-up | Your bank probably already uses it to serve you data | Runs Minty and stores your data |
+| Plaid | https://dashboard.plaid.com/signup | You probably already use it: it handles the handshake between your banks and Minty | Connects to your banks (US/Canada). It checks your identity, usually quickly |
 
 ## 2. Copy Minty
 
