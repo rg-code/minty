@@ -43,7 +43,11 @@ export const BANK_ROWS_SQL = `
   SELECT i.id, i.owner, i.plaid_account, i.institution_name, i.status, i.updated_at,
          i.last_error, i.last_error_message, i.consent_expires_at,
          i.sync_start_cursor IS NOT NULL AS downloading, i.txn_cursor IS NOT NULL AS synced_once,
-         (SELECT count(*) FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE a.item_id = i.id) AS txns
+         -- counted only while a history download runs (the only message that shows it): counting
+         -- every bank's transactions on each /health poll read the whole table each time
+         CASE WHEN i.sync_start_cursor IS NOT NULL
+              THEN (SELECT count(*) FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE a.item_id = i.id)
+              ELSE 0 END AS txns
   FROM items i`;
 
 /** Plaid error codes (and Minty's own) in plain words. Unknown codes fall back to Plaid's text. */

@@ -9,7 +9,7 @@ import { bankHealth, bankRows, syncHealth } from "../health";
  * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql"];
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql"];
 
 interface Check { id: string; ok: boolean; level: "error" | "warn"; message: string; fix?: string }
 
@@ -120,12 +120,19 @@ export async function status(env: Env, config: Config, email: string): Promise<R
   // Express and for any bank where Plaid sends it. Informational: never a warning, because Plaid
   // fills it in only for some accounts.
   const { results: members } = await env.DB.prepare(
-    `SELECT i.id, i.institution_name AS name, count(t.id) AS n, count(t.account_owner) AS with_member,
-            count(DISTINCT t.account_owner) AS distinct_members
-     FROM items i JOIN accounts a ON a.item_id = i.id LEFT JOIN transactions t ON t.account_id = a.id
+    // Only banks that are Amex or have card members; member counts come from the partial index
+    // idx_txn_member, and only those banks' transactions are counted.
+    `SELECT i.id, i.institution_name AS name,
+            (SELECT count(*) FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE a.item_id = i.id) AS n,
+            (SELECT count(*) FROM transactions t JOIN accounts a ON a.id = t.account_id
+              WHERE a.item_id = i.id AND t.account_owner IS NOT NULL) AS with_member,
+            (SELECT count(DISTINCT t.account_owner) FROM transactions t JOIN accounts a ON a.id = t.account_id
+              WHERE a.item_id = i.id AND t.account_owner IS NOT NULL) AS distinct_members
+     FROM items i
      WHERE i.status IN ('good', 'login_required')
-     GROUP BY i.id
-     HAVING with_member > 0 OR i.institution_name LIKE 'American Express%'
+       AND (i.institution_name LIKE 'American Express%' OR EXISTS (
+             SELECT 1 FROM transactions t JOIN accounts a ON a.id = t.account_id
+             WHERE a.item_id = i.id AND t.account_owner IS NOT NULL))
      ORDER BY i.id`,
   ).all<{ id: number; name: string | null; n: number; with_member: number; distinct_members: number }>()
     .catch(() => ({ results: [] as { id: number; name: string | null; n: number; with_member: number; distinct_members: number }[] }));

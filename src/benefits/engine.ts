@@ -134,7 +134,7 @@ const indexOf = () => patternIndex ??= new Map(allPatterns().map((p, i) => [p, i
 export const MERCHANT_HIT = 1000;
 
 export function tag(t: TxnRow): Tagged {
-  if (t.hits !== undefined && t.hits !== null) return { ...t, hit: new Set(t.hits ? t.hits.split(",").map(Number) : []) };
+  if (t.hits !== undefined && t.hits !== null) return { ...t, hit: new Set(t.hits.split(",").filter(Boolean).map(Number)) };
   const n = (t.name ?? "").toLowerCase(), mn = (t.merchant_name ?? "").toLowerCase();
   const hit = new Set<number>();
   for (const [p, i] of indexOf()) {
@@ -405,6 +405,28 @@ export function compute(input: Input): { cards: CardOut[]; totals: Totals; endin
 
 export interface EndingSoon { account_id: number; card: string | null; mask: string | null; benefit_id: string; benefit: string;
                               left_cents: number; ends: string; how: Benefit["how"]; enroll: boolean }
+
+/** Which cards' transactions ABC must read, and which patterns (indexes into allPatterns()):
+ * cards recognised by name or by choice, plus cards a product-only credit could identify (same
+ * bank, nothing chosen). Hidden cards aren't read at all. */
+export function scope(cards: CardRow[]): { accountIds: number[]; patterns: number[] } {
+  const ids = new Set<number>(), pats = new Set<number>();
+  const idx = indexOf();
+  for (const c of cards) {
+    if (c.hidden) continue;
+    const { product } = productFor(c, []);
+    const candidates = product ? [product]
+      : c.product_id === "none" ? []
+      : PRODUCTS.filter((p) => p.creditEvidence && likeMatcher([p.institution])((c.bank ?? "").toLowerCase()));
+    if (!candidates.length) continue;
+    ids.add(c.id);
+    for (const p of candidates) {
+      for (const e of p.creditEvidence ?? []) pats.add(idx.get(e)!);
+      for (const b of p.benefits) for (const x of [...(b.credit ?? []), ...(b.charge ?? [])]) pats.add(idx.get(x)!);
+    }
+  }
+  return { accountIds: [...ids].sort((a, b) => a - b), patterns: [...pats].sort((a, b) => a - b) };
+}
 
 /** Every LIKE pattern the SQL needs, to fetch only rows that can matter. */
 export function allPatterns(): string[] {

@@ -1,23 +1,44 @@
 import type { Env } from "../env";
 import { HttpError, intParam, json, unprocessable } from "../http";
 import { CHECKED, NOT_TRACKED, PRODUCTS, productById } from "../benefits/catalog";
-import { type CardRow, MERCHANT_HIT, type TxnRow, allPatterns, compute, periodStart, productFor, tag } from "../benefits/engine";
+import { type CardRow, MERCHANT_HIT, type TxnRow, allPatterns, compute, periodStart, productFor, scope, tag } from "../benefits/engine";
 
 /** ABC ("All but coupon clipping"): GET /benefits, the household's card credits for a year;
  * PUT /benefits/cards/:id, a card's product / card-year month / hidden; PUT /benefits/marks,
  * ticks for credits Minty can't see on a statement. */
 
-// The catalog's patterns as one bound JSON array, so SQLite returns only credits, qualifying
-// purchases and evidence rows: a few hundred, not every transaction. (One OR per pattern would
-// exceed SQLite's expression-depth limit of 100.)
-// Each row comes back with the patterns it matched (see TxnRow.hits), so the Worker does no
-// string matching: on a cold isolate that alone would use up the 10 ms CPU allowance.
-const PATTERNS = JSON.stringify(allPatterns());
-const TAGGED = `
-  SELECT t.id, t.account_id, t.date, t.amount_cents, t.name, t.merchant_name,
-         group_concat(CASE WHEN t.name LIKE p.value THEN p.key ELSE p.key + ${MERCHANT_HIT} END) AS hits
-  FROM transactions t JOIN accounts a ON a.id = t.account_id
-  JOIN json_each(?) p ON t.name LIKE p.value OR t.merchant_name LIKE p.value`;
+// D1 bills rows read, and the free plan allows 5,000,000 a day. So /benefits reads each
+// transaction of the cards ABC tracks exactly once (an index range per card), and SQLite tags
+// each row with the patterns it matched (see TxnRow.hits), so the Worker does no string matching
+// either (on a cold isolate that would use up its 10 ms of CPU). The patterns are inlined as one
+// balanced expression: they're code, not input. Joining a json_each list of patterns instead
+// reads every transaction once per pattern (463,000 rows a request on a real household), and a
+// chain of 100+ ORs or ||s exceeds SQLite's expression-depth limit of 100.
+
+const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
+const balanced = (parts: string[], op: string): string =>
+  parts.length === 1 ? parts[0] : `(${balanced(parts.slice(0, parts.length >> 1), op)} ${op} ${balanced(parts.slice(parts.length >> 1), op)})`;
+
+const FEE = `(t.amount_cents >= 0 AND t.name NOT LIKE '%REFUND%' AND (t.name LIKE '%MEMBERSHIP FEE%' OR t.name LIKE '%ANNUAL FEE%'))`;
+
+/** The rows ABC needs from these cards: credits, qualifying purchases and evidence (hits), and
+ * annual fees (fee = 1, for card years). One pass over each card's transactions. */
+export function taggedRowsSql(accountCount: number, patterns: number[]): string {
+  const all = allPatterns();
+  const hits = patterns.length
+    ? balanced(patterns.map((i) => `(CASE WHEN t.name LIKE ${lit(all[i])} THEN '${i},' WHEN t.merchant_name LIKE ${lit(all[i])} THEN '${MERCHANT_HIT + i},' ELSE '' END)`), "||")
+    : "''";
+  return `SELECT * FROM (
+      SELECT t.id, t.account_id, t.date, t.amount_cents, t.name, t.merchant_name, ${hits} AS hits, ${FEE} AS fee
+      FROM transactions t WHERE t.account_id IN (${Array(accountCount).fill("?").join(", ")}) AND t.pending = 0
+    ) WHERE hits <> '' OR fee = 1`;
+}
+
+const CARDS = `
+  SELECT a.id, a.owner, i.institution_name AS bank, a.name, a.mask, cp.product_id, cp.anniversary_month,
+         coalesce(cp.hidden, 0) AS hidden
+  FROM accounts a JOIN items i ON i.id = a.item_id LEFT JOIN card_products cp ON cp.account_id = a.id
+  WHERE a.type = 'credit'`;
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -26,31 +47,32 @@ export async function benefits(env: Env, url: URL): Promise<Response> {
   const thisYear = Number(now.slice(0, 4));
   const year = intParam(url, "year", { def: thisYear, min: 2000, max: thisYear + 1 })!;
 
-  const [cards, rows, fees, since, marks] = await env.DB.batch([
-    env.DB.prepare(
-      `SELECT a.id, a.owner, i.institution_name AS bank, a.name, a.mask,
-              cp.product_id, cp.anniversary_month, coalesce(cp.hidden, 0) AS hidden
-       FROM accounts a JOIN items i ON i.id = a.item_id LEFT JOIN card_products cp ON cp.account_id = a.id
-       WHERE a.type = 'credit' ORDER BY a.owner, i.id, a.name, a.id`),
-    env.DB.prepare(`${TAGGED} WHERE a.type = 'credit' AND t.pending = 0 GROUP BY t.id`).bind(PATTERNS),
-    env.DB.prepare(
-      `SELECT t.account_id, min(t.date) AS date FROM transactions t JOIN accounts a ON a.id = t.account_id
-       WHERE a.type = 'credit' AND t.amount_cents >= 0 AND t.name NOT LIKE '%REFUND%'
-         AND (t.name LIKE '%MEMBERSHIP FEE%' OR t.name LIKE '%ANNUAL FEE%')
-       GROUP BY t.account_id`),
-    env.DB.prepare(
-      `SELECT t.account_id, min(t.date) AS date FROM transactions t JOIN accounts a ON a.id = t.account_id
-       WHERE a.type = 'credit' GROUP BY t.account_id`),
+  const [cardsRes, marksRes] = await env.DB.batch([
+    env.DB.prepare(`${CARDS} ORDER BY a.owner, i.id, a.name, a.id`),
     env.DB.prepare("SELECT account_id, benefit_id, period_start FROM benefit_marks"),
   ]);
-  const byAccount = (r: { account_id: number; date: string }[]) => new Map(r.map((x) => [x.account_id, x.date]));
+  const cards = cardsRes.results as unknown as CardRow[];
+  const { accountIds, patterns } = scope(cards);
+  let rows: (TxnRow & { fee: number })[] = [];
+  let since: { account_id: number; date: string | null }[] = [];
+  if (accountIds.length) {
+    const [r, s] = await env.DB.batch([
+      env.DB.prepare(taggedRowsSql(accountIds.length, patterns)).bind(...accountIds),
+      // a card's first transaction: one read each on idx_txn_account_date
+      env.DB.prepare(`SELECT a.value AS account_id, (SELECT min(t.date) FROM transactions t WHERE t.account_id = a.value) AS date
+                      FROM json_each(?) a`).bind(JSON.stringify(accountIds)),
+    ]);
+    rows = r.results as any;
+    since = s.results as any;
+  }
+  const firstFee = new Map<number, string>();
+  for (const t of rows) if (t.fee && !(firstFee.get(t.account_id)! <= t.date)) firstFee.set(t.account_id, t.date);
   const result = compute({
-    year, today: now,
-    cards: cards.results as unknown as CardRow[],
-    rows: rows.results as unknown as TxnRow[],
-    firstFee: byAccount(fees.results as any),
-    dataSince: byAccount(since.results as any),
-    marks: new Set((marks.results as { account_id: number; benefit_id: string; period_start: string }[])
+    year, today: now, cards,
+    rows: rows.filter((t) => t.hits),
+    firstFee,
+    dataSince: new Map(since.filter((x) => x.date).map((x) => [x.account_id, x.date!])),
+    marks: new Set((marksRes.results as { account_id: number; benefit_id: string; period_start: string }[])
       .map((m) => `${m.account_id}|${m.benefit_id}|${m.period_start}`)),
   });
   return json({
@@ -69,11 +91,7 @@ async function body(request: Request): Promise<Record<string, unknown>> {
 }
 
 async function creditCard(env: Env, accountId: number): Promise<CardRow> {
-  const card = await env.DB.prepare(
-    `SELECT a.id, a.owner, i.institution_name AS bank, a.name, a.mask, cp.product_id, cp.anniversary_month,
-            coalesce(cp.hidden, 0) AS hidden
-     FROM accounts a JOIN items i ON i.id = a.item_id LEFT JOIN card_products cp ON cp.account_id = a.id
-     WHERE a.id = ? AND a.type = 'credit'`).bind(accountId).first<CardRow>();
+  const card = await env.DB.prepare(`${CARDS} AND a.id = ?`).bind(accountId).first<CardRow>();
   if (!card) throw new HttpError(404, "credit card not found");
   return card;
 }
@@ -119,7 +137,8 @@ export async function setMark(env: Env, request: Request, email: string): Promis
   }
   if (typeof b.used !== "boolean") throw unprocessable("used must be true or false");
   const card = await creditCard(env, b.account_id as number);
-  const rows = (await env.DB.prepare(`${TAGGED} WHERE t.account_id = ? GROUP BY t.id`).bind(PATTERNS, card.id).all<TxnRow>()).results;
+  const { patterns } = scope([{ ...card, hidden: 0 }]);
+  const rows = (await env.DB.prepare(taggedRowsSql(1, patterns)).bind(card.id).all<TxnRow>()).results.filter((t) => t.hits);
   const { product } = productFor(card, rows.map(tag));
   const benefit = product?.benefits.find((x) => x.id === b.benefit_id);
   if (!benefit) throw new HttpError(404, "this card has no such credit");
