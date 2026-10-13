@@ -10,6 +10,7 @@ const GATED: Array<[string, string]> = [
   ["POST", "/link/token"], ["POST", "/link/exchange"], ["POST", "/link/token/update"],
   ["POST", "/link/reconnected"],
   ["GET", "/benefits"], ["PUT", "/benefits/cards/1"], ["PUT", "/benefits/marks"],
+  ["GET", "/sync-request"], ["POST", "/sync-request"],
 ];
 
 describe("Access gate", () => {

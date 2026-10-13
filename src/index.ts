@@ -4,10 +4,12 @@ import { ConfigError, loadConfig, type Config } from "./config";
 import { HttpError, json, unprocessable } from "./http";
 import * as data from "./routes/data";
 import * as abc from "./routes/benefits";
+import * as syncReq from "./routes/syncrequest";
 import * as link from "./routes/link";
 import * as setup from "./routes/status";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
+import { isPending, markSwept, syncState } from "./routes/syncrequest";
 
 /** Minty Worker. API paths are listed in wrangler.jsonc assets.run_worker_first; everything
  * else is served straight from public/. /healthz is the only path outside the Access check.
@@ -26,6 +28,8 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["GET", /^\/capacity$/, ({ env, config }) => data.capacity(env, config)],
   ["GET", /^\/transactions$/, ({ env, url }) => data.transactions(env, url)],
   ["GET", /^\/tags$/, ({ env }) => data.listTags(env)],
+  ["GET", /^\/sync-request$/, ({ env }) => syncReq.getSyncRequest(env)],
+  ["POST", /^\/sync-request$/, ({ env, email }) => syncReq.requestSync(env, email)],
   ["GET", /^\/benefits$/, ({ env, url }) => abc.benefits(env, url)],
   ["PUT", /^\/benefits\/cards\/(\d+)$/, ({ env, request, params }) => abc.setCard(env, request, Number(params[0]))],
   ["PUT", /^\/benefits\/marks$/, ({ env, request, email }) => abc.setMark(env, request, email)],
@@ -82,12 +86,17 @@ export default {
   },
 
   async scheduled(controller: ScheduledController, env: Env, _ctx: ExecutionContext): Promise<void> {
-    const updatesOnly = controller.cron === CATCH_UP_CRON;      // the 10-minute catch-up
+    // The 10-minute catch-up continues unfinished downloads, unless someone asked for a sync from
+    // the dashboard: then it sweeps every bank, like the hourly run. Sync only ever runs here.
+    const catchUp = controller.cron === CATCH_UP_CRON;
+    const requested = catchUp && isPending(await syncState(env).catch(() => ({ requested_at: null, last_sweep_at: null })));
+    const updatesOnly = catchUp && !requested;
     const results = await runSyncAll(env, undefined, { updatesOnly });
+    if (!updatesOnly) await markSwept(env).catch((e) => console.error("marking the sweep failed:", e instanceof Error ? e.message : e));
     if (!updatesOnly || Object.keys(results).length) {          // quiet when nothing is downloading
-      console.log(updatesOnly ? "catch-up sync complete" : "scheduled sync complete", JSON.stringify(results));   // item id -> result; no data
+      console.log(requested ? "requested sync complete" : updatesOnly ? "catch-up sync complete" : "scheduled sync complete", JSON.stringify(results));   // item id -> result; no data
     }
-    if (!updatesOnly) {
+    if (!catchUp) {
       // After sync, so a failed check never costs a sync; each bank about once a day.
       const checked = await checkConnections(env).catch((e) => {
         console.error("connection check failed:", e instanceof Error ? e.message : e);

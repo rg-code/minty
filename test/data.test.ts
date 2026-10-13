@@ -139,6 +139,14 @@ describe("GET /transactions", () => {
     expect((await call(`/transactions?${qs}`)).status).toBe(422);
   });
 
+  it("pages back with before=<date>:<id>, newest first", async () => {
+    const all = ids((await getJson("/transactions")).body);
+    const first = (await getJson("/transactions?limit=2")).body;
+    const last = first[first.length - 1];
+    expect(ids((await getJson(`/transactions?limit=10&before=${last.date}:${last.id}`)).body)).toEqual(all.slice(2));
+    expect((await call("/transactions?before=yesterday")).status).toBe(422);
+  });
+
   it("honours limit", async () => {
     expect(ids((await getJson("/transactions?limit=2")).body)).toEqual([100, 101]);
   });

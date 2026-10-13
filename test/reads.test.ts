@@ -77,11 +77,13 @@ describe("D1 rows read per request (budgets)", () => {
     ["/health", 100],
     ["/items", 100],
     ["/transactions", 2500],             // newest 500, via the date index
+    ["/transactions?before=2025-06-01:3000", 2500],   // the next page, via the same index
     ["/accounts", 3500],                 // card members: only accounts that have some
     ["/status", 3500],
     ["/tags", 100],
     ["/users", 10],
     ["/capacity", 100],
+    ["/sync-request", 40],
   ])("%s reads at most %i rows", async (path, budget) => {
     const rows = await readsOf(path);
     console.warn(`${path}: ${rows} rows read`);

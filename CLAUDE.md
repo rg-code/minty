@@ -45,6 +45,9 @@ Design history and decisions: `docs/serverless-plan.md`.
 - There is NO HTTP sync endpoint, by design. Sync runs only from the cron triggers
   (`/link/exchange` starts the first sync of a new Item internally). Do not add one.
   `/link/reconnected` only re-checks a connection with Plaid's `/item/get`; it never syncs.
+  Clicking the logo on the dashboard only *records* a sync request (`POST /sync-request`, in
+  `app_state`); the next cron run (the 10-minute catch-up at the latest) then sweeps every bank.
+  No request path ever calls Plaid's `/transactions/sync`.
 - Sync problems are never silent: every failure is recorded on the item (`last_error`,
   `last_error_message`), and `src/health.ts` turns it into the one verdict the dashboard's
   status strip (`/health`) and Setup checks (`/status`) both show. New failure modes get a

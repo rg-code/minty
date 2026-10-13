@@ -49,6 +49,7 @@
       "/transactions",
       "/transactions/*",
       "/tags",
+      "/sync-request",
       "/benefits",
       "/benefits/*",
       "/link/*"

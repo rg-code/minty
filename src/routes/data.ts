@@ -187,6 +187,14 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
   if (banks.length)             { clauses.push(`a.item_id IN (${marks(banks)})`); params.push(...banks); }
   if (start)                   { clauses.push("t.date >= ?");      params.push(start); }
   if (end)                     { clauses.push("t.date <= ?");      params.push(end); }
+  // before=<date>:<id>: the page after the last row shown (newest first), read through idx_txn_date_id
+  const before = url.searchParams.get("before");
+  if (before) {
+    const m = /^(\d{4}-\d{2}-\d{2}):(\d+)$/.exec(before);
+    if (!m) throw unprocessable("before must be <YYYY-MM-DD>:<transaction id>");
+    // "date <= ?" lets SQLite range over the index; an OR here made it scan every transaction
+    clauses.push("t.date <= ?", "NOT (t.date = ? AND t.id >= ?)"); params.push(m[1], m[1], Number(m[2]));
+  }
   if (tags.length) {
     // transaction_tags.tag is COLLATE NOCASE, so IN matches case-insensitively; the
     // (transaction_id, tag) primary key means "all" is a plain count of matching rows.
