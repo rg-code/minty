@@ -70,6 +70,25 @@ describe("static pages", () => {
     expect((await SELF.fetch("https://minty.example.workers.dev/benefits")).status).toBe(403);   // in run_worker_first
   });
 
+  it("dashboard has a Dates menu with quick ranges, like the other filters", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('id="dateBtn"');
+    expect(html).toMatch(/\["datePick", "dateBtn", "dateMenu"\]/);           // opens and closes like Tags / Banks
+    for (const r of ["this-month", "last-month", "30", "90", "this-year", "last-year"]) expect(html).toContain(`data-range="${r}"`);
+    expect(html).toContain('<input type="date" id="start" />');
+    expect(html).toContain('<input type="date" id="end" />');
+  });
+
+  it("ABC folds each card and keeps its settings out of the way", async () => {
+    const js = (await page("/abc.js")).html;
+    expect(js).toContain('<details class="abc-card"');
+    expect(js).toContain('<details class="abc-settings"><summary>Card settings</summary>');
+    expect(js).toContain('class="src"');                                    // "source" links, not a glyph fonts may lack
+    expect(js).not.toContain("ⓘ");
+    const css = (await page("/abc.css")).html;
+    expect(css).toMatch(/\.abc \.abc-top \{ position: sticky/);            // title, year and × stay in view
+  });
+
   it("dashboard shows a status strip from /health that names the problem and offers the fix", async () => {
     const { html } = await page("/");
     expect(html).toContain('id="health"');

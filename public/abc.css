@@ -11,12 +11,16 @@ dialog.abc::backdrop { background: rgb(0 0 0 / 0.3); backdrop-filter: blur(4px);
 dialog.abc:focus { outline: none; }
 @media (max-width: 560px) { dialog.abc { width: 100%; max-width: none; max-height: 100%; height: 100%; border-radius: 0; border: 0; } }
 
-.abc .abc-close { position: sticky; top: 0; float: right; margin: -8px -8px 0 8px; z-index: 1; }
+/* title, year and × stay in view while the popup scrolls */
+.abc .abc-top { position: sticky; top: -24px; z-index: 2; margin: -24px calc(-1 * clamp(16px, 3vw, 28px)) 0; padding: 18px clamp(16px, 3vw, 28px) 12px;
+                background: var(--bg); border-bottom: 1px solid var(--hairline); display: flex; align-items: flex-start; gap: 12px; }
+.abc .abc-top header { flex: 1; }
+.abc .abc-close { margin: 0; }
 .abc .abc-close button { width: 34px; height: 34px; border-radius: 999px; border: 1px solid var(--hairline); background: var(--surface);
                          color: var(--muted); display: grid; place-items: center; cursor: pointer; padding: 0; }
 .abc .abc-close button:hover { color: var(--ink); }
 .abc .abc-close svg { width: 16px; height: 16px; }
-.abc header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding-right: 40px; }
+.abc header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .abc h2 { font-size: 22px; margin: 0; letter-spacing: -0.02em; font-weight: 650; }
 .abc header .sub { color: var(--muted); font-size: 13.5px; flex: 1 1 260px; }
 .abc select { font: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px; padding: 4px 8px; }
@@ -43,19 +47,36 @@ dialog.abc:focus { outline: none; }
 .abc-list .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 14px; font-size: 13.5px; flex-wrap: wrap; }
 .abc-list .row + .row { border-top: 1px solid var(--hairline); }
 .abc-list .when { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.abc-soon .row { display: grid; grid-template-columns: 5.5em minmax(0, 1fr) auto; gap: 10px; flex-wrap: nowrap; }
+.abc-soon .amt { font-weight: 650; font-variant-numeric: tabular-nums; }
+.abc-soon .what { overflow-wrap: anywhere; }
 
 .abc-card { background: var(--surface); border: 1px solid var(--hairline); border-radius: 10px; margin-top: 14px; overflow: hidden; }
-.abc-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; border-bottom: 1px solid var(--hairline); }
+.abc-card > summary.head { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; padding: 12px 14px 12px 34px; cursor: pointer;
+                           list-style: none; position: relative; }
+.abc-card > summary.head::-webkit-details-marker { display: none; }
+.abc-card > summary.head::before { content: ""; position: absolute; left: 15px; top: 50%; width: 6px; height: 6px; margin-top: -4px;
+                                   border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform .12s; }
+.abc-card[open] > summary.head::before { transform: rotate(45deg); margin-top: -6px; }
+.abc-card[open] > summary.head { border-bottom: 1px solid var(--hairline); }
+.abc-card > summary.head:hover { background: var(--row-hover); }
+.abc-card .sum b { color: var(--ok); font-weight: 650; } .abc-card .sum b.open { color: var(--accent); }
+.abc-settings { border-top: 1px solid var(--hairline); padding: 8px 14px; font-size: 12.5px; }
+.abc-settings > summary { color: var(--muted); cursor: pointer; width: max-content; }
+.abc-settings > summary:hover { color: var(--ink); }
+.abc-settings .tools { margin-top: 8px; }
 .abc-card .title { font-weight: 650; overflow-wrap: anywhere; }
 .abc-card .meta { color: var(--muted); font-size: 12.5px; flex: 1 1 200px; }
-.abc-card .sum { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.abc-card .sum { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; text-align: right; }
 .abc-card .tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--muted); }
 
 .abc .ben { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 6px 16px; padding: 11px 14px; align-items: center; }
 .abc .ben + .ben { border-top: 1px solid var(--hairline); }
 .abc .ben .name { font-weight: 550; overflow-wrap: anywhere; }
 .abc .note { color: var(--muted); font-size: 12.5px; overflow-wrap: anywhere; }
-.abc .note a { color: inherit; }
+.abc .note a.src { color: var(--muted); font-size: 11.5px; text-decoration: underline; text-decoration-color: var(--hairline); text-underline-offset: 2px; }
+.abc .note a.src:hover { color: var(--ink); }
+.abc .abc-guess { color: var(--muted); font-weight: 400; margin-left: 2px; cursor: help; }
 .abc .note.abc-err { color: var(--err); }
 .abc .chip { display: inline-block; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px;
              background: var(--tag-bg); color: var(--muted); white-space: nowrap; }
@@ -70,9 +91,9 @@ dialog.abc:focus { outline: none; }
 .abc .sq { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--hairline); background: var(--surface); padding: 0; }
 .abc .sq.used { background: var(--ok); border-color: var(--ok); }
 .abc .sq.partial, .abc .sq.pending { background: var(--warn-bg); border-color: var(--warn); }
-.abc .sq.missed { background: var(--err-bg); border-color: var(--err); }
+.abc .sq.missed { background: var(--err-bg); border-color: color-mix(in srgb, var(--err) 35%, var(--hairline)); }
 .abc .sq.open { border-color: var(--accent); border-width: 2px; }
-.abc .sq.upcoming, .abc .sq.locked { opacity: .5; }
+.abc .sq.upcoming, .abc .sq.locked { border-style: dashed; border-color: var(--muted); opacity: .45; }
 .abc .sq.out { opacity: .35; }                  /* belongs to another year's totals */
 .abc button.sq { cursor: pointer; }
 .abc button.sq:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -80,3 +101,7 @@ dialog.abc:focus { outline: none; }
 
 .abc-foot { color: var(--muted); font-size: 12.5px; margin-top: 26px; }
 .abc-foot ul { margin: 6px 0 0; padding-left: 18px; }
+@media (max-width: 560px) {
+  .abc .abc-top { padding-top: 14px; padding-bottom: 10px; }
+  .abc header .sub { display: none; }               /* keep the pinned header to one line on a phone */
+}
