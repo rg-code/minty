@@ -92,8 +92,12 @@ Make a new key with one of these, and paste the result as the value:
 - Windows PowerShell:
   `$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')`
 
-**Keep a copy somewhere safe**, such as a password manager. Without it, stored bank connections
-can't be used and you'd have to link them again.
+> **Store this key carefully, in a password manager. There is no recovery, by design.** Nobody
+> has a copy: not Minty, not Cloudflare (a secret can't be read back once saved), not Plaid. If
+> it's lost, the stored bank connections can't be decrypted, so Minty can't sync them, and every
+> bank has to be linked again. Each new link uses another of Plaid's 10 Trial logins, and a
+> removed or abandoned one doesn't give its login back. Transactions already saved stay.
+> Never change `TOKEN_ENC_KEY` once banks are linked, for the same reason.
 
 ## 5. Get Plaid keys
 

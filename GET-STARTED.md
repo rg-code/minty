@@ -46,7 +46,14 @@ More detail on any step: [SETUP.md](SETUP.md).
 
 ## 5. Add your keys
 
-1. **Encryption key.** Make one on your computer, then save a copy in your password manager:
+1. **Encryption key.** Make one on your computer.
+
+   > **Store this key carefully, in a password manager. There is no recovery, by design.**
+   > Nobody (not Minty, Cloudflare or Plaid) has a copy, and Cloudflare won't show it again
+   > after you save it. Lose it and Minty can't use your bank connections any more: you'd have
+   > to link every bank again, which uses up more of Plaid's 10 free bank logins. Your saved
+   > transactions stay.
+
    - Mac: open Terminal and run `openssl rand -base64 32 | tr '+/' '-_'`
    - Windows: open PowerShell and run
      `$b=New-Object byte[] 32;[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b);[Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')`
