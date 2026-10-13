@@ -105,4 +105,13 @@ Status and next steps: [docs/STATUS.md](docs/STATUS.md).
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Minty is **source-available**, under the [PolyForm Strict License 1.0.0](LICENSE). It's not
+open source. In short (the [LICENSE](LICENSE) text is what counts):
+
+- **You may:** fork or clone it, read and review the code, and run it **unmodified** for your own
+  personal or household use, or any other noncommercial purpose.
+- **You may not:** change it or build on it (in a fork or anywhere else), redistribute it, or use
+  it for any commercial purpose.
+
+This covers the Minty name and logo (`brand/`) too. Third-party pieces keep their own licenses;
+for example, the Manrope typeface in the logo is under the SIL Open Font License.

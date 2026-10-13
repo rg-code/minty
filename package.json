@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Minty on Cloudflare Workers: one Worker + D1 per household (see docs/serverless-plan.md)",
-  "license": "MIT",
+  "license": "PolyForm-Strict-1.0.0",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --test-scheduled --var MINTY_DEV_NO_AUTH:1",

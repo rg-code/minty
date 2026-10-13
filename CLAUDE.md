@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Self-hosted personal finance aggregator that consolidates bank and credit card
 transactions for a household (one person by default; any number via `MINTY_USERS`) into one
 private dashboard.
-Anyone can fork it and run their own copy on Cloudflare's free plans.
+Anyone can fork it and run their own copy on Cloudflare's free plans. It's source-available under
+PolyForm Strict 1.0.0 (`LICENSE`): use unmodified, noncommercial only; no changes or redistribution.
 Goals: full data ownership, no subscription fees, no public endpoints.
 
 **Current status and to-do: `docs/STATUS.md`. Read it first when resuming work.**
