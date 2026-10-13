@@ -70,6 +70,19 @@ describe("static pages", () => {
     expect((await SELF.fetch("https://minty.example.workers.dev/benefits")).status).toBe(403);   // in run_worker_first
   });
 
+  it("every page has the Minty favicon and home-screen icon, and the dashboard shows the logo", async () => {
+    for (const path of ["/", "/connect", "/add-user"]) {
+      const { html } = await page(path);
+      expect(html, path).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml" />');
+      expect(html, path).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
+    }
+    const dash = (await page("/")).html;
+    expect(dash).toMatch(/<h1 class="brand"><img src="\/favicon.svg" alt="" width="30" height="30" \/><svg class="wordmark"[^>]*aria-label="Minty"/);
+    for (const asset of ["/favicon.svg", "/favicon-32.png", "/apple-touch-icon.png"]) {
+      expect((await SELF.fetch(`https://minty.example.workers.dev${asset}`)).status, asset).toBe(200);
+    }
+  });
+
   it("dashboard has a Dates menu with quick ranges, like the other filters", async () => {
     const { html } = await page("/");
     expect(html).toContain('id="dateBtn"');

@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/minty-logo-dark.png">
+    <img src="brand/minty-logo.png" alt="Minty" width="340">
+  </picture>
+</p>
+
 # Minty — a personal transaction aggregator
 
 Minty pulls transactions from your household's banks and cards via Plaid into one private
