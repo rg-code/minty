@@ -68,8 +68,8 @@ More detail on any step: [SETUP.md](SETUP.md).
 
 ## 7. Keep it up to date (optional)
 
-Nothing to do if you did step 2: your copy updates itself **every Monday**: the *Stay up to date* workflow you enabled in step 2
-pulls the latest Minty, and Cloudflare redeploys it. Your data and settings stay.
+Nothing to do if you did step 2: your copy pulls the latest Minty **every Monday**, and
+Cloudflare redeploys it. Your data and settings stay.
 
 - **Want it now?** On your fork: **Actions → Stay up to date → Run workflow**.
 - **Got an email that it failed?** Open your fork and click **Sync fork → Update branch**. That's
