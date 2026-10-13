@@ -64,10 +64,20 @@ Signed in to GitHub, open https://github.com/rg-code/minty/fork and click **Crea
 3. Click **+ Add account → Connect with Plaid**, and sign in to your bank in Plaid's window.
    Transactions start arriving within a minute.
 
+## 7. Keep it up to date (required)
+
+Your copy doesn't update by itself: a fork is a snapshot. **At least once a month**, and whenever
+you hear there's an update:
+
+1. Open your fork, `https://github.com/<your-github-name>/minty`.
+2. Click **Sync fork → Update branch**.
+
+Cloudflare redeploys within a couple of minutes, and your data and settings stay. Staying
+current keeps you on the latest fixes, including ones that protect your data and your free-plan
+limits.
+
 ## Later
 
-- **Updates:** on your fork at GitHub, click **Sync fork → Update branch**. Cloudflare redeploys
-  by itself, and your data and settings stay.
 - **Your name, or more people:** **+ Add user**.
 - **Stuck?** Check **+ Add user → Setup checks**, then [SETUP.md](SETUP.md).
 - **License:** use Minty unmodified, for personal or household use only: no changes, no
