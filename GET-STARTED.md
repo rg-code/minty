@@ -98,5 +98,5 @@ Cloudflare redeploys it. Your data and settings stay.
 
 **Have a home server and don't want Cloudflare?** There's an older, *untested* build of Minty
 that runs in Docker (FastAPI + Postgres) and is reached privately over Tailscale:
-[the `python-app-final` version](https://github.com/rg-code/minty/tree/python-app-final)
+[the `tailscale-selfhosted` branch](https://github.com/rg-code/minty/tree/tailscale-selfhosted)
 (setup is in its README). It doesn't get updates, and the steps above don't apply to it.
