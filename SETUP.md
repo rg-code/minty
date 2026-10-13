@@ -26,7 +26,9 @@ You'll need:
 1. Open https://github.com/rg-code/minty and click **Fork** → **Create fork**.
    Keep the name `minty`.
 
-Use a fork, not a download: it's how you get updates later (step 9).
+Use a fork, not a download: it's how you get updates later (step 9). Then, in the fork's
+**Actions** tab, click **I understand my workflows, go ahead and enable them**, so your copy
+updates itself every week.
 
 ## 2. Deploy it to Cloudflare
 
@@ -174,9 +176,18 @@ back to the installed app, link that bank from the browser instead.
 
 ## 9. Get updates
 
-When Minty gets improvements, open your fork on GitHub and click **Sync fork → Update branch**.
-Cloudflare redeploys automatically. Any database changes are applied as part of that deploy,
-and your settings, secrets and data are untouched.
+Your fork updates itself every Monday: the **Stay up to date** workflow
+(`.github/workflows/stay-up-to-date.yml`) pulls the latest Minty into your fork's `main`, and
+Cloudflare redeploys automatically. Any database changes are applied as part of that deploy, and
+your settings, secrets and data are untouched.
+
+- To update right away: **Actions → Stay up to date → Run workflow**.
+- If a run fails (GitHub emails you), click **Sync fork → Update branch** on your fork. That
+  happens when an update changes a file in `.github/workflows/`, which GitHub doesn't let a
+  workflow's own token change, or if your fork's `main` has commits of its own.
+- GitHub pauses scheduled workflows in a repository with no activity for 60 days, and emails
+  you. If that happens, re-enable it on the Actions tab, or sync by hand.
+- Workflows not enabled? Then click **Sync fork → Update branch** yourself, at least monthly.
 
 ---
 

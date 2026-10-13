@@ -1,0 +1,30 @@
+# Keeps a copy (fork) of Minty up to date: once a week it pulls the latest rg-code/minty into
+# this fork's main branch, and Cloudflare then redeploys it by itself. It does nothing in
+# rg-code/minty itself.
+#
+# One-time setup in a fork: open its Actions tab and click "I understand my workflows, go ahead
+# and enable them" (GitHub turns Actions off in new forks). "Run workflow" on that tab updates
+# right away.
+#
+# If a run fails (GitHub emails you), open the fork and click Sync fork -> Update branch. That
+# happens when an update changes a file in .github/workflows/, which GitHub doesn't let this
+# workflow's token update, or if the fork's main has changes of its own.
+name: Stay up to date
+
+on:
+  schedule:
+    - cron: "37 6 * * 1"        # Mondays, 06:37 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: github.repository != 'rg-code/minty'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull the latest Minty into this fork
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh repo sync "$GITHUB_REPOSITORY" --source rg-code/minty --branch main

@@ -15,7 +15,9 @@ More detail on any step: [SETUP.md](SETUP.md).
 
 ## 2. Copy Minty
 
-Signed in to GitHub, open https://github.com/rg-code/minty/fork and click **Create fork**.
+1. Signed in to GitHub, open https://github.com/rg-code/minty/fork and click **Create fork**.
+2. In your new fork, open the **Actions** tab and click **I understand my workflows, go ahead and
+   enable them**. This lets your copy update itself every week (step 7).
 
 ## 3. Put it on Cloudflare
 
@@ -66,15 +68,14 @@ Signed in to GitHub, open https://github.com/rg-code/minty/fork and click **Crea
 
 ## 7. Keep it up to date (required)
 
-Your copy doesn't update by itself: a fork is a snapshot. **At least once a month**, and whenever
-you hear there's an update:
+Your copy updates itself **every Monday**: the *Stay up to date* workflow you enabled in step 2
+pulls the latest Minty, and Cloudflare redeploys it. Your data and settings stay.
 
-1. Open your fork, `https://github.com/<your-github-name>/minty`.
-2. Click **Sync fork → Update branch**.
-
-Cloudflare redeploys within a couple of minutes, and your data and settings stay. Staying
-current keeps you on the latest fixes, including ones that protect your data and your free-plan
-limits.
+- **Want it now?** On your fork: **Actions → Stay up to date → Run workflow**.
+- **Got an email that it failed?** Open your fork and click **Sync fork → Update branch**. That's
+  all it takes; it happens when an update changes one of GitHub's workflow files.
+- **Skipped step 2?** Then nothing updates by itself. Enable it now, or click **Sync fork →
+  Update branch** at least once a month.
 
 ## Later
 
