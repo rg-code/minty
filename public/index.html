@@ -171,6 +171,16 @@
   .tagopts label:hover { background: var(--row-hover); }
   .tagopts input { accent-color: var(--accent); margin: 0; }
   .tagopts .none { color: var(--muted); font-size: 13px; padding: 6px; }
+  .datemenu { min-width: 260px; max-width: min(320px, calc(100vw - 32px)); left: auto; right: 0; }   /* last in the row: open leftwards */
+  @media (max-width: 640px) { .datemenu { left: 0; right: auto; } }
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px; }
+  .presets button { font: inherit; font-size: 13px; text-align: left; padding: 7px 9px; border-radius: 6px; border: 1px solid transparent;
+                    background: transparent; color: var(--ink); cursor: pointer; }
+  .presets button:hover { background: var(--row-hover); }
+  .presets button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .customrange { display: grid; gap: 6px; border-top: 1px solid var(--hairline); padding-top: 8px; }
+  .customrange label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
+  .customrange input { padding: 5px 8px; font-size: 13px; }
   .menutitle { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 0 4px; }
   .optgroup { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted);
               padding: 8px 6px 2px; }
@@ -252,7 +262,7 @@
   </div>
   <div class="controls">
     <div class="seg" id="ownerSeg" role="group" aria-label="Filter by person"></div>
-    <input type="search" id="q" placeholder="Search description or merchant…" />
+    <input type="search" id="q" placeholder="Search" aria-label="Search descriptions and merchants" />
     <div class="tagpick" id="tagPick">
       <button type="button" class="tagbtn" id="tagBtn" aria-haspopup="true" aria-expanded="false" aria-controls="tagMenu">All tags</button>
       <div class="tagmenu" id="tagMenu" hidden>
@@ -286,8 +296,27 @@
         <div class="tagopts" id="acctOpts" role="group" aria-label="Cards and accounts"></div>
       </div>
     </div>
-    <input type="date" id="start" aria-label="From date" />
-    <input type="date" id="end" aria-label="To date" />
+    <div class="tagpick" id="datePick">
+      <button type="button" class="tagbtn" id="dateBtn" aria-haspopup="true" aria-expanded="false" aria-controls="dateMenu">All dates</button>
+      <div class="tagmenu datemenu" id="dateMenu" hidden>
+        <div class="menuhead">
+          <span class="menutitle">Dates</span>
+          <button type="button" class="tagclear" id="dateClear">Clear</button>
+        </div>
+        <div class="presets" id="datePresets" role="group" aria-label="Quick ranges">
+          <button type="button" data-range="this-month">This month</button>
+          <button type="button" data-range="last-month">Last month</button>
+          <button type="button" data-range="30">Last 30 days</button>
+          <button type="button" data-range="90">Last 90 days</button>
+          <button type="button" data-range="this-year">This year</button>
+          <button type="button" data-range="last-year">Last year</button>
+        </div>
+        <div class="customrange">
+          <label>From <input type="date" id="start" /></label>
+          <label>To <input type="date" id="end" /></label>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -296,14 +325,16 @@
 
 <!-- ABC: card credits, in a popup (public/abc.js, public/abc.css). /?abc opens it. -->
 <dialog id="abc" class="abc" aria-labelledby="abcTitle" tabindex="-1">
-  <form method="dialog" class="abc-close"><button aria-label="Close" title="Close">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-  </button></form>
-  <header>
-    <h2 id="abcTitle">ABC</h2>
-    <span class="sub">All but coupon clipping: every credit on your cards, used and still open.</span>
-    <select id="abcYear" aria-label="Year" hidden></select>
-  </header>
+  <div class="abc-top">
+    <header>
+      <h2 id="abcTitle">ABC</h2>
+      <span class="sub">All but coupon clipping: every credit on your cards, used and still open.</span>
+      <select id="abcYear" aria-label="Year" hidden></select>
+    </header>
+    <form method="dialog" class="abc-close"><button aria-label="Close" title="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button></form>
+  </div>
   <div id="abcMain"></div>
 </dialog>
 <div class="totals" id="totals"></div>
@@ -788,7 +819,7 @@ let deb;
 document.getElementById("q").addEventListener("input", e => { clearTimeout(deb); deb = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250); });
 // Filter dropdowns (tags, banks, cards & accounts): opening one closes the others; a click
 // outside or Escape closes them.
-const DROPDOWNS = [["tagPick", "tagBtn", "tagMenu"], ["bankPick", "bankBtn", "bankMenu"], ["acctPick", "acctBtn", "acctMenu"]]
+const DROPDOWNS = [["tagPick", "tagBtn", "tagMenu"], ["bankPick", "bankBtn", "bankMenu"], ["acctPick", "acctBtn", "acctMenu"], ["datePick", "dateBtn", "dateMenu"]]
   .map(([pick, btn, menu]) => ({ pick: document.getElementById(pick), btn: document.getElementById(btn), menu: document.getElementById(menu) }));
 function setDropdown(d, open) { d.menu.hidden = !open; d.btn.setAttribute("aria-expanded", open); }
 for (const d of DROPDOWNS) d.btn.addEventListener("click", () => {
@@ -836,8 +867,43 @@ document.getElementById("acctOpts").addEventListener("change", e => {
   renderAccountControls(); load();
 });
 document.getElementById("acctClear").addEventListener("click", () => { state.cards = []; setAccounts([]); });
-document.getElementById("start").addEventListener("change", e => { state.start = e.target.value; load(); });
-document.getElementById("end").addEventListener("change", e => { state.end = e.target.value; load(); });
+// Dates: quick ranges (in local time) or a custom from/to, in one menu like the other filters.
+const ymdLocal = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function rangeFor(key) {
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth();
+  if (key === "this-month") return [ymdLocal(new Date(y, m, 1)), ymdLocal(now)];
+  if (key === "last-month") return [ymdLocal(new Date(y, m - 1, 1)), ymdLocal(new Date(y, m, 0))];
+  if (key === "this-year") return [ymdLocal(new Date(y, 0, 1)), ymdLocal(now)];
+  if (key === "last-year") return [ymdLocal(new Date(y - 1, 0, 1)), ymdLocal(new Date(y - 1, 11, 31))];
+  return [ymdLocal(new Date(y, m, now.getDate() - Number(key) + 1)), ymdLocal(now)];
+}
+const PRESET_LABEL = { "this-month": "This month", "last-month": "Last month", "30": "Last 30 days", "90": "Last 90 days",
+                       "this-year": "This year", "last-year": "Last year" };
+const shortDay = s => new Date(s + "T00:00").toLocaleDateString(undefined, { month: "short", day: "numeric",
+  ...(s.slice(0, 4) !== String(new Date().getFullYear()) ? { year: "numeric" } : {}) });
+function renderDateControls() {
+  const preset = Object.keys(PRESET_LABEL).find(k => { const [a, b] = rangeFor(k); return a === state.start && b === state.end; });
+  const btn = document.getElementById("dateBtn");
+  btn.textContent = preset ? PRESET_LABEL[preset]
+    : state.start && state.end ? `${shortDay(state.start)} – ${shortDay(state.end)}`
+    : state.start ? `From ${shortDay(state.start)}` : state.end ? `Until ${shortDay(state.end)}` : "All dates";
+  btn.classList.toggle("active", !!(state.start || state.end));
+  for (const b of document.querySelectorAll("#datePresets button")) b.setAttribute("aria-pressed", b.dataset.range === preset);
+  document.getElementById("start").value = state.start;
+  document.getElementById("end").value = state.end;
+  document.getElementById("dateClear").disabled = !(state.start || state.end);
+}
+function setDates(start, end) { state.start = start; state.end = end; renderDateControls(); load(); }
+document.getElementById("datePresets").addEventListener("click", e => {
+  const b = e.target.closest("button[data-range]");
+  if (!b) return;
+  setDates(...rangeFor(b.dataset.range));
+  setDropdown(DROPDOWNS[3], false);
+});
+document.getElementById("dateClear").addEventListener("click", () => setDates("", ""));
+document.getElementById("start").addEventListener("change", e => setDates(e.target.value, state.end));
+document.getElementById("end").addEventListener("change", e => setDates(state.start, e.target.value));
+renderDateControls();
 
 // sample data for offline preview only (includes account fields + tags)
 const SAMPLE = [

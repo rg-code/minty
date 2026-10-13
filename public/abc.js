@@ -18,6 +18,7 @@
   let users = [];
   let data = null;
   let year = null;
+  const collapsed = new Set();                    // cards folded by the viewer, kept across reloads
 
   async function load() {
     try {
@@ -59,8 +60,9 @@
 
     const soon = d.ending_soon.slice(0, 8);
     if (soon.length && !past) {
-      html += `<h3>Use before it resets</h3><div class="abc-list">` + soon.map(e => `<div class="row">
-        <span>${money(e.left_cents)} · ${esc(e.benefit)} <span class="abc-muted">(${esc(e.card || "card")}${e.mask ? " ••" + esc(e.mask) : ""})</span></span>
+      html += `<h3>Use before it resets</h3><div class="abc-list abc-soon">` + soon.map(e => `<div class="row">
+        <span class="amt">${money(e.left_cents)}</span>
+        <span class="what">${esc(e.benefit)} <span class="abc-muted" title="${esc(e.card || "")}">${e.mask ? "••" + esc(e.mask) : esc(e.card || "")}</span></span>
         <span class="when">by ${day(e.ends)}</span></div>`).join("") + `</div>`;
     }
 
@@ -81,8 +83,9 @@
         <button type="button" class="abc-link" data-unhide="${c.account_id}">Show again</button></div>`).join("") + `</div>`;
     }
 
-    html += `<div class="abc-foot">Benefit details checked ${esc(d.checked)} (Frequent Miler, Doctor of Credit, issuers' pages); each credit's ⓘ links to its source.
-      Credits count in the period of the purchase they paid back. Not tracked:<ul>${d.not_tracked.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
+    html += `<div class="abc-foot">Benefit details checked ${esc(d.checked)} (Frequent Miler, Doctor of Credit, issuers' pages); each credit links to its source.
+      Credits count in the period of the purchase they paid back. For credits marked <span class="abc-guess" aria-hidden="true">*</span>, no statement credit
+      has posted yet, so Minty matches it by a best guess at its wording. Not tracked:<ul>${d.not_tracked.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
     main.innerHTML = html;
   }
 
@@ -95,23 +98,27 @@
     const yearPicker = c.card_year ? `<label>Card year starts <select data-month="${c.account_id}" aria-label="Card year starts">
         ${MON.map((m, i) => `<option value="${i + 1}" ${c.card_year.month === i + 1 ? "selected" : ""}>${m}</option>`).join("")}</select></label>
         ${c.card_year.source === "annual_fee" ? `<span title="From the first annual fee on the card">(from the annual fee)</span>` : ""}` : "";
-    return `<section class="abc-card">
-      <div class="head">
+    const pct = t.available_cents ? Math.round(100 * t.used_cents / t.available_cents) : 0;
+    return `<details class="abc-card" data-card="${c.account_id}" ${collapsed.has(c.account_id) ? "" : "open"}>
+      <summary class="head">
         <span class="title">${cardTitle(c)}</span>
-        <span class="meta">${esc(c.product.name)} · ${esc(c.bank || "")}${who(c)} · ${money(c.product.fee_cents)} fee</span>
-        <span class="sum">${money(t.used_cents)} of ${money(t.available_cents)} used${t.open_now_cents ? ` · ${money(t.open_now_cents)} open` : ""}</span>
-        <span class="tools">${productPicker} ${yearPicker} <button type="button" class="abc-link" data-hide="${c.account_id}">Hide</button></span>
-      </div>
+        <span class="meta">${esc(c.product.name)}${who(c)} · ${money(c.product.fee_cents)} fee</span>
+        <span class="sum"><b>${money(t.used_cents)}</b> of ${money(t.available_cents)} used (${pct}%)${t.open_now_cents ? ` · <b class="open">${money(t.open_now_cents)}</b> open` : ""}</span>
+      </summary>
       ${c.benefits.map(b => benefitHTML(c, b)).join("")}
-    </section>`;
+      <details class="abc-settings"><summary>Card settings</summary>
+        <div class="tools">${productPicker} ${yearPicker} <button type="button" class="abc-link" data-hide="${c.account_id}">Hide this card</button></div>
+      </details>
+    </details>`;
   }
 
   function benefitHTML(c, b) {
     const chips = (b.enroll ? `<span class="chip warn" title="Enroll in the issuer's app or site, or the credit never posts">enroll</span>` : "")
       + (b.how === "outside" ? `<span class="chip" title="Minty can't see this one on a statement: tick it when you've used it">tick when used</span>` : "");
-    const label = !b.label_seen && b.how === "on_card" ? " The statement wording is a best guess until one posts." : "";
-    const left = `<div><div class="name">${esc(b.name)} · ${money(b.amount_cents)} ${PERIOD[b.period]}${chips}</div>
-      <div class="note">${esc(b.note)}${esc(label)} <a href="${esc(b.source)}" target="_blank" rel="noopener" title="Source">ⓘ</a></div></div>`;
+    const guess = !b.label_seen && b.how === "on_card"
+      ? `<span class="abc-guess" title="No statement credit has posted yet: Minty matches it by a best guess at its wording">*</span>` : "";
+    const left = `<div><div class="name">${esc(b.name)}${guess} · ${money(b.amount_cents)} ${PERIOD[b.period]}${chips}</div>
+      <div class="note">${esc(b.note)} <a class="src" href="${esc(b.source)}" target="_blank" rel="noopener">source</a></div></div>`;
 
     if (b.once) {
       const o = b.once;
@@ -145,7 +152,9 @@
       }
       return `<span class="${cls}" title="${esc(title)}"></span>`;
     }).join("");
-    return `<div class="ben">${left}<div><div class="now">${now}</div><div class="squares" aria-label="${esc(b.name)} by period">${squares}</div></div></div>`;
+    // one period this year: the bar says it all, unless it's ticked by hand
+    const showSquares = b.periods.length > 1 || b.how === "outside";
+    return `<div class="ben">${left}<div><div class="now">${now}</div>${showSquares ? `<div class="squares" aria-label="${esc(b.name)} by period">${squares}</div>` : ""}</div></div>`;
   }
 
   async function put(path, body) {
@@ -179,6 +188,11 @@
     }
   });
   yearSel.addEventListener("change", e => { year = Number(e.target.value); load(); });
+  // remember folded cards ("toggle" doesn't bubble, so listen in the capture phase)
+  main.addEventListener("toggle", e => {
+    const card = e.target.closest?.("details.abc-card");
+    if (card && e.target === card) card.open ? collapsed.delete(Number(card.dataset.card)) : collapsed.add(Number(card.dataset.card));
+  }, true);
 
   function open() {
     if (!dialog.open) dialog.showModal();
