@@ -77,10 +77,22 @@ describe("static pages", () => {
       expect(html, path).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png" />');
     }
     const dash = (await page("/")).html;
-    expect(dash).toMatch(/<h1 class="brand"><img src="\/favicon.svg" alt="" width="30" height="30" \/><svg class="wordmark"[^>]*aria-label="Minty"/);
+    expect(dash).toMatch(/<h1 class="brand"><button[^>]*id="syncBtn"[^>]*><img src="\/favicon.svg" alt="" width="30" height="30" \/><\/button><svg class="wordmark"[^>]*aria-label="Minty"/);
     for (const asset of ["/favicon.svg", "/favicon-32.png", "/apple-touch-icon.png"]) {
       expect((await SELF.fetch(`https://minty.example.workers.dev${asset}`)).status, asset).toBe(200);
     }
+  });
+
+  it("clicking the coin reloads and asks for a sync; the count says when more exist and when it last synced", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<button type="button" class="coinbtn" id="syncBtn"');
+    expect(html).toContain('fetch("/sync-request", { method: "POST" })');
+    expect(html).toContain('id="lastSync"');
+    expect(html).toContain("latest ${txns.length.toLocaleString()} transactions");
+    expect(html).toContain('p.set("before", `${last.date}:${last.id}`)');
+    expect(html).toContain('id="moreBtn">Show more');
+    expect(html).not.toContain('fetch("/sync"');                          // there is no sync endpoint
+    expect((await SELF.fetch("https://minty.example.workers.dev/sync-request")).status).toBe(403);   // in run_worker_first
   });
 
   it("dashboard has a Dates menu with quick ranges, like the other filters", async () => {
