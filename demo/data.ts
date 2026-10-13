@@ -1,0 +1,216 @@
+// The live demo's household: made-up people, accounts and transactions, generated in the
+// visitor's browser relative to today, so ABC's periods and "Last synced" are always current.
+// Nothing here is real: the people are "Alex" and "Sam", the last-4 digits are made up, and the
+// employers, landlord and restaurants are invented. Banks, card products and big merchants are
+// real names, because ABC recognises cards and credits by them.
+// Deterministic for a given day (seeded PRNG), so a visitor sees the same data on reload.
+// Plaid sign convention: POSITIVE amount = money out. Amounts are integer cents.
+
+export interface DemoOwners { alex: string; sam: string }
+export interface DemoData {
+  users: string;                                    // the MINTY_USERS value
+  items: Record<string, string | number | null>[];
+  accounts: Record<string, string | number | null>[];
+  transactions: Record<string, string | number | null>[];
+  tags: [number, string, number][];                 // transaction_id, tag, position
+  marks: [number, string, string][];                // account_id, benefit_id, period_start
+}
+
+export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", sam: "sam" }): DemoData {
+  let s = 20261013;                                  // mulberry32
+  const rand = () => {
+    s |= 0; s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const between = (lo: number, hi: number) => lo + (hi - lo) * rand();
+  const cents = (dollars: number) => Math.round(dollars * 100);
+  const Y = now.getUTCFullYear(), M = now.getUTCMonth(), D = now.getUTCDate();
+  const todayIso = iso(Y, M, D);
+  const daysAgo = (n: number) => iso(Y, M, D - n);
+  const DAYS = daysBetween(iso(Y - 1, 0, 1), todayIso) + 1;        // everything goes back to last January 1
+  const nowIso = (minutesAgo: number) => new Date(now.getTime() - minutesAgo * 60_000).toISOString();
+
+  const items: DemoData["items"] = [], accounts: DemoData["accounts"] = [], transactions: DemoData["transactions"] = [];
+  const tags: DemoData["tags"] = [], marks: DemoData["marks"] = [];
+
+  // owner, credential set, bank, consent ends in (days), accounts: [name, last-4, type, subtype, balance]
+  const BANKS: [keyof DemoOwners, string, number | null, [string, string, string, string, number][]][] = [
+    ["alex", "Chase", null, [["Total Checking", "0417", "depository", "checking", 8421.55],
+                             ["Sapphire Preferred", "2208", "credit", "credit card", 1932.40]]],
+    ["alex", "American Express", null, [["The Platinum Card®", "1009", "credit", "credit card", 2760.12]]],
+    ["sam", "American Express", null, [["Business Gold Card", "3006", "credit", "credit card", 1184.03]]],
+    ["sam", "Citi", null, [["Citi Strata Premier℠ Card", "5512", "credit", "credit card", 642.77]]],
+    ["sam", "Ally Bank", 5, [["Online Savings", "7731", "depository", "savings", 24510.00]]],
+  ];
+  const acct: Record<string, number> = {};
+  BANKS.forEach(([who, bank, consentDays, accts], i) => {
+    const itemId = i + 1;
+    items.push({
+      id: itemId, owner: owners[who], plaid_account: `${owners[who]}_primary`, plaid_item_id: `demo-item-${itemId}`,
+      access_token_enc: "demo-no-token", institution_name: bank, txn_cursor: "demo-cursor", status: "good",
+      updated_at: nowIso(14 + i * 3), attempted_at: nowIso(14 + i * 3), checked_at: nowIso(90),
+      consent_expires_at: consentDays == null ? null : new Date(now.getTime() + consentDays * 864e5).toISOString(),
+    });
+    accts.forEach(([name, mask, type, subtype, bal], j) => {
+      const id = itemId * 10 + j;
+      acct[`${who}:${name}`] = id;
+      accounts.push({ id, owner: owners[who], item_id: itemId, plaid_account_id: `demo-acct-${id}`, name, mask, type, subtype,
+                      balance_current_cents: cents(bal), balance_available_cents: type === "credit" ? null : cents(bal), currency: "USD" });
+    });
+  });
+  const ownerOf = (accountId: number) => accounts.find((a) => a.id === accountId)!.owner as string;
+
+  let nextId = 1;
+  const add = (accountId: number, date: string, dollars: number, name: string, merchant: string | null, category: string,
+               o: { tags?: string[]; member?: string | null } = {}) => {
+    if (date > todayIso) return;
+    const id = nextId++;
+    const age = daysBetween(date, todayIso);
+    transactions.push({
+      id, owner: ownerOf(accountId), account_id: accountId, plaid_txn_id: `demo-txn-${id}`, amount_cents: cents(dollars), currency: "USD",
+      date, datetime: `${date}T${String(8 + Math.floor(rand() * 13)).padStart(2, "0")}:${String(Math.floor(rand() * 60)).padStart(2, "0")}:00Z`,
+      name, merchant_name: merchant, category, pending: age <= 1 && dollars > 0 && rand() < 0.6 ? 1 : 0, pending_txn_id: null,
+      account_owner: o.member ?? null,
+    });
+    (o.tags ?? []).forEach((t, pos) => tags.push([id, t, pos]));
+  };
+
+  const checking = acct["alex:Total Checking"], sapphire = acct["alex:Sapphire Preferred"];
+  const platinum = acct["alex:The Platinum Card®"], gold = acct["sam:Business Gold Card"];
+  const strata = acct["sam:Citi Strata Premier℠ Card"], savings = acct["sam:Online Savings"];
+  const member = () => (rand() < 0.3 ? "SAM MORGAN" : "ALEX MORGAN");     // Sam is an additional card member
+
+  // --- Everyday spending: merchant, category, [min, max], times per 30 days, card, tag
+  const SPEND: [string, string, [number, number], number, number, string | null][] = [
+    ["Whole Foods Market", "FOOD_AND_DRINK", [38, 165], 4, sapphire, "groceries"],
+    ["Trader Joe's", "FOOD_AND_DRINK", [24, 96], 3, strata, "groceries"],
+    ["Blue Bottle Coffee", "FOOD_AND_DRINK", [4.5, 13], 7, platinum, null],
+    ["DoorDash", "FOOD_AND_DRINK", [22, 68], 2, sapphire, "eating-out"],
+    ["Lantern & Rye", "FOOD_AND_DRINK", [48, 140], 2, platinum, "eating-out"],
+    ["Shell", "TRANSPORTATION", [38, 72], 2, strata, null],
+    ["Uber", "TRANSPORTATION", [11, 42], 3, platinum, null],
+    ["Amazon", "GENERAL_MERCHANDISE", [14, 180], 4, sapphire, null],
+    ["Target", "GENERAL_MERCHANDISE", [19, 120], 2, strata, "household"],
+    ["Costco", "GENERAL_MERCHANDISE", [85, 260], 1, sapphire, "groceries"],
+    ["CVS Pharmacy", "MEDICAL", [8, 46], 1, strata, null],
+    ["Staples", "GENERAL_MERCHANDISE", [12, 64], 1, gold, "reimbursable"],
+  ];
+  for (const [merchant, category, [lo, hi], per30, card, tag] of SPEND) {
+    const n = Math.round((per30 * DAYS) / 30 * between(0.75, 1.15));
+    for (let k = 0; k < n; k++) {
+      const name = rand() < 0.35 ? merchant.toUpperCase() : merchant;
+      add(card, daysAgo(Math.floor(rand() * DAYS)), between(lo, hi), name, merchant, category,
+          { tags: tag && rand() < 0.7 ? [tag] : [], member: card === platinum ? member() : null });
+    }
+  }
+  // monthly bills and pay
+  for (let d = 0; d < DAYS; d += 1) {
+    const day = daysAgo(d), dom = Number(day.slice(8));
+    if (dom === 1) add(checking, day, 3150, "Maple Court Apartments Rent", null, "RENT_AND_UTILITIES", { tags: ["rent"] });
+    if (dom === 15 || dom === 28) add(checking, day, -4280.5, "NORTHWIND LABS PAYROLL", null, "INCOME");
+    if (dom === 7) add(checking, day, between(95, 190), "PG&E", "PG&E", "RENT_AND_UTILITIES", { tags: ["utilities"] });
+    if (dom === 11) add(checking, day, 79.99, "Comcast Xfinity", "Comcast Xfinity", "RENT_AND_UTILITIES", { tags: ["utilities"] });
+    if (dom === 18) add(sapphire, day, 15.49, "Netflix", "Netflix", "ENTERTAINMENT", { tags: ["subscriptions"] });
+    if (dom === 21) add(strata, day, 11.99, "Spotify", "Spotify", "ENTERTAINMENT", { tags: ["subscriptions"] });
+    if (dom === 27) add(savings, day, -between(70, 95), "Interest Payment", null, "INCOME");
+    if (dom === 20) for (const [card, bank] of [[sapphire, "CHASE"], [platinum, "AMEX"], [gold, "AMEX"], [strata, "CITI"]] as const) {
+      const paid = between(600, 2400);
+      add(card, day, -paid, "AUTOPAY PAYMENT - THANK YOU", null, "LOAN_PAYMENTS");
+      add(checking, day, paid, `${bank} EPAYMENT`, null, "LOAN_PAYMENTS");
+    }
+  }
+  add(checking, daysAgo(33), 1500, "Transfer to Ally Savings", null, "TRANSFER_OUT");
+  add(savings, daysAgo(32), -1500, "Transfer from Chase Checking", null, "TRANSFER_IN");
+  add(checking, daysAgo(9), -64, "Zelle from Riley", null, "TRANSFER_IN", { tags: ["reimbursable"] });
+
+  // --- Card credits, this year and last, so ABC shows used, partly used, open and tick-box ones.
+  const cur = { y: Y, m: M };
+  const months = (from: number, to: number) => {                   // [y, m] for months from..to ago
+    const out: [number, number][] = [];
+    for (let k = to; k >= from; k--) { const d = new Date(Date.UTC(Y, M - k, 1)); out.push([d.getUTCFullYear(), d.getUTCMonth()]); }
+    return out;
+  };
+  const day = (y: number, m: number, d: number) => iso(y, m, d);
+  const back = M + 12;                                              // months back to last January
+
+  // Platinum (Alex): annual fee, digital entertainment, Walmart+, Uber One, Resy, lululemon, hotel, airline, CLEAR
+  add(platinum, day(Y, 1, 4), 895, "PLATINUM ANNUAL MEMBERSHIP FEE", null, "BANK_FEES");
+  add(platinum, day(Y - 1, 1, 4), 695, "PLATINUM ANNUAL MEMBERSHIP FEE", null, "BANK_FEES");
+  for (const [y, m] of months(0, back)) {
+    const isCur = y === cur.y && m === cur.m;
+    add(platinum, day(y, m, 3), 15.99, "DISNEY PLUS", "Disney+", "ENTERTAINMENT", { tags: ["subscriptions"], member: "ALEX MORGAN" });
+    add(platinum, day(y, m, 9), 6.25, "NYTIMES DIGITAL", "The New York Times", "ENTERTAINMENT", { tags: ["subscriptions"], member: "ALEX MORGAN" });
+    if (!isCur || D >= 12) add(platinum, day(y, m, isCur ? 12 : 11), -(isCur ? 15.99 : 22.24), "Platinum Digital Entertainment Credit", null, "BANK_FEES");
+    if (y === Y || m >= 6) {                                        // Walmart+ from last July
+      add(platinum, day(y, m, 6), 14.03, "Walmart+ Membership", "Walmart+", "GENERAL_MERCHANDISE", { member: "ALEX MORGAN" });
+      if (!(y === Y && m === M - 2)) add(platinum, day(y, m, 7), -14.03, "Walmart", "Walmart", "GENERAL_MERCHANDISE");   // one month missed
+    }
+    add(platinum, day(y, m, 14), 9.99, "UBER ONE MEMBERSHIP", "Uber One", "TRANSPORTATION", { member: "ALEX MORGAN" });
+    add(platinum, day(y, m, 16), -9.99, "Uber One Credit", null, "BANK_FEES");
+    if (!isCur && rand() < 0.85) marks.push([platinum, "uber_cash", day(y, m, 1)]);   // ticked: used in the Uber app
+  }
+  for (const y of [Y - 1, Y]) for (let q = 0; q < 4; q++) {
+    const qs = q * 3, curQ = y === Y && Math.floor(M / 3) === q;
+    if (y === Y && qs > M) break;
+    const resy = curQ ? 54.2 : y === Y && q === Math.floor(M / 3) - 1 ? 0 : between(70, 128);   // last quarter missed
+    if (resy) {
+      add(platinum, day(y, qs + 1, 2), resy, "RESY* LANTERN AND RYE", "Lantern & Rye", "FOOD_AND_DRINK", { tags: ["eating-out"], member: member() });
+      add(platinum, day(y, qs + 1, 5), -Math.min(resy, 100), "Platinum Resy Credit", null, "BANK_FEES");
+    }
+    if (!curQ && (y === Y - 1 || q % 2 === 1)) {
+      add(platinum, day(y, qs, 20), 98, "LULULEMON.COM", "lululemon", "GENERAL_MERCHANDISE", { member: member() });
+      add(platinum, day(y, qs, 23), -75, "Platinum Lululemon Credit", null, "BANK_FEES");
+    }
+  }
+  for (const y of [Y - 1, Y]) {
+    add(platinum, day(y, 2, 18), 742.6, "AMEX TRAVEL FINE HOTELS", "Amex Travel", "TRAVEL", { tags: ["travel"], member: "ALEX MORGAN" });
+    add(platinum, day(y, 2, 21), -300, "Platinum Hotel Credit", null, "BANK_FEES");
+    if (y < Y) {
+      add(platinum, day(y, 8, 9), 488, "AMEX TRAVEL HOTEL COLLECTION", "Amex Travel", "TRAVEL", { tags: ["travel"], member: "ALEX MORGAN" });
+      add(platinum, day(y, 8, 12), -300, "Platinum Hotel Credit", null, "BANK_FEES");
+    }
+    add(platinum, day(y, 4, 10), 70, "UNITED AIRLINES BAGGAGE", "United Airlines", "TRAVEL", { tags: ["travel"], member: "ALEX MORGAN" });
+    add(platinum, day(y, 4, 13), -70, "Airline Fee Credit", null, "BANK_FEES");
+    add(platinum, day(y, 7, 22), 45, "UNITED AIRLINES SEAT", "United Airlines", "TRAVEL", { tags: ["travel"], member: "ALEX MORGAN" });
+    add(platinum, day(y, 7, 24), -45, "Airline Fee Credit", null, "BANK_FEES");
+    add(platinum, day(y, 0, 26), 209, "CLEAR *CLEARME.COM", "CLEAR", "TRAVEL", { member: "ALEX MORGAN" });
+    add(platinum, day(y, 0, 28), -209, "CLEAR Plus Credit", null, "BANK_FEES");
+  }
+
+  // Business Gold (Sam): flexible business credit (Grubhub, office supplies), ChatGPT Business
+  add(gold, day(Y, 3, 2), 375, "BUSINESS GOLD ANNUAL MEMBERSHIP FEE", null, "BANK_FEES");
+  for (const [y, m] of months(0, back)) {
+    const isCur = y === cur.y && m === cur.m;
+    const lunch = isCur ? 12.4 : between(24, 38);
+    add(gold, day(y, m, 4), lunch, "GRUBHUB*BLUEBIRD DELI", "Grubhub", "FOOD_AND_DRINK", { tags: ["reimbursable"] });
+    if (!isCur || D >= 6) add(gold, day(y, m, 6), -Math.min(lunch, 20), "Flexible Business Credit", null, "BANK_FEES");
+    if (y === Y) {
+      add(gold, day(y, m, 8), 30, "OPENAI *CHATGPT SUBSCR", "OpenAI", "GENERAL_SERVICES", { tags: ["subscriptions"] });
+      if (!isCur) add(gold, day(y, m, 25), -30, "ChatGPT Business Credit", null, "BANK_FEES");
+    }
+  }
+
+  return { users: `${owners.alex}:Alex,${owners.sam}:Sam`, items, accounts, transactions, tags, marks };
+}
+
+/** INSERT statements (SQL with ? placeholders, values) for the data, parents first. */
+export function statements(d: DemoData): [string, (string | number | null)[]][] {
+  const ins = (table: string, rows: Record<string, string | number | null>[]) => rows.map((r): [string, (string | number | null)[]] => {
+    const cols = Object.keys(r);
+    return [`INSERT INTO ${table} (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`, cols.map((c) => r[c])];
+  });
+  return [
+    ...ins("items", d.items), ...ins("accounts", d.accounts), ...ins("transactions", d.transactions),
+    ...d.tags.map((t): [string, (string | number | null)[]] => ["INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (?, ?, ?)", t]),
+    ...d.marks.map((m): [string, (string | number | null)[]] => ["INSERT INTO benefit_marks (account_id, benefit_id, period_start, marked_by) VALUES (?, ?, ?, 'demo')", m]),
+  ];
+}
+
+function iso(y: number, m: number, d: number): string {
+  return new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
+}
+function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+}

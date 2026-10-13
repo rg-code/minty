@@ -58,6 +58,9 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 
 ## Recently done
 
+- **Live demo (2026-10-13).** The landing page's **Try the live demo** runs the real dashboard and
+  Worker in the browser over sql.js, with a made-up household and a working ABC, plus a
+  coming-soon AI connector dialog. `docs/demo.md`.
 - **Sync stall fixed (#27, migration 0004; deployed 2026-10-10).** Wells Fargo and Citibank had
   stopped after their first page at link time (Sep 30), and Amex on Oct 7 partway through its
   history. All three were still `good`, so nothing warned. Cause:

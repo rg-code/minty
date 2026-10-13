@@ -1,0 +1,40 @@
+/* The live demo's additions to the dashboard; colours come from its tokens (light and dark). */
+#install { display: none !important; }               /* the demo isn't installable */
+#mcpOpen .short { display: none; }
+@media (max-width: 560px) {
+  #mcpOpen .long { display: none; } #mcpOpen .short { display: inline; }
+  .links a[href="/add-user"] { display: none; }        /* room for the AI button; adding people needs your own Minty */
+}
+
+.demo-strip { font-size: 13px; line-height: 1.45; padding: 7px 16px; text-align: center; color: var(--ink);
+              background: color-mix(in srgb, var(--brand-dot) 16%, var(--surface)); border-bottom: 1px solid var(--hairline); }
+
+.demo-toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 50; max-width: min(520px, calc(100vw - 32px));
+              padding: 10px 14px; border-radius: 12px; font-size: 14px; background: var(--ink); color: var(--surface);
+              box-shadow: 0 10px 30px -10px rgba(0,0,0,.4); }
+.demo-toast[hidden] { display: none; }
+
+dialog.mcp { width: min(620px, calc(100vw - 24px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--hairline);
+             border-radius: 16px; background: var(--surface); color: var(--ink); box-shadow: 0 30px 80px -30px rgba(0,0,0,.5); }
+dialog.mcp::backdrop { background: rgba(10, 20, 30, .35); }
+.mcp-head { display: flex; align-items: center; gap: 10px; padding: 14px 12px 10px 20px; border-bottom: 1px solid var(--hairline);
+            position: sticky; top: 0; background: var(--surface); }
+.mcp-head h2 { margin: 0; font-size: 17px; flex: 1 1 auto; }
+.mcp-head form { margin: 0; }
+.soon { font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px; color: var(--brand-ink);
+        background: color-mix(in srgb, var(--brand-dot) 22%, var(--surface)); }
+.mcp-x { font: inherit; font-size: 22px; line-height: 1; width: 40px; height: 40px; border: 0; border-radius: 10px; background: transparent;
+         color: var(--ink); cursor: pointer; }
+.mcp-x:hover { background: var(--tag-bg); }
+.mcp-lead, .mcp-fine { margin: 14px 20px; font-size: 14px; color: var(--muted); }
+.mcp-fine { font-size: 12.5px; margin-bottom: 18px; }
+.mcp-list { list-style: none; margin: 0; padding: 0 20px; display: grid; gap: 14px; }
+.mcp-list > li { border: 1px solid var(--hairline); border-radius: 12px; overflow: hidden; }
+.mcp-q { margin: 0; padding: 10px 14px; font-weight: 600; font-size: 14.5px; background: var(--tag-bg); }
+.mcp-q::before { content: "You: "; color: var(--muted); font-weight: 500; }
+.mcp-a { padding: 4px 14px; font-size: 14px; }
+.mcp-a p { margin: 8px 0; }
+.mcp-a ul { margin: 8px 0; padding-left: 18px; }
+.mcp-a .pill[disabled] { opacity: .6; cursor: not-allowed; }
+.mcp-note { font-size: 12.5px; color: var(--muted); }
+.mcp-wait { padding: 12px 14px; color: var(--muted); border: 0 !important; }
