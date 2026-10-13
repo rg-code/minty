@@ -1,129 +1,124 @@
 # Minty status and to-do
 
-Handoff notes for continuing on another machine. Last updated 2026-10-12.
+Handoff notes for continuing on another machine. Last updated 2026-10-13.
 Household-specific values (the workers.dev address, Access team and AUD, email addresses)
 are deliberately **not** in this public repo. They're in the owner's Cloudflare dashboard.
 
 ## Where things stand
 
-- **Code:** Minty is Cloudflare-only: phases P0–P4 are on `main`. P4 removed the Python/Docker
-  app (its last version is tagged `python-app-final`) and moved the pages to `public/`.
-  CI (vitest in workerd + typecheck) runs on every PR.
-  - Tests: 219 Worker.
-  - Since then: filter by bank (#18) and by card/account (#19), and one person by default with
-    the person switch only for two or more (#20). Card members on multi-card accounts (#23–#25).
-    The sync-stall fix and 10-minute catch-up (#27). Bank problems on the dashboard and a daily
-    Plaid connection check (#28).
-  - Plan and decision log: [serverless-plan.md](serverless-plan.md) §8.
-- **The owner's household deployment (in progress):**
-  - [x] Imported `rg-code/minty` via Workers & Pages → Import a repository. Name `minty`, deploy
-        command `npm run deploy`. The build succeeded.
-  - [x] The first deploy created D1 `minty`, and the cron trigger is scheduled (`17 * * * *`).
-  - [x] Live QA against the real deployment: 24/24 passed (pages load, API fails closed, no sync
-        endpoint, forged tokens rejected).
-  - [x] Access enabled from the Worker's **Access** tab. The policies are "Cloudflare Account" plus
-        the owner's email domain (a catch-all to the owner's inbox). The edge now redirects to the
-        team's sign-in page, and the team's signing keys are reachable (2 × RS256).
-  - [x] Step 3: Access variables `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ALLOWED_LOGINS`.
-  - [x] Step 4: `TOKEN_ENC_KEY` set to a **new** key (2026-09-26). The owner keeps a copy in a
-        password manager; losing it means re-linking every bank.
-  - [x] Step 5 on **Plaid Sandbox**: `PLAID_*_ME_PRIMARY` and `PLAID_*_SPOUSE_PRIMARY` set to
-        Sandbox keys, `PLAID_ENV` unset (2026-09-26).
-  - [x] Step 6: Setup checks all ✓ (the only "!" is the expected "Plaid: sandbox").
-  - [x] Step 7 (test): linked **First Platypus Bank** with `user_good` / `pass_good`.
-  - [x] Tidy-up (2026-09-27): Preview URLs off (dashboard, and enforced by `"preview_urls": false`
-        in `wrangler.jsonc`; branch builds still pass as PR checks). Production branch confirmed
-        as `main` under **Settings → Builds → Branch control**.
-  - [x] Sandbox cleanup (2026-09-28): deleted both Sandbox Items (First Platypus Bank, Tartan
-        Bank) and their 10 accounts, 200 transactions and 2 tags from remote D1 via the dashboard
-        console, with the owner's go-ahead. Verified: every count is 0, and both migrations are still
-        recorded. The Sandbox keys are still set, until the switch below.
-  - [x] **Production** (by 2026-09-30, as reported by the owner): switched to `PLAID_ENV=production`
-        and linked real banks, all under Me (none under Spouse): **8 banks, 28 accounts**.
-  - [x] **CPU on the free plan:** the owner reports no "Exceeded CPU" on the Worker dashboard during
-        the first real syncs (2026-09-30).
-  - Spouse slot: nothing is linked under it. Its `PLAID_*_SPOUSE_*` secrets held the owner's
-    Sandbox-era keys; Setup checks flag them as unused until they're deleted or a second person is
-    added to `MINTY_USERS` with their own Plaid keys.
-  - Lesson from step 3: Access's policy (who can sign in) and the Worker's `ALLOWED_LOGINS`
-    (who the Worker accepts) are separate lists; a login must be on both. A "forbidden" from the
-    API was an address missing from `ALLOWED_LOGINS`. The API now says which check failed.
-- **The Python/Docker app is retired (P4).** It was never deployed with real data, nothing was
-  running on the Immich box, and there was nothing to migrate.
+- **Code:** Minty is Cloudflare-only (a Worker plus D1, on free plans); everything through #44 is
+  on `main`. CI (vitest in workerd + typecheck) runs on every PR, and Workers Builds deploys
+  `main`. **Tests: 281.** Migrations 0001–0008.
+  - Plan and decision log: [serverless-plan.md](serverless-plan.md) §8. ABC: [abc.md](abc.md).
+    Finance agent: [agent-plan.md](agent-plan.md). Live demo: [demo.md](demo.md).
+- **Licence:** PolyForm Strict 1.0.0 since #39 (source-available: use unmodified, noncommercial;
+  no changes or redistribution). Copies taken before #39 keep MIT. The old Python/Docker app is
+  the `tailscale-selfhosted` branch and the `python-app-final` tag, both moved to PolyForm Strict
+  on 2026-10-13. Untested, and linked from GET-STARTED for people with a home server.
+- **The owner's household deployment:** live on **Plaid production** since 2026-09-30, with
+  **8 banks and 28 accounts**, all under `me`.
+  - **Access:** the policies, `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` and `ALLOWED_LOGINS` are set.
+    A login must be on both Access's policy and `ALLOWED_LOGINS`.
+  - **`TOKEN_ENC_KEY`:** set 2026-09-26 and kept in a password manager. Losing it means
+    re-linking every bank.
+  - **Builds:** preview URLs are off, and the production branch is `main`.
+  - **Sync:** the cron runs hourly (`17 * * * *`), plus a 10-minute catch-up. All 8 banks were
+    caught up by 2026-10-11 after the stall fix (#27).
+  - **D1 rows read:** the free quota ran out once, on 2026-10-12, because ABC read 463,000 rows a
+    request. Fixed in #32 with indexes and a per-route read budget (`test/reads.test.ts`).
+  - **Spouse slot:** unused. Its `PLAID_*_SPOUSE_*` secrets are leftover Sandbox keys, and Setup
+    checks flag them.
+- **For friends:**
+  - **Landing page:** https://minty.milesmaximizer.com, also reached via
+    `milesmaximizer.com/minty/`. Code: rg-code/point-xfer `minty-site/`, a Cloudflare Pages
+    project published with `node deploy.mjs`.
+  - **On the landing page:** Get started opens [GET-STARTED.md](../GET-STARTED.md) in a side
+    panel; Try the live demo runs the demo; plus fork, ZIP and clone links, share buttons and
+    GoatCounter.
+  - **Forks:** they update themselves every Monday (#41), after the one-time "enable workflows"
+    click in each fork.
 
-- **More Plaid accounts per person (2026-09-28):** `PLAID_SLOTS` makes the number of credential
-  slots configurable (default `primary,backup`, up to 10). Routing skips slots without keys, and
-  `/status` flags half-set keys and banks stranded on a removed slot. With the default, adding
-  the `…_BACKUP` secrets gives each person 20 bank logins.
+## Recently done (2026-10-10 to 10-13)
 
-## Recently done
-
-- **Live demo (2026-10-13).** The landing page's **Try the live demo** runs the real dashboard and
-  Worker in the browser over sql.js, with a made-up household and a working ABC, plus a
-  coming-soon AI connector dialog. `docs/demo.md`.
-- **Sync stall fixed (#27, migration 0004; deployed 2026-10-10).** Wells Fargo and Citibank had
-  stopped after their first page at link time (Sep 30), and Amex on Oct 7 partway through its
-  history. All three were still `good`, so nothing warned. Cause:
-  `TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION` was retried from the run's cursor instead of the
-  update's first cursor, which fails forever. They also slowed the other five banks to about
-  one sync every 5 hours. Now `items.sync_start_cursor` remembers where an update began, and a
-  10-minute catch-up trigger continues unfinished downloads. **All 8 banks were caught up by
-  2026-10-11 03:17 UTC** (Amex 907 → 2,333 transactions, newest Oct 9). Details: serverless-plan.md
-  §8, 2026-10-10.
-- **Bank problems are never silent (#28, migration 0005; deployed 2026-10-11).** A status strip
-  under the dashboard header lists every bank that needs attention: what went wrong in plain
-  words, Plaid's own message, and a Reconnect / Link-again button. It stays until the problem is
-  fixed, and Setup checks show the same lines (`src/health.ts`). A daily `/item/get` check per
-  bank catches broken connections early and records consent end dates. Citibank, Navy Federal
-  and Amex end on **2027-09-30**, so the strip warns from about 2027-09-23. Reconnecting renews
-  them.
-- **Amex card members (#23–#25):** Amex sends the card member (15 of them), and each is listed
-  under its Amex card in **Cards & accounts**, with `/transactions` taking
-  `card=<account_id>:<member>`.
+- **Sync (#27):**
+  - Stalled downloads restart from where the update began (`items.sync_start_cursor`).
+  - A 10-minute catch-up trigger continues unfinished downloads.
+- **Bank problems are never silent (#28):** a status strip on the dashboard and the same lines in
+  Setup checks (`src/health.ts`), plus a daily `/item/get` check. Citibank, Navy Federal and Amex
+  consent ends **2027-09-30**, so the strip warns from about 2027-09-23.
+- **ABC, "All but coupon clipping" (#30–#33):**
+  - A popup listing every card credit, used and still open, checked against statement credits.
+  - Covers Amex Platinum, Business Platinum and Business Gold, Citi Strata Premier and U.S. Bank
+    Altitude Reserve.
+  - #32 fixed the read quota; #33 counts Walmart+ credits that post as a "Walmart" refund.
+- **Dashboard:**
+  - **Look:** a Dates menu and a tidier ABC (#34), a mint background (#35), the coin logo (#36).
+  - **The coin (#37):** click it to refresh and request a sync (recorded only; the next cron run
+    syncs). Also Show more past 500, and "Last synced".
+  - **Install as an app (#40):** Chrome, Safari and Edge, with GRAZE's Samsung Internet handling.
+- **Onboarding:** GET-STARTED.md, a one-page guide for anyone (#38, #42, #43). The licence change
+  (#39). Weekly fork sync (#41).
+- **Live demo (#44):**
+  - **What it is:** the real dashboard and Worker in the browser over sql.js. About 500 made-up
+    transactions, a working ABC, and a coming-soon "AI connector" dialog.
+  - **Speed:** about 0.8 s from click to transactions.
+  - **Upkeep:** rebuilt and published with the landing page (`node deploy.mjs` in point-xfer
+    `minty-site/`).
 
 ## To do, in order
 
-1. **Quick checks after the Oct 10–11 deploys:**
-   - Look at the dashboard's status strip in light, dark and phone views (not checked visually
-     yet: no screenshots were possible). It's empty while every bank is healthy.
+1. **Quick checks on the live deployment** (the owner, in the dashboard):
+   - **CPU:** **Worker → Metrics** for "Exceeded CPU", especially `/benefits` and the catch-up
+     runs.
+   - **D1 rows read:** **D1 → minty → Metrics** after a day of normal use with ABC. The budget
+     is 5,000,000 a day.
    - **Barclays and Taekus:** their newest transactions are Jun 5 and Sep 23 although both sync
      hourly, and Barclays has exactly 100 transactions. If those cards are still in use,
-     something is off; if not, nothing to do.
-   - **CPU** (**Worker → Metrics**, "Exceeded CPU"), especially around the Oct 10–11 catch-up.
-   - **Amex card members:** if some of the 15 are one person in different formats, a later change
+     something is off.
+   - **Amex card members (15):** if some are one person in different formats, a later change
      could merge or rename them.
-2. **ABC ("All but coupon clipping"): track card credits.** A page listing every monthly,
-   quarterly, semi-annual and annual credit on the household's cards, with what's been used and
-   what's still open, checked against the statement credits in the transactions. **Built in
-   #30** (design agreed 2026-10-12; [abc.md](abc.md)); after merging, open the ABC popup on the dashboard and check
-   CPU on the Worker's Metrics for `/benefits`. Refresh the benefit list when issuers change
-   credits (`src/benefits/catalog.ts`, `CHECKED`).
-3. **The finance agent ("Ask Minty").** Plan: [agent-plan.md](agent-plan.md); its to-do list is
-   §11 there. Decisions are made (2026-10-06): household secret; OpenRouter free models, Workers AI,
-   and the household's own OpenAI/Anthropic keys; tagging with Confirm from the start; free plan
-   only; automations with a **dashboard inbox**. **Next: A0** (§8.1), which needs the owner's
-   go-ahead and a few keys in `.dev.vars`.
-4. **Optional tidy-up:**
-   - Delete the unused `PLAID_*_SPOUSE_*` secrets (Setup checks flag them), and set `MINTY_USERS` =
+2. **ABC coverage for the household's other cards.** Cards ABC doesn't know show as untracked;
+   add the ones the household holds to `src/benefits/catalog.ts`, with sources and `CHECKED`.
+   Re-check the existing benefits when issuers change them; the last check was 2026-10-12.
+3. **Decide where MCP goes.** The live demo shows an "AI connector (MCP), coming soon" button, but
+   [agent-plan.md](agent-plan.md) has the MCP server as optional phase **A7**. The options:
+   - move MCP earlier, as a read-only server built on A1's query tools, so Claude Desktop and
+     similar apps can use it before the chat panel exists; or
+   - relabel the demo's button "Ask Minty (coming soon)".
+4. **The finance agent ("Ask Minty").** Its to-do is §11 of [agent-plan.md](agent-plan.md), and
+   its decisions were made 2026-10-06. **Next: A0** (§8.1). It needs the owner's go-ahead plus an
+   OpenRouter key (training off) and a Workers AI token in `.dev.vars`.
+5. **Landing page and demo upkeep:**
+   - After dashboard changes, run `node deploy.mjs` from `point-xfer/minty-site/` so the demo
+     follows. A dashboard change the demo can't follow stops the build, by design.
+   - Check that the first Monday run of **Stay up to date** on a friend's fork (2026-10-19)
+     passes.
+6. **Owner housekeeping:**
+   - **Leaked commit in point-xfer:** commit `14df20b` (a wrangler cache, with account and
+     location details) is still reachable through closed PR #26. Ask GitHub Support to purge it.
+   - **Spouse secrets:** delete the unused `PLAID_*_SPOUSE_*` secrets, and set `MINTY_USERS` to
      `me:<Your name>` to show your name. Keep the key `me`: your banks are stored under it.
-   - `npx wrangler logout` on machines that don't need Cloudflare access.
-   - Plaid Sandbox end-to-end (the owner runs it because it reads `.dev.vars`):
-     `node scripts/sandbox-e2e.ts` against `npm run dev`.
-5. **Ongoing:**
-   - **Keep Cloudflare's "Update your Wrangler configuration" prompt unapplied.** `keep_vars`
-     already preserves dashboard variables across deploys, and copying them into `wrangler.jsonc`
-     would publish the household's emails and Access IDs in this public repo.
+   - **Wrangler logins:** `npx wrangler logout` on machines that don't need Cloudflare access.
+   - **Plaid Sandbox end-to-end:** the owner runs `node scripts/sandbox-e2e.ts` against
+     `npm run dev`, because it reads `.dev.vars`.
+7. **Ongoing:**
+   - **Keep Cloudflare's "Update your Wrangler configuration" prompt unapplied:** `keep_vars`
+     already preserves dashboard variables, and copying them into `wrangler.jsonc` would publish
+     the household's emails and Access IDs.
    - **Each new bank uses a Plaid Trial slot for good** (10 per credential set), so link only
      banks you'll keep.
-   - **Deploys:** if a merge doesn't show up live, check **Workers & Pages → minty → Builds** for
-     a missing or failed build of that commit, and retry it (#25's merge didn't start one).
-   - **CPU now and then**, especially after linking a bank with a long history. An overrun is
-     safe (each page commits with its cursor). If they become frequent, lower
-     `SYNC_MAX_BYTES_PER_RUN`, or move to Workers Paid and raise it (e.g. 20000000 bytes / 50 pages).
-6. **Later:**
-   - Onboard friends from SETUP.md (fork → import → …) and fix anything they trip on.
+   - **Workflows:** a change under `.github/workflows/` breaks every fork's next automatic sync
+     until its owner clicks Sync fork, so only make one when it's worth that, and say so in the
+     PR.
+   - **Deploys:** if a merge doesn't show up live, check **Workers & Pages → minty → Builds** and
+     retry the build.
+   - **CPU after linking a bank with a long history:** an overrun is safe, because each page
+     commits with its cursor. If overruns become frequent, lower `SYNC_MAX_BYTES_PER_RUN`, or move
+     to Workers Paid and raise it.
+8. **Later:**
+   - Onboard friends with GET-STARTED.md, and fix anything they trip on.
    - Email or push alerts for bank problems (they'd need an outbound mail setup).
-   - Several Plaid Trial accounts per person is a Plaid ToS gray area; one paid Plaid account per
+   - Several Plaid Trial accounts per person is a Plaid ToS gray area. One paid Plaid account per
      person is the cleaner long-term option. Deferred, not forgotten.
 
 ## Picking up on a new machine
@@ -132,7 +127,9 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
     npm ci                       # Node 22+; if npm 10 errors resolving new deps, use npx npm@11
     npm test && npm run typecheck
     npm run db:migrate:local && npm run db:seed:local && npm run dev:demo   # http://localhost:8787, two demo people
+    npm run build:demo           # the live demo, in dist/demo (serve that folder at /demo/)
 
 - **Cloudflare CLI** (optional; the dashboard is enough): `npx wrangler login`.
 - **Temporary QA accounts:** `npx wrangler deploy --temporary` works for Workers + D1. It can't
   run cron or migrations there. See serverless-plan.md §8.
+- **The landing page** needs point-xfer next to this repo: `cd ../point-xfer/minty-site && node deploy.mjs`.
