@@ -1,5 +1,7 @@
 # Set up Minty for your household
 
+**New here? The one-page version is [GET-STARTED.md](GET-STARTED.md).** This page has the detail.
+
 Minty puts your household's bank and card transactions on one private dashboard. You run your
 **own copy**, on your own free accounts. Nobody else, including whoever shared this repo, can
 see your data or your keys.
