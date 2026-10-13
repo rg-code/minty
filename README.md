@@ -125,4 +125,10 @@ To run the cron sync by hand locally: `curl "http://localhost:8787/cdn-cgi/handl
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Minty is **source-available**, under the [PolyForm Strict License 1.0.0](LICENSE). It's not
+open source. In short (the [LICENSE](LICENSE) text is what counts):
+
+- **You may:** fork or clone it, read and review the code, and run it **unmodified** for your own
+  personal or household use, or any other noncommercial purpose.
+- **You may not:** change it or build on it (in a fork or anywhere else), redistribute it, or use
+  it for any commercial purpose.
