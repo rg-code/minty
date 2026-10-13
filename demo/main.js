@@ -9,7 +9,7 @@
 
 import worker from "../src/index.ts";
 import { markSwept } from "../src/routes/syncrequest.ts";
-import { generate, statements } from "./data.ts";
+import { demoEnv, generate, statements } from "./data.ts";
 import { DemoD1 } from "./d1.js";
 
 /* global __MIGRATIONS__, __API_PATHS__, __SQLJS__ */
@@ -50,12 +50,8 @@ const ready = (async () => {
   }
   for (const st of cache.values()) st.free();
   sql.run("COMMIT");
-  const keys = Object.fromEntries(data.users.split(",").flatMap((u) => {
-    const k = u.split(":")[0].toUpperCase();               // placeholder keys, so no bank shows as "has no Plaid keys"
-    return [[`PLAID_CLIENT_ID_${k}_PRIMARY`, "demo-not-a-key"], [`PLAID_SECRET_${k}_PRIMARY`, "demo-not-a-key"]];
-  }));
   env = { DB: new DemoD1(sql), ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
-          MINTY_USERS: data.users, MINTY_DEV_NO_AUTH: "1", PLAID_ENV: "sandbox", ...keys };
+          MINTY_DEV_NO_AUTH: "1", PLAID_ENV: "sandbox", ...demoEnv(data) };
   window.__mintyDemo = { ms: Math.round(performance.now() - t0), rows: data.transactions.length };
   return env;
 })();
