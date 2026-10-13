@@ -93,3 +93,10 @@ Cloudflare redeploys it. Your data and settings stay.
 - **Stuck?** Check **+ Add user → Setup checks**, then [SETUP.md](SETUP.md).
 - **License:** use Minty unmodified, for personal or household use only: no changes, no
   redistribution, no commercial use. See [LICENSE](LICENSE).
+
+---
+
+**Have a home server and don't want Cloudflare?** There's an older, *untested* build of Minty
+that runs in Docker (FastAPI + Postgres) and is reached privately over Tailscale:
+[the `python-app-final` version](https://github.com/rg-code/minty/tree/python-app-final)
+(setup is in its README). It doesn't get updates, and the steps above don't apply to it.
