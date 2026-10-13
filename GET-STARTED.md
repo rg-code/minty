@@ -70,3 +70,5 @@ Signed in to GitHub, open https://github.com/rg-code/minty/fork and click **Crea
   by itself, and your data and settings stay.
 - **Your name, or more people:** **+ Add user**.
 - **Stuck?** Check **+ Add user → Setup checks**, then [SETUP.md](SETUP.md).
+- **License:** use Minty unmodified, for personal or household use only: no changes, no
+  redistribution, no commercial use. See [LICENSE](LICENSE).
