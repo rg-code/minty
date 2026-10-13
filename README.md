@@ -9,6 +9,8 @@
 
 **Want your own? Start here: [GET-STARTED.md](GET-STARTED.md)** (about 30 minutes, free, all in a browser).
 
+**See it first:** the [live demo](https://minty.milesmaximizer.com/#demo) runs Minty with made-up data, in your browser ([how](docs/demo.md)).
+
 Minty pulls transactions from your household's banks and cards via Plaid into one private
 dashboard, with tags, search and per-person totals. Each household runs its own copy on
 Cloudflare: one Worker plus a D1 database, on free plans, with no server to look after.

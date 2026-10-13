@@ -119,6 +119,11 @@ Design history and decisions: `docs/serverless-plan.md`.
   transactions reads them once per list entry, which is what blew the budget on 2026-10-12.
   Every page-facing route has a budget in `test/reads.test.ts`: keep new queries index-driven and
   add a line there. Check `rows_read` before running ad-hoc remote queries over transactions.
+- Live demo (`demo/`, `npm run build:demo`, `docs/demo.md`): the real dashboard and Worker in the
+  browser over sql.js, with a made-up household. It's built from `public/` and `src/`, so it follows
+  their changes; the build checks every edit it makes to `public/index.html` and stops when one no
+  longer applies (fix the edit, never the check). Its data stays made up (`test/demo.test.ts`), and
+  it never talks to a real Minty or to Plaid.
 - Fernet reference vectors (`test/fixtures/fernet-vectors.json`, test key only) pin the
   encryption to the reference implementation. Don't regenerate them casually.
 
