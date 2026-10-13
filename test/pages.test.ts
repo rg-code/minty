@@ -117,6 +117,16 @@ describe("static pages", () => {
     expect(dash).toContain("package=com.android.chrome");
   });
 
+  it("on phones, the filters move into a small strip pinned to the top once the header scrolls away", async () => {
+    const { html } = await page("/");
+    expect(html).toContain("@media (max-width: 640px) { body > header { position: static; } }");   // the header no longer pins half the screen
+    expect(html).toContain('<div class="ministrip" id="miniStrip" role="region" aria-label="Filters" hidden>');
+    expect(html).toMatch(/strip\.append\(controls\)/);                                // the same controls, so their state comes along
+    expect(html).toMatch(/header\.append\(controls\)/);
+    expect(html).toMatch(/header\.style\.minHeight = header\.offsetHeight/);           // the list doesn't jump
+    for (const id of ["tagBtn", "bankBtn", "acctBtn", "dateBtn"]) expect(html).toContain(`.ministrip #${id}::before { -webkit-mask-image:`);
+  });
+
   it("dashboard has a Dates menu with quick ranges, like the other filters", async () => {
     const { html } = await page("/");
     expect(html).toContain('id="dateBtn"');

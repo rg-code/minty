@@ -286,6 +286,44 @@
   .pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .pill .icon { width: 16px; height: 16px; }
   .links { align-items: center; }
+
+  /* Phones: the header scrolls away with the page, and once it's gone a small strip pinned to the
+     top takes over (setCompact below). The filters move into it as they are, shown as icon buttons
+     whose menus open full width under the strip; the person switch opens as a list. */
+  @media (max-width: 640px) { body > header { position: static; } }
+  .ministrip { position: fixed; top: 0; left: 0; right: 0; z-index: 15; display: flex; align-items: center; gap: 6px;
+               padding: calc(6px + env(safe-area-inset-top)) 8px 6px; background: var(--surface);
+               border-bottom: 1px solid var(--hairline); box-shadow: 0 6px 16px -10px var(--shadow); animation: strip-in .16s ease-out; }
+  .ministrip[hidden] { display: none; }
+  @keyframes strip-in { from { transform: translateY(-100%); } }
+  @media (prefers-reduced-motion: reduce) { .ministrip { animation: none; } }
+  .minicoin { flex: none; border: 0; background: none; padding: 0; line-height: 0; cursor: pointer; border-radius: 50%; }
+  .ministrip .controls { flex: 1; min-width: 0; margin: 0; flex-wrap: nowrap; gap: 5px; justify-content: space-between; }
+  .ministrip .seg { flex: 0 1 98px; min-width: 70px; height: 38px; padding: 2px; flex-direction: column; overflow: visible; position: relative; z-index: 3; }
+  .ministrip .seg button { flex: none; height: 32px; padding: 0 7px; gap: 5px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ministrip .seg:not(.open) button[aria-pressed="false"] { display: none; }
+  .ministrip .seg.open button { background: var(--surface); border: 1px solid var(--hairline); box-shadow: 0 6px 16px -8px var(--shadow); }
+  .ministrip .seg.open button[aria-pressed="true"] { color: var(--accent); }
+  .ministrip #q { flex: 0 1 38px; width: 38px; min-width: 32px; height: 38px; padding: 0; color: transparent; caret-color: transparent; cursor: pointer;
+                  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E") center / 18px no-repeat; }
+  :root[data-theme="dark"] .ministrip #q { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E"); }
+  .ministrip #q::placeholder { color: transparent; }
+  .ministrip #q:not(:placeholder-shown) { border-color: var(--accent); }
+  .ministrip #q:focus { position: absolute; left: 8px; right: 8px; top: calc(6px + env(safe-area-inset-top)); width: auto; z-index: 4;
+                        padding: 0 11px 0 34px; background-position: 10px center; color: var(--ink); caret-color: auto; cursor: text; }
+  .ministrip #q:focus::placeholder { color: var(--muted); }
+  .ministrip .tagpick { flex: 0 1 38px; min-width: 32px; position: static; }
+  .ministrip .tagbtn { width: 100%; height: 38px; padding: 0; font-size: 0; max-width: none; }
+  .ministrip .tagbtn::after { display: none; }
+  .ministrip .tagbtn::before { content: ""; position: absolute; inset: 0; margin: auto; width: 18px; height: 18px; background: var(--muted);
+                               -webkit-mask: center / contain no-repeat; mask: center / contain no-repeat; }
+  .ministrip #tagBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z'/%3E%3Ccircle cx='7.5' cy='7.5' r='1.5'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z'/%3E%3Ccircle cx='7.5' cy='7.5' r='1.5'/%3E%3C/svg%3E"); }
+  .ministrip #bankBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10h18L12 4 3 10zM5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10h18L12 4 3 10zM5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18'/%3E%3C/svg%3E"); }
+  .ministrip #acctBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='5' width='19' height='14' rx='2'/%3E%3Cpath d='M2.5 10h19M6 15h4'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='5' width='19' height='14' rx='2'/%3E%3Cpath d='M2.5 10h19M6 15h4'/%3E%3C/svg%3E"); }
+  .ministrip #dateBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15' rx='2'/%3E%3Cpath d='M3.5 10h17M8 3v4M16 3v4'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15' rx='2'/%3E%3Cpath d='M3.5 10h17M8 3v4M16 3v4'/%3E%3C/svg%3E"); }
+  .ministrip .tagbtn.active::before { background: var(--accent); }
+  .ministrip .tagmenu { position: fixed; top: var(--strip-bottom, 56px); left: 8px; right: 8px; min-width: 0; max-width: none; }
+  .ministrip .tagopts { max-height: calc(100dvh - var(--strip-bottom, 56px) - 120px); }
 </style>
 <link rel="stylesheet" href="/abc.css" />
 </head>
@@ -365,6 +403,9 @@
     </div>
   </div>
 </header>
+<div class="ministrip" id="miniStrip" role="region" aria-label="Filters" hidden>
+  <button type="button" class="minicoin" id="miniTop" aria-label="Back to top" title="Back to top"><img src="/favicon.svg" alt="" width="26" height="26" /></button>
+</div>
 
 <div id="banner" hidden class="banner"></div>
 <section id="health" class="health" hidden aria-live="polite" aria-label="Bank status"></section>
@@ -901,6 +942,44 @@ document.addEventListener("keydown", e => {
   const d = DROPDOWNS.find(x => !x.menu.hidden);
   if (d) { setDropdown(d, false); d.btn.focus(); }
 });
+// Phones: once the header has scrolled away, the filters move into a small strip pinned to the top
+// (the same elements, so their state and handlers come along) and move back when the header shows
+// again. The header keeps its height meanwhile, so the list doesn't jump.
+const PHONE = matchMedia("(max-width: 640px)");
+const header = document.querySelector("body > header"), controls = header.querySelector(".controls");
+const strip = document.getElementById("miniStrip"), ownerSeg = document.getElementById("ownerSeg");
+let compact = false;
+function setCompact(on) {
+  if (on === compact) return;
+  compact = on;
+  for (const d of DROPDOWNS) setDropdown(d, false);
+  ownerSeg.classList.remove("open");
+  const typing = document.activeElement === document.getElementById("q");
+  if (on) {
+    header.style.minHeight = header.offsetHeight + "px";
+    strip.hidden = false;
+    strip.append(controls);
+    strip.style.setProperty("--strip-bottom", strip.offsetHeight + 6 + "px");   // its height: it sits at the top (and may be sliding in)
+  } else {
+    header.append(controls);
+    header.style.minHeight = "";
+    strip.hidden = true;
+  }
+  if (typing) document.getElementById("q").focus({ preventScroll: true });
+}
+new IntersectionObserver(([e]) => setCompact(PHONE.matches && !e.isIntersecting && e.boundingClientRect.top < 0)).observe(header);
+PHONE.addEventListener("change", () => { if (!PHONE.matches) setCompact(false); });
+document.getElementById("miniTop").addEventListener("click", () => scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" }));
+// In the strip the person switch shows only the current choice; a tap opens the full list.
+ownerSeg.addEventListener("click", e => {
+  if (!compact) return;
+  if (!ownerSeg.classList.contains("open")) {
+    e.stopPropagation();
+    for (const d of DROPDOWNS) setDropdown(d, false);
+    ownerSeg.classList.add("open");
+  } else setTimeout(() => ownerSeg.classList.remove("open"));
+}, true);
+document.addEventListener("click", e => { if (!ownerSeg.contains(e.target)) ownerSeg.classList.remove("open"); });
 // tag filter
 document.getElementById("tagOpts").addEventListener("change", e => {
   const boxes = [...document.querySelectorAll("#tagOpts input:checked")].map(b => b.value);
