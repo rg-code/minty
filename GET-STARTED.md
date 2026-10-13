@@ -1,17 +1,20 @@
 # Get started with Minty
 
-Your own private dashboard of all your bank and card transactions. It runs on your own free
-accounts, so only you can see it. **About 30 minutes, all in a web browser, $0.**
+Your central, private home for all your bank and card data. Only you can see or change it: it
+lives in your own Cloudflare account, encrypted at rest, and your bank connections are encrypted
+again with a key only you hold.
+
+**About 30 minutes, all in a web browser, $0.**
 
 More detail on any step: [SETUP.md](SETUP.md).
 
 ## 1. Make three free accounts
 
-| Account | Sign up | Why |
-|---|---|---|
-| GitHub | https://github.com/signup | Holds your copy of Minty's code |
-| Cloudflare | https://dash.cloudflare.com/sign-up | Runs Minty and stores your data |
-| Plaid | https://dashboard.plaid.com/signup | Connects to your banks (US/Canada). It checks your identity, usually quickly |
+| Account | Sign up | What | Why |
+|---|---|---|---|
+| GitHub | https://github.com/signup | Only a repository for Minty's code. Your transactions, accounts and other information never touch GitHub | Holds your copy of Minty's code |
+| Cloudflare | https://dash.cloudflare.com/sign-up | Your bank probably already uses it to serve you data | Runs Minty and stores your data |
+| Plaid | https://dashboard.plaid.com/signup | You probably already use it: it handles the handshake between your banks and Minty | Connects to your banks (US/Canada). It checks your identity, usually quickly |
 
 ## 2. Copy Minty
 
@@ -43,7 +46,14 @@ More detail on any step: [SETUP.md](SETUP.md).
 
 ## 5. Add your keys
 
-1. **Encryption key.** Make one on your computer, then save a copy in your password manager:
+1. **Encryption key.** Make one on your computer.
+
+   > **Store this key carefully, in a password manager. There is no recovery, by design.**
+   > Nobody (not Minty, Cloudflare or Plaid) has a copy, and Cloudflare won't show it again
+   > after you save it. Lose it and Minty can't use your bank connections any more: you'd have
+   > to link every bank again, which uses up more of Plaid's 10 free bank logins. Your saved
+   > transactions stay.
+
    - Mac: open Terminal and run `openssl rand -base64 32 | tr '+/' '-_'`
    - Windows: open PowerShell and run
      `$b=New-Object byte[] 32;[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b);[Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')`
@@ -66,10 +76,10 @@ More detail on any step: [SETUP.md](SETUP.md).
 3. Click **+ Add account → Connect with Plaid**, and sign in to your bank in Plaid's window.
    Transactions start arriving within a minute.
 
-## 7. Keep it up to date (required)
+## 7. Keep it up to date (optional)
 
-Your copy updates itself **every Monday**: the *Stay up to date* workflow you enabled in step 2
-pulls the latest Minty, and Cloudflare redeploys it. Your data and settings stay.
+Nothing to do if you did step 2: your copy pulls the latest Minty **every Monday**, and
+Cloudflare redeploys it. Your data and settings stay.
 
 - **Want it now?** On your fork: **Actions → Stay up to date → Run workflow**.
 - **Got an email that it failed?** Open your fork and click **Sync fork → Update branch**. That's
