@@ -1,7 +1,10 @@
 # Get started with Minty
 
-Your own private dashboard of all your bank and card transactions. It runs on your own free
-accounts, so only you can see it. **About 30 minutes, all in a web browser, $0.**
+Your central, private home for all your bank and card data. Only you can see or change it: it
+lives in your own Cloudflare account, encrypted at rest, and your bank connections are encrypted
+again with a key only you hold.
+
+**About 30 minutes, all in a web browser, $0.**
 
 More detail on any step: [SETUP.md](SETUP.md).
 
