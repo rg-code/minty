@@ -45,4 +45,4 @@ through the real routes.
 Writes a static folder (default `dist/demo`, not committed). Each change the build makes to
 `public/index.html` is checked, so when the dashboard changes in a way the demo can't follow, the
 build stops with the edit that no longer applies. Rebuild and redeploy the landing page after
-dashboard changes: it's in rg-code/point-xfer, `minty-site/` (see its README).
+dashboard changes: it's in its own private repo, rg-code/minty-site (`node deploy.mjs` there; see its README).
