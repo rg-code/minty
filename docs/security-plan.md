@@ -1,6 +1,6 @@
 # Plan: security hardening after the 2026-10-14 review
 
-**Status: decisions made (2026-10-14, §2); step 1 in progress. To-do list: §4.** Written 2026-10-14.
+**Status: decisions made (2026-10-14, §2); step 1 done (2026-10-14); step 2 next. To-do list: §4.** Written 2026-10-14.
 
 An external review of `main` at 183d15b (API, pages, encryption, migrations, workflows, tests)
 found no unauthenticated path to financial data. Its main risks were how updates reach a
@@ -100,21 +100,31 @@ the pinned key.
 
 ## 4. To-do, in order
 
-1. **Settings and docs (no deploy risk).**
+1. **Settings and docs (no deploy risk).** Done 2026-10-14.
    - [x] Move household-specific notes to `docs/private/` (gitignored, kept in a private repo).
    - [x] Document the trust model (README, SETUP, CLAUDE.md) and prefer an Emails policy in SETUP.
-   - [ ] GitHub, `rg-code/minty`: a ruleset on `main` that requires a pull request and the
-         status check **Worker (vitest in workerd + typecheck)**, blocks force pushes and
-         deletion, with an empty bypass list. 2FA (or a passkey) on the account.
+   - [x] GitHub, `rg-code/minty`: a ruleset on `main` that requires a pull request and the
+         status check **Worker (vitest in workerd + typecheck)** (pinned to GitHub Actions), blocks
+         force pushes and deletion, with an empty bypass list. 2FA on the account.
+         GitHub adds `require_extra_approval_for_unattributed_changes` to the ruleset; if a PR
+         ever waits for an approval nobody can give, check that setting first.
    - [ ] Claude Code's Git credential: a fine-grained token for this repo only, Contents read
-         and write, no Workflows permission. The ruleset keeps it off `main`.
-   - [ ] Workers Builds → **Branch control**: turn off builds for non-production branches. PRs
-         are still checked by `test.yml`, which holds no Cloudflare credentials.
-   - [ ] Workers Builds → build token: replace with a custom API token limited to this account,
-         Workers Scripts Edit and D1 Edit. Confirm the next build still migrates and deploys.
-   - [ ] Access: replace the email-domain policy with an Emails policy listing each address;
-         shorten the application's session duration; require MFA if the sign-in method offers it.
-   - [ ] 2FA on Cloudflare and Plaid.
+         and write, no Workflows permission. Skipped for now (optional): the ruleset protects
+         `main` whatever credential is used.
+   - [x] Workers Builds: builds for preview branches turned off (**Settings → Builds → Previews
+         Base**). Production stays on `main` with `npm run deploy`. PRs are still checked by
+         `test.yml`, which holds no Cloudflare credentials. Never set the preview command to
+         `npm run deploy`: `scripts/deploy.mjs` doesn't check the branch, so it would migrate and
+         deploy production.
+   - [x] Workers Builds: the build token was the broad one created at import (Email Routing,
+         SSL, Workers Routes on every zone, and more). Narrowed in place to Workers Scripts Edit
+         and D1 Edit, this account only; the next production build migrated and deployed.
+   - [x] Access: an Emails policy listing each address replaces the email-domain policy, and
+         the application's session is shorter (SETUP suggests 24 hours).
+   - [x] Access: MFA on the owner's deployment. There's no simple version for forks: it's
+         several Zero Trust settings and a per-person enrollment that Minty can't automate
+         without a token that edits Access. SETUP keeps it optional.
+   - [x] 2FA on Cloudflare, Plaid, and the inbox that receives the sign-in codes.
 2. **Rate limits and the D1 budget** (§3), with `test/reads.test.ts` lines for anything new,
    plus a `/status` warning when `ALLOWED_LOGINS` is empty.
 3. **Link sessions** (§3, migration 0009).

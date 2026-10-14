@@ -46,7 +46,8 @@ there, gitignored here). If that folder exists, read it too.
 ## Recently done (2026-10-10 to 10-14)
 
 - **Security review (2026-10-14).** No unauthenticated path to financial data. Plan, decisions
-  and to-do: [security-plan.md](security-plan.md).
+  and to-do: [security-plan.md](security-plan.md). Step 1 done the same day: a ruleset on `main`,
+  preview builds off and a narrower build token, an Emails Access policy.
 - **Phones (#46):** the dashboard header no longer pins half the screen.
   - It scrolls away, and a small strip pinned to the top takes over: the coin (back to top), the
     current person, and icon buttons for search, tags, banks, cards and dates.
@@ -82,7 +83,8 @@ there, gitignored here). If that folder exists, read it too.
 
 ## To do, in order
 
-1. **Security plan, step 1** (settings, [security-plan.md](security-plan.md) §4), then steps 2–6.
+1. **Security plan, step 2** (rate limits and the D1 budget, [security-plan.md](security-plan.md)
+   §3–§4), then steps 3–6. Step 1 (settings and docs) was done 2026-10-14.
 2. **Quick checks on the live deployment** (the owner, in the dashboard):
    - **CPU:** **Worker → Metrics** for "Exceeded CPU", especially `/benefits` and the catch-up
      runs.
