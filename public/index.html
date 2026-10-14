@@ -291,6 +291,7 @@
      top takes over (setCompact below). The filters move into it as they are, shown as icon buttons
      whose menus open full width under the strip; the person switch opens as a list. */
   @media (max-width: 640px) { body > header { position: static; } }
+  @media (max-width: 640px) { body > header .seg { max-width: 100%; overflow-x: auto; scrollbar-width: none; } }   /* many people: it scrolls sideways */
   .ministrip { position: fixed; top: 0; left: 0; right: 0; z-index: 15; display: flex; align-items: center; gap: 6px;
                padding: calc(6px + env(safe-area-inset-top)) 8px 6px; background: var(--surface);
                border-bottom: 1px solid var(--hairline); box-shadow: 0 6px 16px -10px var(--shadow); animation: strip-in .16s ease-out; }

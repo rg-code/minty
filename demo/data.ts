@@ -7,6 +7,13 @@
 // Plaid sign convention: POSITIVE amount = money out. Amounts are integer cents.
 
 export interface DemoOwners { alex: string; sam: string }
+/** Four more people with one transaction each (the household's in-jokes): label, bank, account, transaction. */
+const CAMEOS: [string, string, [string, string, string, string, number], string, string, [number, number]][] = [
+  ["Kate", "Capital One", ["360 Checking", "6120", "depository", "checking", 1840.25], "WM Money Center", "GENERAL_SERVICES", [8, 60]],
+  ["Adam", "Wells Fargo", ["Everyday Checking", "4478", "depository", "checking", 3215.6], "PPK Call", "GENERAL_SERVICES", [15, 90]],
+  ["Andy", "Discover", ["Discover it Card", "8034", "credit", "credit card", 312.48], "HBFC Supplements", "GENERAL_MERCHANDISE", [25, 120]],
+  ["Maurice", "Bank of America", ["Customized Cash Rewards", "2957", "credit", "credit card", 527.1], "Bluz Cards Emes", "ENTERTAINMENT", [10, 75]],
+];
 export interface DemoData {
   users: string;                                    // the MINTY_USERS value
   items: Record<string, string | number | null>[];
@@ -36,27 +43,29 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   const tags: DemoData["tags"] = [], marks: DemoData["marks"] = [];
 
   // owner, credential set, bank, consent ends in (days), accounts: [name, last-4, type, subtype, balance]
-  const BANKS: [keyof DemoOwners, string, number | null, [string, string, string, string, number][]][] = [
+  const who = (k: string) => (k === "alex" || k === "sam" ? owners[k] : k);
+  const BANKS: [string, string, number | null, [string, string, string, string, number][]][] = [
     ["alex", "Chase", null, [["Total Checking", "0417", "depository", "checking", 8421.55],
                              ["Sapphire Preferred", "2208", "credit", "credit card", 1932.40]]],
     ["alex", "American Express", null, [["The Platinum Card®", "1009", "credit", "credit card", 2760.12]]],
     ["sam", "American Express", null, [["Business Gold Card", "3006", "credit", "credit card", 1184.03]]],
     ["sam", "Citi", null, [["Citi Strata Premier℠ Card", "5512", "credit", "credit card", 642.77]]],
     ["sam", "Ally Bank", 5, [["Online Savings", "7731", "depository", "savings", 24510.00]]],
+    ...CAMEOS.map(([label, bank, a]): [string, string, null, [string, string, string, string, number][]] => [label.toLowerCase(), bank, null, [a]]),
   ];
   const acct: Record<string, number> = {};
-  BANKS.forEach(([who, bank, consentDays, accts], i) => {
+  BANKS.forEach(([person, bank, consentDays, accts], i) => {
     const itemId = i + 1;
     items.push({
-      id: itemId, owner: owners[who], plaid_account: `${owners[who]}_primary`, plaid_item_id: `demo-item-${itemId}`,
+      id: itemId, owner: who(person), plaid_account: `${who(person)}_primary`, plaid_item_id: `demo-item-${itemId}`,
       access_token_enc: "demo-no-token", institution_name: bank, txn_cursor: "demo-cursor", status: "good",
       updated_at: nowIso(14 + i * 3), attempted_at: nowIso(14 + i * 3), checked_at: nowIso(90),
       consent_expires_at: consentDays == null ? null : new Date(now.getTime() + consentDays * 864e5).toISOString(),
     });
     accts.forEach(([name, mask, type, subtype, bal], j) => {
       const id = itemId * 10 + j;
-      acct[`${who}:${name}`] = id;
-      accounts.push({ id, owner: owners[who], item_id: itemId, plaid_account_id: `demo-acct-${id}`, name, mask, type, subtype,
+      acct[`${person}:${name}`] = id;
+      accounts.push({ id, owner: who(person), item_id: itemId, plaid_account_id: `demo-acct-${id}`, name, mask, type, subtype,
                       balance_current_cents: cents(bal), balance_available_cents: type === "credit" ? null : cents(bal), currency: "USD" });
     });
   });
@@ -192,7 +201,24 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
     }
   }
 
-  return { users: `${owners.alex}:Alex,${owners.sam}:Sam`, items, accounts, transactions, tags, marks };
+  // The cameos: one transaction each, in the last two weeks.
+  for (const [label, , [name], txn, category, [lo, hi]] of CAMEOS) {
+    add(acct[`${label.toLowerCase()}:${name}`], daysAgo(2 + Math.floor(rand() * 12)), between(lo, hi), txn, txn, category);
+  }
+
+  const users = [`${owners.alex}:Alex`, `${owners.sam}:Sam`, ...CAMEOS.map(([label]) => `${label.toLowerCase()}:${label}`)].join(",");
+  return { users, items, accounts, transactions, tags, marks };
+}
+
+/** The Worker settings the demo runs with: its people, and placeholder Plaid keys for each, so no
+ * bank shows as "has no Plaid keys". The keys are never used: the demo never calls Plaid. */
+export function demoEnv(d: DemoData): Record<string, string> {
+  const env: Record<string, string> = { MINTY_USERS: d.users };
+  for (const u of d.users.split(",")) {
+    const k = u.split(":")[0].toUpperCase();
+    env[`PLAID_CLIENT_ID_${k}_PRIMARY`] = env[`PLAID_SECRET_${k}_PRIMARY`] = "demo-not-a-key";
+  }
+  return env;
 }
 
 /** INSERT statements (SQL with ? placeholders, values) for the data, parents first. */

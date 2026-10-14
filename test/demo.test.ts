@@ -1,13 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
-import { generate, statements } from "../demo/data";
+import { demoEnv, generate, statements } from "../demo/data";
 import { getJson } from "./helpers";
 
 // The live demo's made-up household (demo/data.ts), loaded into the real local D1 and read back
-// through the real routes, as the demo does in the browser. Owners are mapped to this test
-// config's people (me, spouse).
+// through the real routes with the demo's own settings (its people and placeholder keys), as the
+// demo does in the browser.
 
-const data = generate(new Date(), { alex: "me", sam: "spouse" });
+const data = generate(new Date());
+const envOverrides = demoEnv(data) as any;
 
 beforeAll(async () => {
   const db = env.DB;
@@ -24,16 +25,24 @@ describe("demo data", () => {
     const names = data.transactions.map((t) => `${t.name} ${t.merchant_name ?? ""}`).join("\n");
     expect(names).not.toMatch(/\d{5,}/);                                       // no long numbers in descriptions
     expect(new Set(data.transactions.map((t) => t.account_owner).filter(Boolean))).toEqual(new Set(["ALEX MORGAN", "SAM MORGAN"]));
-    expect(data.users).toBe("me:Alex,spouse:Sam");
+    expect(data.users).toBe("alex:Alex,sam:Sam,kate:Kate,adam:Adam,andy:Andy,maurice:Maurice");
   });
 
-  it("stays small (about 500 transactions), so the demo starts fast", () => {
+  it("stays small (at most 500 transactions), so the demo starts fast", () => {
     expect(data.transactions.length).toBeGreaterThan(400);
-    expect(data.transactions.length).toBeLessThan(600);
+    expect(data.transactions.length).toBeLessThanOrEqual(500);
+  });
+
+  it("gives Kate, Adam, Andy and Maurice one transaction each", () => {
+    const first = (owner: string) => data.transactions.filter((t) => t.owner === owner).map((t) => t.name);
+    expect(first("kate")).toEqual(["WM Money Center"]);
+    expect(first("adam")).toEqual(["PPK Call"]);
+    expect(first("andy")).toEqual(["HBFC Supplements"]);
+    expect(first("maurice")).toEqual(["Bluz Cards Emes"]);
   });
 
   it("is the same for the same day", () => {
-    const again = generate(new Date(), { alex: "me", sam: "spouse" });
+    const again = generate(new Date());
     expect(JSON.stringify(again.transactions.map((t) => [t.date, t.amount_cents, t.name]))).toBe(
       JSON.stringify(data.transactions.map((t) => [t.date, t.amount_cents, t.name])));
   });
@@ -46,10 +55,10 @@ describe("demo data", () => {
 
 describe("demo data through the real routes", () => {
   it("lists the transactions and one bank whose access is about to end", async () => {
-    const tx = await getJson<unknown[]>("/transactions");
+    const tx = await getJson<unknown[]>("/transactions", { envOverrides });
     expect(tx.status).toBe(200);
     expect(tx.body.length).toBeGreaterThan(100);
-    const health = await getJson<{ sync: { ok: boolean }; banks: { institution_name: string; health: { state: string } }[] }>("/health");
+    const health = await getJson<{ sync: { ok: boolean }; banks: { institution_name: string; health: { state: string } }[] }>("/health", { envOverrides });
     expect(health.status).toBe(200);
     expect(health.body.sync.ok).toBe(true);
     const states = health.body.banks.map((b) => `${b.institution_name}:${b.health.state}`);
@@ -58,7 +67,7 @@ describe("demo data through the real routes", () => {
   });
 
   it("gives ABC used, open and tick-box credits on all three tracked cards", async () => {
-    const { status, body } = await getJson<any>("/benefits");
+    const { status, body } = await getJson<any>("/benefits", { envOverrides });
     expect(status).toBe(200);
     const byProduct = new Map(body.cards.filter((c: any) => c.product).map((c: any) => [c.product.id, c]));
     expect([...byProduct.keys()].sort()).toEqual(["amex_business_gold", "amex_platinum", "citi_strata_premier"]);

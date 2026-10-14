@@ -24,7 +24,8 @@ Plaid is never called, and everything resets on reload.
 
 ## The data
 
-`demo/data.ts`: a made-up household, Alex and Sam, generated in the browser relative to the
+`demo/data.ts`: a made-up household, Alex and Sam (plus Kate, Adam, Andy and Maurice, with one
+transaction each), generated in the browser relative to the
 visitor's date (the same for a given day). About 500 transactions, kept small so the demo starts
 fast: everyday spending, bills and pay for the last 160 days, and card credits back to last
 January 1, planted so ABC shows used, partly used,
