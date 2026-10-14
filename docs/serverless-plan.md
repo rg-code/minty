@@ -181,8 +181,8 @@ GitHub Actions runs **only tests** on pull requests. That's a normal CI use, all
   Python app. `SETUP.md`'s "moving from the Docker version" note stays for anyone who did
   run it.
 - **2026-10-10: a history download that spans runs must restart from where it began.**
-  - *The problem:* in production, Wells Fargo and Citi stopped after their first page (at link
-    time) and Amex after ~9 pages of re-downloaded history, all still marked `good`. Plaid's data
+  - *The problem:* in production, two banks stopped after their first page (at link time) and a
+    third after ~9 pages of re-downloaded history, all still marked `good`. Plaid's data
     changed between runs (`TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION`), and Plaid says to
     restart the whole update from its first cursor. Sync retried from that run's cursor instead,
     which fails every time. Each stuck bank also spent 3 of the run's 10 calls, so the five

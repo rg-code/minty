@@ -11,7 +11,9 @@ Anyone can fork it and run their own copy on Cloudflare's free plans. It's sourc
 PolyForm Strict 1.0.0 (`LICENSE`): use unmodified, noncommercial only; no changes or redistribution.
 Goals: full data ownership, no subscription fees, no public endpoints.
 
-**Current status and to-do: `docs/STATUS.md`. Read it first when resuming work.**
+**Current status and to-do: `docs/STATUS.md`. Read it first when resuming work.** If
+`docs/private/STATUS.md` exists (the owner's private notes, gitignored), read it too.
+Security work: `docs/security-plan.md` (decisions and to-do).
 Design history and decisions: `docs/serverless-plan.md`.
 
 ## Stack
@@ -53,6 +55,10 @@ Design history and decisions: `docs/serverless-plan.md`.
   `last_error_message`), and `src/health.ts` turns it into the one verdict the dashboard's
   status strip (`/health`) and Setup checks (`/status`) both show. New failure modes get a
   plain-words entry in its `MEANING` table.
+- Trust model: every login that passes Access and `ALLOWED_LOGINS` is fully trusted with the
+  whole household (all people's data, linking and reconnecting banks). `owner` is a view filter,
+  not an access boundary. Decided 2026-10-14 (`docs/security-plan.md` §2); don't add roles
+  without asking.
 - Auth: Cloudflare Access guards the hostname; every API route also re-validates the
   Access JWT (`src/access.ts`) and applies the optional `ALLOWED_LOGINS` allow-list.
   **Missing `ACCESS_TEAM_DOMAIN` / `ACCESS_AUD` means everything is refused.** `/healthz`
@@ -133,6 +139,9 @@ Design history and decisions: `docs/serverless-plan.md`.
   Plaid Sandbox to production.
 - Never read or modify `.dev.vars` or any secrets file. Never commit secrets or
   household-specific values (emails, Access team/AUD, workers.dev address) to this public repo.
+  That includes notes about the household's data: bank or card names, counts of banks,
+  accounts or transactions, consent dates, Access policy details. Those go in
+  `docs/private/STATUS.md`; public docs say "a bank", "several accounts".
   If a new setting is needed, add a placeholder to `.dev.vars.example` (secrets) or the
   `wrangler.jsonc` header comment (variables) and tell me.
 - Develop and test against Plaid Sandbox credentials, not live Items.

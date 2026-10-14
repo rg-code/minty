@@ -57,6 +57,10 @@ the secret names to add in the Cloudflare dashboard.
 > The clean alternative is one paid Plaid account per person (no cap). Your call.
 
 ## Security model
+- **Every login you admit is fully trusted.** Anyone who passes Access (and `ALLOWED_LOGINS`)
+  can see every person's banks and transactions, change tags and card settings, and link or
+  reconnect banks. The person switch is a view, not a permission. Admit only people you'd hand
+  your whole household's finances to.
 - **Cloudflare Access** decides who can sign in to the hostname at all.
 - **The Worker re-checks the Access token** on every API request, and optionally an
   `ALLOWED_LOGINS` allow-list. If `ACCESS_TEAM_DOMAIN` or `ACCESS_AUD` is missing, every API
