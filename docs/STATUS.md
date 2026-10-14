@@ -30,7 +30,7 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
     checks flag them.
 - **For friends:**
   - **Landing page:** https://minty.milesmaximizer.com, also reached via
-    `milesmaximizer.com/minty/`. Code: rg-code/point-xfer `minty-site/`, a Cloudflare Pages
+    `milesmaximizer.com/minty/`. Code: rg-code/minty-site (private), a Cloudflare Pages
     project published with `node deploy.mjs`.
   - **On the landing page:** Get started opens [GET-STARTED.md](../GET-STARTED.md) in a side
     panel; Try the live demo runs the demo; plus fork, ZIP and clone links, share buttons and
@@ -62,8 +62,8 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
   - **What it is:** the real dashboard and Worker in the browser over sql.js. About 500 made-up
     transactions, a working ABC, and a coming-soon "AI connector" dialog.
   - **Speed:** about 0.8 s from click to transactions.
-  - **Upkeep:** rebuilt and published with the landing page (`node deploy.mjs` in point-xfer
-    `minty-site/`).
+  - **Upkeep:** rebuilt and published with the landing page (`node deploy.mjs` in
+    rg-code/minty-site).
 
 ## To do, in order
 
@@ -89,7 +89,7 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
    its decisions were made 2026-10-06. **Next: A0** (§8.1). It needs the owner's go-ahead plus an
    OpenRouter key (training off) and a Workers AI token in `.dev.vars`.
 5. **Landing page and demo upkeep:**
-   - After dashboard changes, run `node deploy.mjs` from `point-xfer/minty-site/` so the demo
+   - After dashboard changes, run `node deploy.mjs` in rg-code/minty-site so the demo
      follows. A dashboard change the demo can't follow stops the build, by design.
    - Check that the first Monday run of **Stay up to date** on a friend's fork (2026-10-19)
      passes.
@@ -132,4 +132,4 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 - **Cloudflare CLI** (optional; the dashboard is enough): `npx wrangler login`.
 - **Temporary QA accounts:** `npx wrangler deploy --temporary` works for Workers + D1. It can't
   run cron or migrations there. See serverless-plan.md §8.
-- **The landing page** needs point-xfer next to this repo: `cd ../point-xfer/minty-site && node deploy.mjs`.
+- **The landing page** is rg-code/minty-site (private), checked out next to this repo: `cd ../minty-site && node deploy.mjs`.
