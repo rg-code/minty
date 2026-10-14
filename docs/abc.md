@@ -49,8 +49,8 @@ open. It's checked against the statement credits in the transactions. Built 2026
     string matching. The patterns are inlined as one balanced expression of `CASE … LIKE …`
     terms.
   - The first version joined a `json_each` list of patterns instead. That read every transaction
-    once per pattern: **463,000 rows a request**, which used up the day's 5,000,000 in about ten
-    opens (2026-10-12).
+    once per pattern: **hundreds of thousands of rows a request**, which used up the day's
+    5,000,000 in a handful of opens (2026-10-12).
   - A chain of 100+ `OR`s or `||`s hits SQLite's expression-depth limit of 100, hence the
     balanced tree.
   - Each card's first transaction is one read on `idx_txn_account_date`.

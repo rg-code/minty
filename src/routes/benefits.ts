@@ -12,7 +12,7 @@ import { type CardRow, MERCHANT_HIT, type TxnRow, allPatterns, compute, periodSt
 // each row with the patterns it matched (see TxnRow.hits), so the Worker does no string matching
 // either (on a cold isolate that would use up its 10 ms of CPU). The patterns are inlined as one
 // balanced expression: they're code, not input. Joining a json_each list of patterns instead
-// reads every transaction once per pattern (463,000 rows a request on a real household), and a
+// reads every transaction once per pattern (hundreds of thousands of rows a request), and a
 // chain of 100+ ORs or ||s exceeds SQLite's expression-depth limit of 100.
 
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;

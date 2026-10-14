@@ -9,8 +9,8 @@ import { vi } from "vitest";
 import { pruneReadCounts, readsToday } from "../src/limits";
 
 // D1 bills rows read: the free plan allows 5,000,000 a day, and one slow query used them up
-// (ABC's first version read ~463,000 rows per request). Every page-facing route gets a budget
-// here, measured on a made-up household the size of a real one (~7,000 transactions).
+// (ABC's first version read hundreds of thousands of rows per request). Every page-facing route
+// gets a budget here, measured on a large made-up household.
 
 const TXNS = 7000;
 
@@ -45,7 +45,8 @@ async function readsOf(path: string, init: RequestInit = {}) {
 beforeAll(async () => {
   const db = env.DB;
   await db.batch(["benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
-  const banks = ["American Express", "Citibank Online", "U.S. Bank", "Bank of America", "Wells Fargo", "Barclays - Cards", "Navy Federal Credit Union", "Taekus"];
+  // The first three are banks ABC's catalog recognises (src/benefits/catalog.ts); the rest are made up.
+  const banks = ["American Express", "Citibank Online", "U.S. Bank", "Example Bank A", "Example Bank B", "Example Bank C", "Example Bank D", "Example Bank E"];
   await db.batch(banks.map((b, i) => db.prepare(
     `INSERT INTO items (id, owner, plaid_account, plaid_item_id, access_token_enc, institution_name, txn_cursor, status, updated_at)
      VALUES (?, 'me', 'me_primary', ?, 'x', ?, 'c', 'good', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`).bind(i + 1, `item-${i}`, b)));
@@ -60,7 +61,7 @@ beforeAll(async () => {
     const name = merchants[n % merchants.length];
     const date = new Date(Date.UTC(2024, 9, 1) + n * 9 * 3.6e6).toISOString().slice(0, 10);
     return [1 + (n % names.length), `t${n}`, name.includes("Credit") ? -2000 : 1000 + (n % 7000), date, name, n % 3 ? name : null,
-            // card members only on the Amex accounts, as in real data
+            // card members only on the Amex accounts, as Plaid sends them
             (n % names.length) < 6 && n % 3 === 0 ? `MEMBER ${n % 4}` : null];
   });
   for (let i = 0; i < rows.length; i += 400) {
@@ -74,7 +75,7 @@ beforeAll(async () => {
 
 describe("D1 rows read per request (budgets)", () => {
   it.each([
-    ["/benefits", 3000],                 // only the tracked cards' rows, once each (was ~463,000 on a real household)
+    ["/benefits", 3000],                 // only the tracked cards' rows, once each (the first version read every row once per pattern)
     ["/health", 100],
     ["/items", 100],
     ["/transactions", 2500],             // newest 500, via the date index
