@@ -214,3 +214,30 @@ describe("connect page Link sessions (docs/security-plan.md, step 3)", () => {
   });
 });
 
+describe("device lock (public/lock.js)", () => {
+  it.each(["/", "/connect", "/add-user"])("%s loads the lock render-blocking at the end of <head>, after the page's colours", async (path) => {
+    const { html } = await page(path);
+    expect(html).toContain('<link rel="stylesheet" href="/lock.css" />\n<script src="/lock.js"></script>\n</head>');
+    expect(html.indexOf("/lock.js")).toBeGreaterThan(html.indexOf("</style>"));
+  });
+
+  it("is served, on by default where the device can do it, and never talks to the Worker", async () => {
+    const js = await page("/lock.js");
+    expect(js.status).toBe(200);
+    expect(js.html).toContain("isUserVerifyingPlatformAuthenticatorAvailable");      // no authenticator: never locked
+    expect(js.html).toContain('userVerification: "required"');
+    expect(js.html).toContain('show(st && st.state === "on" ? "unlock" : "setup")');   // unset = offer it
+    expect(js.html).not.toMatch(/fetch\(|XMLHttpRequest|sendBeacon/);
+    const css = await page("/lock.css");
+    expect(css.html).toContain("html.minty-locked body > *:not(#minty-lock) { visibility: hidden !important; }");
+  });
+
+  it("is in the service worker's shell and shown in Setup checks", async () => {
+    expect((await page("/sw.js")).html).toContain('"/lock.js", "/lock.css"');
+    const { html } = await page("/add-user");
+    expect(html).toContain('id="lockState"');
+    expect(html).toContain("MintyLock.turnOff()");
+    // The live demo strips it: scripts/build-demo.mjs edit "no device lock" (the build stops if it no longer applies).
+  });
+});
+
