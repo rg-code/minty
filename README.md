@@ -7,7 +7,7 @@
 
 # Minty — a personal transaction aggregator
 
-**Want your own? Start here: [GET-STARTED.md](GET-STARTED.md)** (about 30 minutes, free, all in a browser).
+**Want your own? Start here: [GET-STARTED.md](GET-STARTED.md)** (about 10 minutes, free, all in a browser).
 
 **See it first:** the [live demo](https://minty.milesmaximizer.com/#demo) runs Minty with made-up data, in your browser ([how](docs/demo.md)).
 
