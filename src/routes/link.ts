@@ -1,7 +1,7 @@
 import type { Env } from "../env";
 import { type Config, ConfigError, credsFor, isConfigured, secretNames } from "../config";
 import { FernetError, fernetDecrypt, fernetEncrypt } from "../fernet";
-import { HttpError, json, unprocessable } from "../http";
+import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { plaidPost } from "../plaid";
 import { type ItemRow, checkItem, syncItem } from "../sync";
 import { BANK_ROWS_SQL, type BankRow, bankHealth } from "../health";
@@ -17,9 +17,11 @@ const HISTORY_DAYS = 730;            // ask for up to 24 months (Plaid's default
 
 async function body(request: Request): Promise<Record<string, unknown>> {
   try {
-    const b = await request.json();
+    const b = await jsonBody(request);
     if (b && typeof b === "object" && !Array.isArray(b)) return b as Record<string, unknown>;
-  } catch { /* fall through */ }
+  } catch (e) {
+    if (e instanceof HttpError) throw e;          // too large
+  }
   throw unprocessable("body must be a JSON object");
 }
 

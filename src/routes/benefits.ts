@@ -1,5 +1,5 @@
 import type { Env } from "../env";
-import { HttpError, intParam, json, unprocessable } from "../http";
+import { HttpError, intParam, json, jsonBody, unprocessable } from "../http";
 import { CHECKED, NOT_TRACKED, PRODUCTS, productById } from "../benefits/catalog";
 import { type CardRow, MERCHANT_HIT, type TxnRow, allPatterns, compute, periodStart, productFor, scope, tag } from "../benefits/engine";
 
@@ -84,9 +84,11 @@ export async function benefits(env: Env, url: URL): Promise<Response> {
 
 async function body(request: Request): Promise<Record<string, unknown>> {
   try {
-    const b = await request.json();
+    const b = await jsonBody(request);
     if (b && typeof b === "object" && !Array.isArray(b)) return b as Record<string, unknown>;
-  } catch { /* fall through */ }
+  } catch (e) {
+    if (e instanceof HttpError) throw e;          // too large
+  }
   throw unprocessable("body must be a JSON object");
 }
 

@@ -24,6 +24,10 @@ export default defineConfig(async () => {
             PLAID_CLIENT_ID_SPOUSE_PRIMARY: "cid_spouse_primary",
             PLAID_SECRET_SPOUSE_PRIMARY: "secret_spouse_primary",
           },
+          // The real rate limiting bindings, with limits no test reaches (every test signs in as the
+          // same login). test/limits.test.ts checks refusals with its own limiters.
+          ratelimits: Object.fromEntries([["RL_GENERAL", "714101"], ["RL_SEARCH", "714102"], ["RL_LINK", "714103"]]
+            .map(([name, namespace_id]) => [name, { namespace_id, simple: { limit: 1_000_000, period: 60 as const } }])),
         },
       }),
     ],

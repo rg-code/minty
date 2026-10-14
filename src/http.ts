@@ -5,14 +5,45 @@ export class HttpError extends Error {
   }
 }
 
-export function json(body: unknown, status = 200): Response {
+export function json(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json", "cache-control": "no-store" },
+    headers: { "content-type": "application/json", "cache-control": "no-store", ...headers },
   });
 }
 
 export const unprocessable = (detail: string) => new HttpError(422, detail);
+
+/** Request bodies are small JSON objects (the largest, 50 tags, is ~3.5 KB). Anything bigger is
+ * refused before it's read into memory or parsed. */
+export const MAX_BODY_BYTES = 16 * 1024;
+export const bodyTooLarge = () => new HttpError(413, `request body too large (at most ${MAX_BODY_BYTES / 1024} KiB)`);
+
+/** The request's JSON body, read up to MAX_BODY_BYTES (also when no Content-Length is sent).
+ * Throws HttpError 413 past that, or the parse error for a body that isn't JSON, like
+ * request.json() did. */
+export async function jsonBody(request: Request): Promise<unknown> {
+  if (Number(request.headers.get("content-length")) > MAX_BODY_BYTES) throw bodyTooLarge();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (request.body) {
+    const reader = request.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BODY_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw bodyTooLarge();
+      }
+      chunks.push(value);
+    }
+  }
+  const bytes = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) { bytes.set(c, at); at += c.byteLength; }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
 
 /** Optional integer query param; 422 if present but not an integer in [min, max]. */
 export function intParam(url: URL, name: string, opts: { def?: number; min?: number; max?: number } = {}): number | undefined {
