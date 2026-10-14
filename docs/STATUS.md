@@ -47,7 +47,7 @@ there, gitignored here). If that folder exists, read it too.
 
 - **Security review (2026-10-14).** No unauthenticated path to financial data. Plan, decisions
   and to-do: [security-plan.md](security-plan.md). Step 1 done the same day: a ruleset on `main`,
-  preview builds off and a narrower build token, an Emails Access policy with MFA.
+  preview builds off and a narrower build token, an Emails Access policy.
 - **Phones (#46):** the dashboard header no longer pins half the screen.
   - It scrolls away, and a small strip pinned to the top takes over: the coin (back to top), the
     current person, and icon buttons for search, tags, banks, cards and dates.

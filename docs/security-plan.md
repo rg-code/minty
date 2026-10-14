@@ -121,12 +121,9 @@ the pinned key.
          and D1 Edit, this account only; the next production build migrated and deployed.
    - [x] Access: an Emails policy listing each address replaces the email-domain policy, and
          the application's session is shorter (SETUP suggests 24 hours).
-   - [x] Access: MFA. One-time PIN is a single factor, and Access can't enforce IdP MFA with
-         GitHub or consumer Google, so this uses Access's **Independent MFA**: allowed under
-         **Access controls → Access settings**, enrolled at `<team>.cloudflareaccess.com/AddMfaDevice`
-         (the App Launcher must be on, with the app shown in it), then required on the
-         application. Enroll before requiring it, or the app locks you out (the dashboard can undo
-         it), and enroll a second device as a backup.
+   - [x] Access: MFA on the owner's deployment. There's no simple version for forks: it's
+         several Zero Trust settings and a per-person enrollment that Minty can't automate
+         without a token that edits Access. SETUP keeps it optional.
    - [x] 2FA on Cloudflare, Plaid, and the inbox that receives the sign-in codes.
 2. **Rate limits and the D1 budget** (§3), with `test/reads.test.ts` lines for anything new,
    plus a `/status` warning when `ALLOWED_LOGINS` is empty.
