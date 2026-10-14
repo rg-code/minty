@@ -189,10 +189,10 @@ describe("items, accounts, capacity", () => {
 
   it("reports every slot's usage against the cap", async () => {
     expect((await getJson("/capacity")).body).toEqual({
-      me: [{ account: "me_primary", slot: "primary", used: 1, cap: 10, configured: true },
-           { account: "me_backup", slot: "backup", used: 0, cap: 10, configured: true }],
-      spouse: [{ account: "spouse_primary", slot: "primary", used: 1, cap: 10, configured: true },
-               { account: "spouse_backup", slot: "backup", used: 0, cap: 10, configured: false }],
+      me: [{ account: "me_primary", slot: "primary", used: 1, reserved: 0, cap: 10, configured: true },
+           { account: "me_backup", slot: "backup", used: 0, reserved: 0, cap: 10, configured: true }],
+      spouse: [{ account: "spouse_primary", slot: "primary", used: 1, reserved: 0, cap: 10, configured: true },
+               { account: "spouse_backup", slot: "backup", used: 0, reserved: 0, cap: 10, configured: false }],
     });
   });
 

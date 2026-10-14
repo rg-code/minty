@@ -200,3 +200,17 @@ describe("limits on the dashboard (docs/security-plan.md, step 2)", () => {
     expect(html).toContain('notice(d.detail || "Too many requests. Wait a minute and try again.");');
   });
 });
+
+describe("connect page Link sessions (docs/security-plan.md, step 3)", () => {
+  it("keeps one entry per session, sends only the session to /link/exchange, and cancels on exit", async () => {
+    const { html } = await page("/connect");
+    expect(html).toContain('const LINK_PREFIX = "minty_link:", TAB_KEY = "minty_link_tab";');
+    expect(html).toContain("body: JSON.stringify({ session_id: entry.id, public_token, institution_name: metadata?.institution?.name ?? null })");
+    expect(html).toContain('fetch("/link/cancel"');
+    expect(html).toContain("if (!finished) cancelSession(entry);");
+    expect(html).toContain("const resumable = linkStore.resume();");              // OAuth return, and expired entries swept
+    expect(html).not.toMatch(/localStorage\.setItem\("plaid_link_/);            // the old shared keys are only removed
+    expect(html).not.toMatch(/owner: forOwner|plaid_account: plaidAccount/);
+  });
+});
+

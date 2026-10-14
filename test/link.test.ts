@@ -13,7 +13,7 @@ const KEY = E.TOKEN_ENC_KEY!;
 let plaid: FakePlaid;
 
 async function wipe() {
-  await env.DB.batch(["transaction_tags", "transactions", "accounts", "items"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
+  await env.DB.batch(["transaction_tags", "transactions", "accounts", "items", "link_sessions"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
 }
 
 /** n Items on a credential set (to fill it up to the cap). */
@@ -26,6 +26,16 @@ async function addItems(plaidAccount: string, owner: string, n: number) {
 
 const post = (path: string, body: unknown, envOverrides?: Partial<Env>) =>
   call(path, { method: "POST", body: JSON.stringify(body), envOverrides });
+
+/** An open Link session, as POST /link/token leaves it (for exchange tests that need a given slot). */
+async function openSession(owner: string, plaidAccount: string, email = "me@example.com"): Promise<string> {
+  const id = `s-${crypto.randomUUID()}`;
+  await env.DB.prepare(
+    "INSERT INTO link_sessions (id, email, operation, owner, plaid_account, expires_at) VALUES (?, ?, 'link', ?, ?, ?)",
+  ).bind(id, email, owner, plaidAccount, new Date(Date.now() + 30 * 60_000).toISOString()).run();
+  return id;
+}
+const SESSION = { session_id: expect.any(String), expires_at: expect.any(String) };
 
 beforeEach(async () => { await wipe(); plaid = new FakePlaid().install(); });
 afterEach(() => { vi.restoreAllMocks(); });
@@ -80,15 +90,15 @@ describe("choose_account_for", () => {
       await addItems("me_backup", "me", 10);
       const r = await post("/link/token", { owner: "me" }, { PLAID_SLOTS: three.PLAID_SLOTS,
         PLAID_CLIENT_ID_ME_EXTRA1: three.PLAID_CLIENT_ID_ME_EXTRA1, PLAID_SECRET_ME_EXTRA1: three.PLAID_SECRET_ME_EXTRA1 });
-      expect(await r.json()).toEqual({ link_token: "link-sandbox-abc", plaid_account: "me_extra1" });
+      expect(await r.json()).toEqual({ link_token: "link-sandbox-abc", plaid_account: "me_extra1", ...SESSION });
       expect([plaid.calls[0].clientId, plaid.calls[0].secret]).toEqual(["cid_me_extra1", "secret_me_extra1"]);
     });
 
     it("exchanges onto a third slot and rejects slots that aren't configured in PLAID_SLOTS", async () => {
       plaid.syncPages.push(page("c1", false));
       const env3 = { PLAID_SLOTS: three.PLAID_SLOTS, PLAID_CLIENT_ID_ME_EXTRA1: "c", PLAID_SECRET_ME_EXTRA1: "s" };
-      expect((await post("/link/exchange", { owner: "me", plaid_account: "me_extra1", public_token: "p" }, env3)).status).toBe(200);
-      expect((await post("/link/exchange", { owner: "me", plaid_account: "me_extra2", public_token: "p" }, env3)).status).toBe(400);
+      expect((await post("/link/exchange", { session_id: await openSession("me", "me_extra1"), public_token: "p" }, env3)).status).toBe(200);
+      expect((await post("/link/exchange", { session_id: await openSession("me", "me_extra2"), public_token: "p" }, env3)).status).toBe(400);
     });
   });
 });
@@ -103,7 +113,7 @@ describe("POST /link/token", () => {
     await addItems("me_primary", "me", 10);
     const r = await post("/link/token", { owner: "me" });
     expect(r.status).toBe(200);
-    expect(await r.json()).toEqual({ link_token: "link-sandbox-abc", plaid_account: "me_backup" });
+    expect(await r.json()).toEqual({ link_token: "link-sandbox-abc", plaid_account: "me_backup", ...SESSION });
     const [c] = plaid.calls;
     expect(c.path).toBe("/link/token/create");
     expect([c.clientId, c.secret]).toEqual(["cid_me_backup", "secret_me_backup"]);
@@ -134,21 +144,23 @@ describe("POST /link/token", () => {
 });
 
 describe("POST /link/exchange", () => {
+  // owner and plaid_account come from the Link session now; a session holding a bad pair (a slot or
+  // person removed since) is still refused before Plaid.
   it.each([
-    { owner: "me", plaid_account: "me_overflow2", public_token: "p" },      // unknown account
-    { owner: "me", plaid_account: "spouse_primary", public_token: "p" },    // owner mismatch
+    { owner: "me", plaid_account: "me_overflow2" },      // unknown account
+    { owner: "me", plaid_account: "spouse_primary" },    // owner mismatch
   ])("rejects bad owner/account pairs without calling Plaid: %j", async (b) => {
-    expect((await post("/link/exchange", b)).status).toBe(400);
+    expect((await post("/link/exchange", { session_id: await openSession(b.owner, b.plaid_account), public_token: "p" })).status).toBe(400);
     expect(plaid.calls).toEqual([]);
   });
 
   it("422s a missing public_token", async () => {
-    expect((await post("/link/exchange", { owner: "me", plaid_account: "me_primary" })).status).toBe(422);
+    expect((await post("/link/exchange", { session_id: await openSession("me", "me_primary") })).status).toBe(422);
   });
 
   it("stores the token encrypted, then backfills in the background", async () => {
     plaid.syncPages.push(page("c1", false, { accounts: [account("a1")], added: [txn("t1", "a1")] }));
-    const r = await post("/link/exchange", { owner: "me", plaid_account: "me_backup", public_token: "public-sandbox-1", institution_name: "Chase" });
+    const r = await post("/link/exchange", { session_id: await openSession("me", "me_backup"), public_token: "public-sandbox-1", institution_name: "Chase" });
     const text = await r.text();
     expect(r.status).toBe(200);
     expect(JSON.parse(text)).toMatchObject({ plaid_account: "me_backup", status: "good" });
@@ -167,9 +179,9 @@ describe("POST /link/exchange", () => {
 
   it("re-linking the same Item refreshes its token instead of duplicating it", async () => {
     plaid.syncPages.push(page("c1", false), page("c2", false));
-    await post("/link/exchange", { owner: "me", plaid_account: "me_primary", public_token: "p1", institution_name: "Chase" });
+    await post("/link/exchange", { session_id: await openSession("me", "me_primary"), public_token: "p1", institution_name: "Chase" });
     plaid.replies["/item/public_token/exchange"] = { body: { access_token: "access-sandbox-new", item_id: "plaid-item-1" } };
-    await post("/link/exchange", { owner: "me", plaid_account: "me_primary", public_token: "p2" });
+    await post("/link/exchange", { session_id: await openSession("me", "me_primary"), public_token: "p2" });
     const { results } = await env.DB.prepare("SELECT * FROM items").all<any>();
     expect(results).toHaveLength(1);
     expect(results[0].institution_name).toBe("Chase");                          // kept when not re-sent
@@ -178,7 +190,7 @@ describe("POST /link/exchange", () => {
 
   it("explains a missing TOKEN_ENC_KEY before calling Plaid", async () => {
     const { status, body } = await getJson("/link/exchange", {
-      method: "POST", body: JSON.stringify({ owner: "me", plaid_account: "me_primary", public_token: "p" }),
+      method: "POST", body: JSON.stringify({ session_id: await openSession("me", "me_primary"), public_token: "p" }),
       envOverrides: { TOKEN_ENC_KEY: "" },
     });
     expect(status).toBe(500);
@@ -210,7 +222,7 @@ describe("POST /link/token/update", () => {
     const r = await post("/link/token/update", { item_id: id });
     const text = await r.text();
     expect(r.status).toBe(200);
-    expect(JSON.parse(text)).toEqual({ link_token: "link-sandbox-abc", plaid_account: "me_backup" });
+    expect(JSON.parse(text)).toEqual({ link_token: "link-sandbox-abc", plaid_account: "me_backup", ...SESSION });
     const [c] = plaid.calls;
     expect(c.clientId).toBe("cid_me_backup");
     expect(c.body.access_token).toBe("access-sandbox-secret");

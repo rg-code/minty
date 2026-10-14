@@ -125,3 +125,22 @@ describe("D1 rows read by the read budget (src/limits.ts)", () => {
     expect(prune.tally.rows).toBeLessThanOrEqual(20);
   });
 });
+
+describe("D1 rows read by Link sessions (src/routes/link.ts)", () => {
+  it("reserving a slot and cancelling stay small", async () => {
+    const plaid = new FakePlaid().install();
+    try {
+      const reserve = counting(env.DB);
+      const r = await call("/link/token", { method: "POST", body: JSON.stringify({ owner: "me" }), envOverrides: { DB: reserve.db } as Partial<Env> });
+      expect(r.status).toBe(200);
+      expect(reserve.tally.rows).toBeLessThanOrEqual(100);
+      const { session_id } = await r.json() as { session_id: string };
+      const cancel = counting(env.DB);
+      await call("/link/cancel", { method: "POST", body: JSON.stringify({ session_id }), envOverrides: { DB: cancel.db } as Partial<Env> });
+      expect(cancel.tally.rows).toBeLessThanOrEqual(20);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});
+

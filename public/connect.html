@@ -108,6 +108,49 @@ const statusEl = document.getElementById("status");
 const connectBtn = document.getElementById("connect");
 
 function setStatus(msg, kind="") { statusEl.textContent = msg; statusEl.className = "status " + kind; }
+// The API's own words for a refusal ({"detail": ...}), else the status code.
+const why = async res => { try { return (await res.json()).detail || res.status; } catch { return res.status; } };
+
+// Link sessions (src/routes/link.ts): one localStorage entry each, minty_link:<session_id> =
+// {id, token, mode: "link" | "update", item, expires}, so a bank's OAuth redirect can resume it;
+// sessionStorage remembers which one is this tab's. Cleared on success, exit and expiry.
+const LINK_PREFIX = "minty_link:", TAB_KEY = "minty_link_tab";
+const OLD_LINK_KEYS = ["plaid_link_token", "plaid_link_owner", "plaid_link_account", "plaid_link_update_item"];
+const linkStore = {
+  save(e) { try { localStorage.setItem(LINK_PREFIX + e.id, JSON.stringify(e)); sessionStorage.setItem(TAB_KEY, e.id); } catch {} },
+  drop(id) {
+    try { localStorage.removeItem(LINK_PREFIX + id); if (sessionStorage.getItem(TAB_KEY) === id) sessionStorage.removeItem(TAB_KEY); } catch {}
+  },
+  all() {
+    const out = [];
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith(LINK_PREFIX)) continue;
+        try { out.push(JSON.parse(localStorage.getItem(k))); } catch { out.push({ id: k.slice(LINK_PREFIX.length), expires: "" }); }
+      }
+    } catch {}
+    return out;
+  },
+  /** Drops expired entries and the pre-session keys; returns this tab's session, else the newest. */
+  resume() {
+    try { OLD_LINK_KEYS.forEach(k => localStorage.removeItem(k)); } catch {}
+    const live = linkStore.all().filter(e => {
+      if (e && Date.parse(e.expires) > Date.now()) return true;
+      if (e) linkStore.drop(e.id);
+      return false;
+    });
+    let mine = null;
+    try { mine = sessionStorage.getItem(TAB_KEY); } catch {}
+    return live.find(e => e.id === mine) || live.sort((a, b) => b.expires.localeCompare(a.expires))[0] || null;
+  },
+};
+/** Link was closed without finishing: the reserved slot goes back (or a reconnect's cooldown ends). */
+function cancelSession(entry) {
+  linkStore.drop(entry.id);
+  fetch("/link/cancel", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: entry.id }) }).catch(() => {});
+}
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const colorOf = k => { const i = USERS.findIndex(u => u.key === k); return i < 0 ? "var(--accent)" : `var(--u${i % 6})`; };
 
@@ -173,13 +216,11 @@ document.getElementById("reconnect").addEventListener("click", async e => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ item_id: itemId }),
     });
-    if (!res.ok) throw new Error(await res.text());
-    const { link_token, plaid_account } = await res.json();
-    localStorage.setItem("plaid_link_token", link_token);
-    localStorage.setItem("plaid_link_account", plaid_account);
-    localStorage.setItem("plaid_link_update_item", String(itemId));
-    localStorage.removeItem("plaid_link_owner");
-    openLink(link_token, null, plaid_account, null, itemId);
+    if (!res.ok) throw new Error(await why(res));
+    const { link_token, session_id, expires_at } = await res.json();
+    const entry = { id: session_id, token: link_token, mode: "update", item: itemId, expires: expires_at };
+    linkStore.save(entry);
+    openLink(entry, null);
   } catch (err) {
     setStatus("Couldn't start reconnect: " + err.message, "err");
     b.disabled = false;
@@ -199,7 +240,8 @@ function renderCapacity() {
   const slots = capacity[owner];
   const hasKeys = s => s.configured !== false;
   // The next link goes to the first slot with keys that's under the cap (the server's overflow logic).
-  const active = slots.find(s => hasKeys(s) && s.used < s.cap);
+  const taken = s => s.used + (s.reserved || 0);                // banks + links in progress
+  const active = slots.find(s => hasKeys(s) && taken(s) < s.cap);
   const shown = slots.filter(s => hasKeys(s) || s.used > 0);   // slots in use, or holding banks
   const idle = slots.filter(s => !hasKeys(s) && s.used === 0).map(s => s.slot);
   box.hidden = false;
@@ -207,7 +249,8 @@ function renderCapacity() {
   box.innerHTML = shown.map(s => {
     const pct = Math.min(100, Math.round((s.used / s.cap) * 100));
     const isActive = active && s.account === active.account;
-    const label = !hasKeys(s) ? `${esc(s.slot)} · no keys, ${s.used} bank(s) can't sync` : `${esc(s.slot)}${isActive ? " · next link" : ""}`;
+    const label = !hasKeys(s) ? `${esc(s.slot)} · no keys, ${s.used} bank(s) can't sync`
+      : `${esc(s.slot)}${isActive ? " · next link" : ""}${s.reserved ? ` · ${s.reserved} being linked` : ""}`;
     return `<div class="line"${hasKeys(s) ? "" : ' style="color:var(--err)"'}>
       <span class="${isActive ? "active" : ""}">${label}</span>
       <span class="bar"><span class="fill" style="width:${pct}%"></span></span>
@@ -220,20 +263,12 @@ function renderCapacity() {
         : "All Plaid trial accounts are full. Add another slot to PLAID_SLOTS (with its keys) or upgrade Plaid."}</div>`);
 }
 
-// OAuth return: resume with the SAME link_token + plaid_account saved pre-redirect.
+// OAuth return: resume with the SAME link_token and session saved before the redirect.
 const params = new URLSearchParams(window.location.search);
+const resumable = linkStore.resume();                    // also clears expired sessions
 if (params.get("oauth_state_id")) {
-  const savedToken = localStorage.getItem("plaid_link_token");
-  const savedOwner = localStorage.getItem("plaid_link_owner");
-  const savedAccount = localStorage.getItem("plaid_link_account");
-  const savedUpdateItem = localStorage.getItem("plaid_link_update_item");
-  if (savedToken && savedAccount && savedUpdateItem) {
-    openLink(savedToken, null, savedAccount, window.location.href, Number(savedUpdateItem));
-  } else if (savedToken && savedOwner && savedAccount) {
-    openLink(savedToken, savedOwner, savedAccount, window.location.href);
-  } else {
-    setStatus("Could not resume the connection. Please start again.", "err");
-  }
+  if (resumable) openLink(resumable, window.location.href);
+  else setStatus("Could not resume the connection (it may have taken longer than 30 minutes). Please start again.", "err");
 }
 
 connectBtn.addEventListener("click", async () => {
@@ -244,32 +279,29 @@ connectBtn.addEventListener("click", async () => {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ owner }),
     });
-    if (!res.ok) throw new Error(await res.text());
-    const { link_token, plaid_account } = await res.json();
-
-    // persist across a possible OAuth redirect
-    localStorage.setItem("plaid_link_token", link_token);
-    localStorage.setItem("plaid_link_owner", owner);
-    localStorage.setItem("plaid_link_account", plaid_account);
-    localStorage.removeItem("plaid_link_update_item");
-
-    openLink(link_token, owner, plaid_account, null);
+    if (!res.ok) throw new Error(await why(res));
+    const { link_token, session_id, expires_at } = await res.json();
+    // kept across a possible OAuth redirect; the session holds a slot until it's used or cancelled
+    const entry = { id: session_id, token: link_token, mode: "link", expires: expires_at };
+    linkStore.save(entry);
+    openLink(entry, null);
   } catch (e) {
     setStatus("Couldn't start Link: " + e.message, "err");
     connectBtn.disabled = false;
   }
 });
 
-const LINK_KEYS = ["plaid_link_token", "plaid_link_owner", "plaid_link_account", "plaid_link_update_item"];
-
-// updateItemId set = update mode (reconnect): Plaid repairs the existing Item; nothing to exchange.
-function openLink(token, forOwner, plaidAccount, receivedRedirectUri, updateItemId = null) {
+// entry.mode "update" = reconnect: Plaid repairs the existing Item; nothing to exchange.
+function openLink(entry, receivedRedirectUri) {
+  let finished = false;
   const handler = Plaid.create({
-    token,
+    token: entry.token,
     receivedRedirectUri,
     onSuccess: async (public_token, metadata) => {
-      if (updateItemId !== null) {
-        LINK_KEYS.forEach(k => localStorage.removeItem(k));
+      finished = true;
+      if (entry.mode === "update") {
+        linkStore.drop(entry.id);
+        const updateItemId = entry.item;
         setStatus("Reconnected. Checking the connection with Plaid…");
         try {
           // Plaid's view of the connection now, so the dashboard's warning clears right away.
@@ -277,7 +309,7 @@ function openLink(token, forOwner, plaidAccount, receivedRedirectUri, updateItem
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ item_id: updateItemId }),
           });
-          if (!res.ok) throw new Error(await res.text());
+          if (!res.ok) throw new Error(await why(res));
           const { health } = await res.json();
           if (health.action === "reconnect" || health.action === "relink") {
             setStatus(`${health.message} ${health.detail ?? ""}`.trim(), "err");
@@ -294,12 +326,11 @@ function openLink(token, forOwner, plaidAccount, receivedRedirectUri, updateItem
       try {
         const res = await fetch("/link/exchange", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ owner: forOwner, plaid_account: plaidAccount, public_token,
-                                 institution_name: metadata?.institution?.name ?? null }),
+          body: JSON.stringify({ session_id: entry.id, public_token, institution_name: metadata?.institution?.name ?? null }),
         });
-        if (!res.ok) throw new Error(await res.text());
+        linkStore.drop(entry.id);                        // used (or refused): a public token works once
+        if (!res.ok) throw new Error(await why(res));
         const data = await res.json();
-        LINK_KEYS.forEach(k => localStorage.removeItem(k));
         setStatus(data.status === "good"
           ? "Connected. Transactions are syncing." : "Connected (status: " + data.status + ").", "ok");
         loadCapacity();
@@ -310,6 +341,7 @@ function openLink(token, forOwner, plaidAccount, receivedRedirectUri, updateItem
       }
     },
     onExit: (err) => {
+      if (!finished) cancelSession(entry);
       if (err) setStatus("Link closed: " + (err.error_message || err.error_code || "cancelled"), "err");
       else setStatus("");
       connectBtn.disabled = false;
