@@ -1,6 +1,6 @@
 # Plan: security hardening after the 2026-10-14 review
 
-**Status: decisions made (2026-10-14, §2); step 1 done (2026-10-14); step 2 next. To-do list: §4.** Written 2026-10-14.
+**Status: decisions made (2026-10-14, §2); steps 1–2 done (2026-10-14); step 3 next. To-do list: §4.** Written 2026-10-14.
 
 An external review of `main` at 183d15b (API, pages, encryption, migrations, workflows, tests)
 found no unauthenticated path to financial data. Its main risks were how updates reach a
@@ -126,7 +126,20 @@ the pinned key.
          without a token that edits Access. SETUP keeps it optional.
    - [x] 2FA on Cloudflare, Plaid, and the inbox that receives the sign-in codes.
 2. **Rate limits and the D1 budget** (§3), with `test/reads.test.ts` lines for anything new,
-   plus a `/status` warning when `ALLOWED_LOGINS` is empty.
+   plus a `/status` warning when `ALLOWED_LOGINS` is empty. **Done 2026-10-14 (#54).**
+   - [x] Three rate limiting bindings per login (`src/limits.ts`): 120 requests a minute for
+         everything, 30 for searches and ABC loads, 10 for `/link/*`. A missing binding means no
+         limit, never a lockout. Checked in production after the deploy: 130 quick requests gave
+         121 × 200 and 9 × 429, so the limiter does refuse (approximately, as documented).
+   - [x] Bodies capped at 16 KiB before they're read. Search text capped at 48 bytes, because D1
+         allows 50 in a LIKE pattern: longer searches had failed with a 500.
+   - [x] Daily read budget: requests reading more than 1,000 rows add to `rows_read:<date>` in
+         `app_state`. Past `READ_BUDGET_PER_DAY` (default 3,000,000), `/transactions`, `/accounts`
+         and `/benefits` pause until 00:00 UTC. `/accounts` and filtered `/transactions` were
+         added to the plan's guard because they also read every transaction they look at. The
+         cron never checks it and prunes counters after 7 days.
+   - [x] Setup checks: `ALLOWED_LOGINS` empty, rate limits off, today's counted reads. A
+         household that followed GET-STARTED sees only ✓ (a test pins it).
 3. **Link sessions** (§3, migration 0009).
 4. **Headers** (§3).
 5. **Rotation and disconnect** (§3).
