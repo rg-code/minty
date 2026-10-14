@@ -1,14 +1,14 @@
 # Minty status and to-do
 
-Handoff notes for continuing on another machine. Last updated 2026-10-13.
+Handoff notes for continuing on another machine. Last updated 2026-10-14.
 Household-specific values (the workers.dev address, Access team and AUD, email addresses)
 are deliberately **not** in this public repo. They're in the owner's Cloudflare dashboard.
 
 ## Where things stand
 
-- **Code:** Minty is Cloudflare-only (a Worker plus D1, on free plans); everything through #44 is
+- **Code:** Minty is Cloudflare-only (a Worker plus D1, on free plans); everything through #48 is
   on `main`. CI (vitest in workerd + typecheck) runs on every PR, and Workers Builds deploys
-  `main`. **Tests: 281.** Migrations 0001–0008.
+  `main`. **Tests: 283.** Migrations 0001–0008.
   - Plan and decision log: [serverless-plan.md](serverless-plan.md) §8. ABC: [abc.md](abc.md).
     Finance agent: [agent-plan.md](agent-plan.md). Live demo: [demo.md](demo.md).
 - **Licence:** PolyForm Strict 1.0.0 since #39 (source-available: use unmodified, noncommercial;
@@ -30,15 +30,35 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
     checks flag them.
 - **For friends:**
   - **Landing page:** https://minty.milesmaximizer.com, also reached via
-    `milesmaximizer.com/minty/`. Code: rg-code/minty-site (private), a Cloudflare Pages
-    project published with `node deploy.mjs`.
-  - **On the landing page:** Get started opens [GET-STARTED.md](../GET-STARTED.md) in a side
-    panel; Try the live demo runs the demo; plus fork, ZIP and clone links, share buttons and
-    GoatCounter.
+    `milesmaximizer.com/minty/` (that redirect stays in rg-code/point-xfer). Code:
+    rg-code/minty-site (private, moved out of point-xfer on 2026-10-14), a Cloudflare Pages
+    project published with `node deploy.mjs` there, which rebuilds the demo from this repo.
+  - **On the landing page:**
+    - **Get started** opens [GET-STARTED.md](../GET-STARTED.md) in a side panel, and **Try the
+      live demo** runs the demo in another. There are fork and clone links, but no ZIP, since a
+      ZIP copy never updates.
+    - **Support Minty** (top right) opens a menu: PayPal and Buy Me a Coffee, Use my referral
+      (a small note of referral links; inKind for now), Star on GitHub, and sharing the repo.
+    - **Three raised cards:** Share, Support and Contact me.
+    - **Contact me** is a form that posts to Inkling's Worker (rg-code/RInkU `POST /contact`,
+      #4 there), which emails the owner without showing any address on the page.
+    - **GoatCounter** counts visits and clicks.
   - **Forks:** they update themselves every Monday (#41), after the one-time "enable workflows"
     click in each fork.
 
-## Recently done (2026-10-10 to 10-13)
+## Recently done (2026-10-10 to 10-14)
+
+- **Phones (#46):** the dashboard header no longer pins half the screen.
+  - It scrolls away, and a small strip pinned to the top takes over: the coin (back to top), the
+    current person, and icon buttons for search, tags, banks, cards and dates.
+  - The same controls move into it and back, so filters keep working. Desktop is unchanged.
+- **Demo people (#47):** Kate, Adam, Andy and Maurice, one transaction each; 497 transactions,
+  inside the 500 cap.
+  - Dashboard fix from it: with four or more people, the person switch scrolls sideways on phones.
+- **Landing page:**
+  - It moved to its own private repo, rg-code/minty-site (#48 updated the docs).
+  - It gained the Support menu, the cards and the contact form described above, and lost the ZIP
+    download.
 
 - **Sync (#27):**
   - Stalled downloads restart from where the update began (`items.sync_start_cursor`).
@@ -91,6 +111,13 @@ are deliberately **not** in this public repo. They're in the owner's Cloudflare 
 5. **Landing page and demo upkeep:**
    - After dashboard changes, run `node deploy.mjs` in rg-code/minty-site so the demo
      follows. A dashboard change the demo can't follow stops the build, by design.
+   - **Card referrals:** send the links (card, perk, link); each becomes a line in
+     `SUPPORT.referrals` in minty-site's page, next to inKind.
+   - **Contact form:** check that the deploy-test message ("Claude (deploy test)", 2026-10-13)
+     reached the inbox, then delete it.
+   - **Optional, automatic deploys:** a new Pages project connected to rg-code/minty-site
+     (dashboard: Connect to Git; the build clones this repo for the demo), then move the custom
+     domain to it. The current project was made by direct upload and can't be switched to Git.
    - Check that the first Monday run of **Stay up to date** on a friend's fork (2026-10-19)
      passes.
 6. **Owner housekeeping:**
