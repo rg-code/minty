@@ -40,6 +40,10 @@ Design history and decisions: `docs/serverless-plan.md`.
   have different numbers of Plaid accounts. An Item keeps its `plaid_account` for good, so
   removing a slot or person that still has Items strands them (they're skipped, and `/status`
   flags them).
+- Linking goes through Link sessions (`link_sessions`, `src/routes/link.ts`): `/link/token`
+  reserves a slot (banks + open reservations under the cap, one statement per slot), and
+  `/link/exchange` claims the session once, before Plaid's exchange, taking owner and
+  plaid_account from it. Never trust either from the browser.
 - A Plaid Item = one institution login (not one account). The Trial cap is
   10 Items per credential set (`TRIAL_ITEM_CAP`); routing logic depends on this.
 - Plaid access tokens are stored Fernet-encrypted (`src/fernet.ts`, `TOKEN_ENC_KEY`).

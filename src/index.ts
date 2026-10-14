@@ -38,9 +38,10 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
     if (!/^\d+$/.test(params[0])) throw unprocessable("transaction id must be an integer");
     return data.setTags(env, request, Number(params[0]));
   }],
-  ["POST", /^\/link\/token$/, ({ env, config, request }) => link.createLinkToken(env, config, request)],
-  ["POST", /^\/link\/exchange$/, ({ env, config, request, ctx }) => link.exchange(env, config, request, ctx)],
-  ["POST", /^\/link\/token\/update$/, ({ env, config, request }) => link.updateMode(env, config, request)],
+  ["POST", /^\/link\/token$/, ({ env, config, request, email }) => link.createLinkToken(env, config, request, email)],
+  ["POST", /^\/link\/exchange$/, ({ env, config, request, ctx, email }) => link.exchange(env, config, request, ctx, email)],
+  ["POST", /^\/link\/cancel$/, ({ env, request, email }) => link.cancel(env, request, email)],
+  ["POST", /^\/link\/token\/update$/, ({ env, config, request, email }) => link.updateMode(env, config, request, email)],
   ["POST", /^\/link\/reconnected$/, ({ env, config, request }) => link.reconnected(env, config, request)],
 ];
 
@@ -126,6 +127,7 @@ export default {
       if (Object.keys(checked).length) console.log("connection check", JSON.stringify(checked));   // item id -> Plaid code or null
       // The cron reads what it needs whatever the day's read budget says; it only tidies the counters.
       await pruneReadCounts(env.DB).catch((e) => console.error("pruning read counts failed:", e instanceof Error ? e.message : e));
+      await link.pruneLinkSessions(env.DB).catch((e) => console.error("pruning Link sessions failed:", e instanceof Error ? e.message : e));
     }
   },
 } satisfies ExportedHandler<Env>;

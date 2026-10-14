@@ -10,7 +10,7 @@ import { DEFAULT_READ_BUDGET, LIMITERS, readBudget, readsToday } from "../limits
  * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql"];
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql"];
 
 interface Check { id: string; ok: boolean; level: "error" | "warn"; message: string; fix?: string }
 
@@ -143,6 +143,21 @@ export async function status(env: Env, config: Config, email: string): Promise<R
       ? "no keys" : "not in MINTY_USERS / PLAID_SLOTS"})`).join(", ");
     add({ id: "items_stranded", ok: false, level: "error", message: `${total} bank(s) can't sync: ${why}.`,
           fix: "Restore that person / slot and its keys. Banks stay with the Plaid account they were linked under." });
+  }
+
+  // A bank link that stopped after its session was claimed (src/routes/link.ts): Plaid may have
+  // created the connection, so it keeps counting against that slot's cap.
+  const { results: interrupted } = await env.DB.prepare(
+    `SELECT plaid_account, count(*) AS n FROM link_sessions
+     WHERE operation = 'link' AND used_at IS NOT NULL AND finished_at IS NULL AND released_at IS NULL
+       AND used_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-10 minutes')
+     GROUP BY plaid_account`).all<{ plaid_account: string; n: number }>().catch(() => ({ results: [] as { plaid_account: string; n: number }[] }));
+  for (const r of interrupted) {
+    add({ id: `link_interrupted_${r.plaid_account}`, ok: false, level: "warn",
+          message: `${r.n} bank link${r.n === 1 ? "" : "s"} on ${r.plaid_account} stopped after Plaid may have created the connection, ` +
+                   `so ${r.n === 1 ? "it counts" : "they count"} against its ${config.itemCap}-bank cap.`,
+          fix: "If a bank you linked is missing from the dashboard, link it again. To stop counting an interrupted link, " +
+               "delete its row from link_sessions in the D1 console (only if you're sure Plaid didn't keep that connection)." });
   }
 
   // Card members (Plaid's account_owner) per bank, so a household can see whether a multi-card

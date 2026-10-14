@@ -78,9 +78,10 @@ the secret names to add in the Cloudflare dashboard.
     GET  /                       dashboard
     GET  /connect                link a bank/card
     GET  /add-user               setup checks + the values to add a person
-    POST /link/token             {owner} -> {link_token, plaid_account}   (overflow chosen here)
-    POST /link/exchange          {owner, plaid_account, public_token}     (starts the first sync)
-    POST /link/token/update      {item_id}  (reconnect a bank that needs a new login)
+    POST /link/token             {owner} -> {link_token, plaid_account, session_id, expires_at}   (reserves a slot for 30 min)
+    POST /link/exchange          {session_id, public_token}   (owner and slot come from the session; starts the first sync)
+    POST /link/cancel            {session_id}   (Link closed: the reserved slot goes back)
+    POST /link/token/update      {item_id} -> {link_token, session_id, ...}   (reconnect a bank; once a minute per bank)
     GET  /items                  linked institutions + status
     GET  /accounts               accounts + balances + card members   (?owner=)
     GET  /transactions           unified feed   (?owner= &tag= [repeatable] &tag_mode=any|all &q= &start= &end= &item_id= [repeatable: banks] &account_id= [repeatable: cards / accounts] &card= [repeatable: account_id:card member])

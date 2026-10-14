@@ -6,9 +6,10 @@
 //   3. npm run dev                                  (in another terminal; local-only Access bypass + cron trigger)
 //   4. node scripts/sandbox-e2e.ts
 //
-// What it does: creates a Sandbox Item (no Link UI needed), exchanges it through the Worker's
-// /link/exchange, runs the cron sync until transactions land, then forces ITEM_LOGIN_REQUIRED and
-// checks the item flips to login_required and /link/token/update works. Prints no secrets.
+// What it does: opens a Link session with the Worker's /link/token (which reserves a slot), creates
+// a Sandbox Item (no Link UI needed), exchanges it through /link/exchange with that session, runs
+// the cron sync until transactions land, then forces ITEM_LOGIN_REQUIRED and checks the item flips
+// to login_required and /link/token/update works. Prints no secrets.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { fernetDecrypt } from "../src/fernet.ts";
@@ -60,13 +61,17 @@ check(!!me?.slots?.find((s: any) => s.account === "me_primary")?.configured, "Wo
 check((await cron()) === 200, "cron trigger reachable (npm run dev)");
 if (failures) process.exit(1);
 
-// 1. Link: Sandbox public token -> Worker /link/exchange
+// 1. Link: a session from the Worker, a Sandbox public token, then /link/exchange with the session
+const lt = await worker("/link/token", { method: "POST", body: JSON.stringify({ owner: "me" }) });
+check(lt.status === 200 && typeof lt.body?.session_id === "string", `link session -> ${lt.body?.plaid_account}`);
+check(lt.body?.plaid_account === "me_primary", "session uses me_primary (this script's Sandbox keys)");
+if (failures) process.exit(1);
 const { public_token } = await plaid("/sandbox/public_token/create", {
   institution_id: "ins_109508", initial_products: ["transactions"], options: { transactions: { days_requested: 730 } },
 });
 const t0 = Date.now();
 const ex = await worker("/link/exchange", { method: "POST", body: JSON.stringify({
-  owner: "me", plaid_account: "me_primary", public_token, institution_name: "First Platypus Bank" }) });
+  session_id: lt.body.session_id, public_token, institution_name: "First Platypus Bank" }) });
 check(ex.status === 200 && Number.isInteger(ex.body?.item_id), `exchange -> item ${ex.body?.item_id} (${Date.now() - t0} ms)`);
 check(!JSON.stringify(ex.body).includes("access-sandbox"), "exchange response carries no access token");
 const itemId = ex.body.item_id;

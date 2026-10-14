@@ -2,6 +2,7 @@ import type { Env } from "../env";
 import { type Config, isConfigured } from "../config";
 import { HttpError, dateParam, intParam, json, jsonBody, unprocessable } from "../http";
 import { bankHealth, bankRows, syncHealth } from "../health";
+import { RESERVED } from "./link";
 
 /** Read API for the pages in public/, plus tag editing. */
 
@@ -90,16 +91,20 @@ export async function accounts(env: Env, url: URL): Promise<Response> {
 
 export async function capacity(env: Env, config: Config): Promise<Response> {
   // Per-person Trial-account usage: how many Items each credential set holds vs the cap.
-  const { results } = await env.DB.prepare(
-    "SELECT plaid_account, count(*) AS n FROM items GROUP BY plaid_account",
-  ).all<{ plaid_account: string; n: number }>();
-  const counts = new Map(results.map((r) => [r.plaid_account, r.n]));
+  const [itemsRes, reservedRes] = await env.DB.batch([
+    env.DB.prepare("SELECT plaid_account, count(*) AS n FROM items GROUP BY plaid_account"),
+    // Link sessions holding a slot (src/routes/link.ts): being linked right now, or interrupted
+    env.DB.prepare(`SELECT plaid_account, count(*) AS n FROM link_sessions s WHERE ${RESERVED} GROUP BY plaid_account`),
+  ]);
+  const counts = new Map((itemsRes.results as { plaid_account: string; n: number }[]).map((r) => [r.plaid_account, r.n]));
+  const reserved = new Map((reservedRes.results as { plaid_account: string; n: number }[]).map((r) => [r.plaid_account, r.n]));
   const out: Record<string, unknown[]> = {};
   for (const [owner, keys] of config.ownerAccounts) {
     out[owner] = keys.map((k) => ({
       account: k,
       slot: k.slice(k.indexOf("_") + 1),
       used: counts.get(k) ?? 0,
+      reserved: reserved.get(k) ?? 0,
       cap: config.itemCap,
       configured: isConfigured(env, config, k),       // slots without keys are skipped when linking
     }));
