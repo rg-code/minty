@@ -4,6 +4,7 @@
 // household (demo/). No server, no Plaid, nothing leaves the browser. See docs/demo.md.
 //
 //   npm run build:demo -- [--out dist/demo] [--goatcounter https://<code>.goatcounter.com/count]
+//                         [--og-image https://…/og.png --og-url https://…/demo/]   (link previews)
 //
 // Every change to the dashboard's HTML is checked: if public/index.html changes so that one no
 // longer applies, the build stops instead of shipping a demo that half works.
@@ -17,6 +18,12 @@ const arg = (name, def) => { const i = process.argv.indexOf(`--${name}`); return
 const out = arg("out", join(root, "dist/demo"));
 const goatcounter = arg("goatcounter", "");
 if (goatcounter && !/^https:\/\/[a-z0-9-]+\.goatcounter\.com\/count$/.test(goatcounter)) throw new Error(`--goatcounter: not a GoatCounter count URL: ${goatcounter}`);
+// Link previews (Slack, iMessage…) for wherever the demo is published: an absolute PNG/JPEG URL
+// (previews can't show SVG) and the demo's own address. Off unless both are given.
+const ogImage = arg("og-image", ""), ogUrl = arg("og-url", "");
+for (const [flag, v] of [["og-image", ogImage], ["og-url", ogUrl]]) if (v && !/^https:\/\/[^\s"<>]+$/.test(v)) throw new Error(`--${flag}: not an https URL: ${v}`);
+if (!!ogImage !== !!ogUrl) throw new Error("--og-image and --og-url go together");
+if (ogImage && !/\.(png|jpe?g)$/i.test(ogImage)) throw new Error(`--og-image: link previews need a PNG or JPEG: ${ogImage}`);
 
 // sql.js from cdnjs, pinned: the script by its SRI hash, the WebAssembly by a hash checked by fetch().
 const SQLJS = {
@@ -53,7 +60,18 @@ const edit = (what, from, to, count = 1) => {
   html = typeof from === "string" ? html.replaceAll(from, to) : html.replace(from, to);
 };
 edit("title", /<title>[^<]*<\/title>/, "<title>Minty demo</title>");
-edit("demo script first", /^<head>$/m, `<head>\n<meta name="robots" content="noindex" />\n<script src="demo.js"></script>`);
+const DESCRIPTION = "Minty with made-up data, in your browser: transactions, card credits (ABC) and more.";
+const og = ogImage ? `
+<meta name="description" content="${DESCRIPTION}" />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Minty" />
+<meta property="og:title" content="Minty live demo" />
+<meta property="og:description" content="${DESCRIPTION}" />
+<meta property="og:url" content="${ogUrl}" />
+<meta property="og:image" content="${ogImage}" />
+<meta property="og:image:alt" content="Minty: your own private home for all your bank and card transactions" />
+<meta name="twitter:card" content="summary_large_image" />` : "";
+edit("demo script first", /^<head>$/m, `<head>\n<meta name="robots" content="noindex" />${og}\n<script src="demo.js"></script>`);
 edit("no manifest", /<link rel="manifest"[^>]*>\n?/, "");
 edit("no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});`, "// the demo registers no service worker");
 edit("light by default", `|| (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")`, `|| "light"`);
@@ -74,4 +92,4 @@ for (const f of ["abc.js", "abc.css", "favicon.svg", "favicon-32.png", "apple-to
 await copyFile(join(root, "demo/demo.css"), join(out, "demo.css"));
 
 const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
-console.log(`demo built in ${out}: demo.js ${kb(Object.values(result.metafile.outputs)[0].bytes)}, ${migrations.length} migrations, ${apiPaths.length} API paths${goatcounter ? ", GoatCounter on" : ""}`);
+console.log(`demo built in ${out}: demo.js ${kb(Object.values(result.metafile.outputs)[0].bytes)}, ${migrations.length} migrations, ${apiPaths.length} API paths${goatcounter ? ", GoatCounter on" : ""}${ogImage ? ", link preview on" : ""}`);

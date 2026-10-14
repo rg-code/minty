@@ -40,9 +40,11 @@ through the real routes.
 
 ## Build
 
-    npm run build:demo -- --out <folder> [--goatcounter https://<code>.goatcounter.com/count]
+    npm run build:demo -- --out <folder> [--goatcounter https://<code>.goatcounter.com/count] \
+                          [--og-image https://<site>/og.png --og-url https://<site>/demo/]
 
-Writes a static folder (default `dist/demo`, not committed). Each change the build makes to
+Writes a static folder (default `dist/demo`, not committed). `--og-image` and `--og-url` add link-preview
+tags (Slack, iMessage…) for wherever it's published; the image must be a PNG or JPEG. Each change the build makes to
 `public/index.html` is checked, so when the dashboard changes in a way the demo can't follow, the
 build stops with the edit that no longer applies. Rebuild and redeploy the landing page after
 dashboard changes: it's in its own private repo, rg-code/minty-site (`node deploy.mjs` there; see its README).
