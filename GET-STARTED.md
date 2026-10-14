@@ -4,7 +4,7 @@ Your central, private home for all your bank and card data. Only you can see or 
 lives in your own Cloudflare account, encrypted at rest, and your bank connections are encrypted
 again with a key only you hold.
 
-**About 30 minutes, all in a web browser, $0.**
+**About 10 minutes, all in a web browser, $0.**
 
 More detail on any step: [SETUP.md](SETUP.md).
 
