@@ -121,8 +121,9 @@ Design history and decisions: `docs/serverless-plan.md`.
   Sync fork: change workflows only when it's worth that, and say so in the PR. No workflow ever
   deploys (Cloudflare does).
 - **D1 rows read are a daily budget** (free plan: 5,000,000 a day, then every read fails until
-  00:00 UTC). A full scan of `transactions` is ~7,000 rows. Joining a `json_each` list against
-  transactions reads them once per list entry, which is what blew the budget on 2026-10-12.
+  00:00 UTC). A full scan of `transactions` reads every row (thousands on a real household).
+  Joining a `json_each` list against transactions reads them once per list entry, which is what
+  blew the budget on 2026-10-12.
   Every page-facing route has a budget in `test/reads.test.ts`: keep new queries index-driven and
   add a line there. Check `rows_read` before running ad-hoc remote queries over transactions.
 - Live demo (`demo/`, `npm run build:demo`, `docs/demo.md`): the real dashboard and Worker in the

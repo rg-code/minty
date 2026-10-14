@@ -124,3 +124,26 @@ the pinned key.
 
 Each step: complete files, `npm test` and `npm run typecheck`, and a Sandbox check by the owner
 where Plaid is involved.
+
+### Rules for every step (2026-10-14, owner)
+
+**No regressions.** Every change strengthens what's built and never breaks it.
+- **One branch and one PR per step** (`security/step-N-<name>`), each revertable on its own. The
+  PR says what a revert leaves in D1.
+- **The design comes first,** with the owner's go before any code. It lists every behaviour
+  change a page, an API caller or a fork would notice, and why normal use isn't affected.
+- **Existing tests are the contract.** Before pushing, every existing assertion that was changed
+  or removed is listed with its reason. New behaviour gets new tests, and any new page-facing
+  query gets a budget in `test/reads.test.ts`.
+- **Migrations only add** tables or columns. **New settings default to today's behaviour.**
+- **A manual checklist covers what the step touched:**
+  - the dashboard: load, person switch, search, filters, tags, pagination, status strip and
+    sync request;
+  - the ABC popup;
+  - connect: a new link, OAuth resume and reconnect;
+  - Setup checks;
+  - the installed app;
+  - light and dark themes, and phone.
+- **Step 4** ships CSP as report-only first. A follow-up PR enforces it once the owner sees no
+  violations. New `.js` files go into `public/sw.js`'s cached list.
+- **Step 6** merges only after the owner has cut the first signed release tag.
