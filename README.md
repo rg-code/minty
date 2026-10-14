@@ -73,6 +73,10 @@ the secret names to add in the Cloudflare dashboard.
 - **Plaid access tokens are Fernet-encrypted** with `TOKEN_ENC_KEY` before they're stored.
   Plaid keys and `TOKEN_ENC_KEY` are Worker secrets; they never reach the browser or the database.
 - **Setup checks** on the Add user page show what's configured, never the values.
+- **Device lock:** on a phone or computer with Face ID, a fingerprint sensor or Windows Hello,
+  Minty offers to ask for it before showing anything (`public/lock.js`). It hides the screen from
+  someone holding your unlocked device; it doesn't protect the data, and never talks to the
+  Worker. Turn it off per device under Add user → This device.
 
 ## Endpoints
     GET  /                       dashboard

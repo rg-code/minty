@@ -115,6 +115,10 @@ Design history and decisions: `docs/serverless-plan.md`.
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).
   `/benefits` keeps string matching in SQL (rows come back tagged), because a cold isolate has
   10 ms of CPU.
+- Device lock (`public/lock.js`, `lock.css`, loaded at the end of `<head>` on every page with
+  data): WebAuthn with a passkey on the device, on by default where the device has a built-in
+  authenticator, and never locking anyone out where it hasn't. A visibility gate only: it never
+  calls the Worker or stores anything in D1. The live demo strips it (`scripts/build-demo.mjs`).
 - Installable app (`public/manifest.webmanifest`, `public/sw.js`): the manifest link needs
   `crossorigin="use-credentials"` or Access answers it with the sign-in page. The service worker
   caches only the listed static shell files, never an API response (no financial data on the

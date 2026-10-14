@@ -70,7 +70,8 @@ More detail on any step: [SETUP.md](SETUP.md).
 
 ## 6. Connect your banks
 
-1. Open your Minty address and sign in with your email (you'll get a one-time code).
+1. Open your Minty address and sign in with your email (you'll get a one-time code). On a phone,
+   Minty then offers to lock itself with Face ID or your fingerprint.
 2. Click **+ Add user**: every line under **Setup checks** should show ✓. Each one that doesn't
    says how to fix it.
 3. Click **+ Add account → Connect with Plaid**, and sign in to your bank in Plaid's window.

@@ -1,0 +1,22 @@
+/* Device lock (lock.js): while locked, nothing on the page shows except the lock's own card. */
+html.minty-locked body > *:not(#minty-lock) { visibility: hidden !important; }
+html.minty-locked body { overflow: hidden; }
+
+#minty-lock { position: fixed; inset: 0; z-index: 2147483647; display: flex; align-items: center; justify-content: center;
+  padding: 16px; background: var(--bg, #f2f8f5); color: var(--ink, #16181d);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+#minty-lock[hidden] { display: none; }
+#minty-lock .card { width: 100%; max-width: 360px; text-align: center; background: var(--surface, #fff);
+  border: 1px solid var(--hairline, #e7e9ee); border-radius: 14px; padding: 28px 22px;
+  box-shadow: 0 8px 30px var(--shadow, rgba(0, 0, 0, .08)); }
+#minty-lock h1 { font-size: 19px; margin: 12px 0 6px; }
+#minty-lock .why { margin: 0 0 18px; color: var(--muted, #6b7280); }
+#minty-lock button { display: block; width: 100%; min-height: 44px; margin-top: 8px; border-radius: 10px;
+  font: inherit; font-weight: 600; cursor: pointer; }
+#minty-lock button[hidden] { display: none; }
+#minty-lock button:disabled { opacity: .6; cursor: default; }
+#minty-lock .primary { background: var(--accent, #4c6ef5); color: #fff; border: 0; }
+#minty-lock .secondary { background: transparent; color: var(--ink, #16181d); border: 1px solid var(--hairline, #e7e9ee); font-weight: 500; }
+#minty-lock button:focus-visible { outline: 2px solid var(--accent, #4c6ef5); outline-offset: 2px; }
+#minty-lock .err { margin: 12px 0 0; color: var(--err, var(--out, #e03131)); }
+#minty-lock .err:empty { display: none; }

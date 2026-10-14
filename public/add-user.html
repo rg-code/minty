@@ -52,6 +52,10 @@
   ul.checks { list-style:none; margin:0 0 22px; padding:0; border:1px solid var(--hairline); border-radius:var(--radius); font-size:13.5px; }
   ul.checks li { padding:9px 12px; display:grid; grid-template-columns:18px 1fr; gap:2px 8px; }
   ul.checks li + li { border-top:1px solid var(--hairline); }
+  .device { margin:0 0 20px; padding:10px 12px; background:var(--surface); border:1px solid var(--hairline); border-radius:var(--radius); }
+  .device button { margin-left:6px; padding:4px 12px; border-radius:8px; border:1px solid var(--hairline); background:var(--surface);
+                   color:var(--ink); font:inherit; cursor:pointer; }
+  .device .lockerr { color:var(--err); }
   ul.checks .mark { font-weight:700; }
   ul.checks .ok .mark { color:var(--ok); } ul.checks .error .mark { color:var(--err); } ul.checks .warn .mark { color:var(--muted); }
   ul.checks .fix { grid-column:2; color:var(--muted); font-size:12.5px; }
@@ -77,6 +81,8 @@
   a.back { display:block; text-align:center; margin-top:20px; font-size:13px; color:var(--muted); }
   .brandmark { display: inline-block; margin-bottom: 12px; line-height: 0; }
 </style>
+<link rel="stylesheet" href="/lock.css" />
+<script src="/lock.js"></script>
 </head>
 <body>
 <div class="card">
@@ -90,6 +96,8 @@
     pass through the browser. Fill in a name and Minty writes the exact values to add.</p>
   <div class="who" id="checksTitle" hidden>Setup checks</div>
   <ul class="checks" id="checks" hidden></ul>
+  <div class="who">This device</div>
+  <p class="device" id="lockState">Checking…</p>
 
   <div class="who">Current users</div>
   <ul class="users" id="users"><li>Loading…</li></ul>
@@ -138,6 +146,26 @@ async function loadStatus() {
   $("checks").innerHTML = st.checks.map(c => `<li class="${c.ok ? "ok" : c.level}">
       <span class="mark">${c.ok ? "✓" : c.level === "error" ? "✕" : "!"}</span><span>${esc(c.message)}</span>
       ${!c.ok && c.fix ? `<span class="fix">${esc(c.fix)}</span>` : ""}</li>`).join("");
+}
+
+// The device lock (lock.js): Face ID / fingerprint / screen lock before Minty shows anything here.
+async function loadLock() {
+  const el = $("lockState");
+  if (!window.MintyLock) { el.textContent = "The device lock isn't available on this page."; return; }
+  const st = await MintyLock.status();
+  const say = {
+    on: "Minty asks for Face ID, your fingerprint or the screen lock before it shows anything on this device.",
+    off: "Minty isn't locked on this device.",
+    unset: "Minty isn't locked on this device.",
+    unavailable: "This device has no Face ID, fingerprint or screen-lock sign-in, so Minty isn't locked here.",
+  }[st];
+  const action = st === "on" ? "Turn off" : st === "unavailable" ? null : "Turn on";
+  el.innerHTML = `${esc(say)}${action ? ` <button type="button" id="lockToggle">${action}</button>` : ""}`;
+  $("lockToggle")?.addEventListener("click", async () => {
+    try { await (st === "on" ? MintyLock.turnOff() : MintyLock.turnOn()); }
+    catch { el.insertAdjacentHTML("beforeend", ' <span class="lockerr">That didn\u2019t work. Try again.</span>'); return; }
+    loadLock();
+  });
 }
 
 async function loadUsers() {
@@ -221,6 +249,7 @@ $("copy").addEventListener("click", async () => {
 
 loadStatus();
 loadUsers();
+loadLock();
 </script>
 </body>
 </html>
