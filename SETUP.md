@@ -57,13 +57,17 @@ refuses everything until the login is set up.
    to 50 people.)
 2. **Authentication policy:** pick who may sign in. The list offers pre-configured policies:
    - **Cloudflare Account**: members of your Cloudflare account (you). Always safe.
-   - **An email domain**: *anyone* with an address at that domain. Only choose it if the domain
-     is yours and you're the only one reading its mail. (A catch-all is fine: codes for any
-     address there land in your inbox.)
+   - **Specific emails** (recommended for anyone else): **Zero Trust → Access → Policies → Add →
+     Include → Emails**, list each address, then attach it to the minty app.
+   - **An email domain**: *anyone* with an address at that domain. Avoid it: every address
+     there, now or later, could sign in. If you use one anyway, the domain must be yours and
+     you the only one reading its mail.
    - **Never** choose "Everyone" or a public domain like gmail.com.
 
-   To allow a specific outside address (e.g. another person's Gmail), add a custom policy later:
-   **Zero Trust → Access → Policies → Add → Include → Emails**, then attach it to the minty app.
+   Everyone you admit is fully trusted: they see every person's data and can link and
+   reconnect banks (README, Security model). While you're in the Access app, a shorter
+   **session duration** (e.g. 24 hours) limits what a stolen session is worth, and if your
+   sign-in method supports it, require MFA.
 3. Copy the **AUD tag** (a long hex string) that the Access tab shows. Then find your **team
    domain**: open your Minty address in a private window. The sign-in page's address starts
    with `https://<team>.cloudflareaccess.com`, and that host is the team domain.

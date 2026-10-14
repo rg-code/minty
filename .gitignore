@@ -9,3 +9,6 @@ secrets/
 node_modules/
 worker-configuration.d.ts
 dist/
+
+# Household-specific notes: a private repo checked out here (docs/security-plan.md, finding 7)
+docs/private/
