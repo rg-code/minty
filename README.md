@@ -66,6 +66,10 @@ the secret names to add in the Cloudflare dashboard.
   `ALLOWED_LOGINS` allow-list. If `ACCESS_TEAM_DOMAIN` or `ACCESS_AUD` is missing, every API
   request is refused. A refusal says which check failed. `/healthz` is the only open path.
 - **Cross-site writes are refused**, so another site can't act through a signed-in browser.
+- **Limits per login:** 120 API requests a minute, 30 searches or ABC loads, 10 bank-linking
+  calls (approximate: Cloudflare counts per location). Request bodies are capped at 16 KiB.
+  A daily D1 read budget pauses browsing and search before Cloudflare's free quota runs out,
+  so sync keeps working.
 - **Plaid access tokens are Fernet-encrypted** with `TOKEN_ENC_KEY` before they're stored.
   Plaid keys and `TOKEN_ENC_KEY` are Worker secrets; they never reach the browser or the database.
 - **Setup checks** on the Add user page show what's configured, never the values.

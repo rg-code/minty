@@ -1,6 +1,6 @@
 import type { Env } from "../env";
 import { type Config, isConfigured } from "../config";
-import { HttpError, dateParam, intParam, json, unprocessable } from "../http";
+import { HttpError, dateParam, intParam, json, jsonBody, unprocessable } from "../http";
 import { bankHealth, bankRows, syncHealth } from "../health";
 
 /** Read API for the pages in public/, plus tag editing. */
@@ -12,6 +12,9 @@ const MAX_FILTER_IDS = 60;    // a card member counts as 2 (account id + name)
 const MAX_CARD_MEMBER_LENGTH = 200;
 const MAX_TAGS_PER_TXN = 50;
 const MAX_TAG_LENGTH = 64;
+// D1 allows 50 bytes in a LIKE pattern, and the search adds a % on each side: longer text failed
+// with "LIKE or GLOB pattern too complex". The dashboard's search box stops there too (maxlength).
+export const MAX_SEARCH_BYTES = 48;
 
 export async function users(env: Env, config: Config): Promise<Response> {
   // Reports only whether keys are present, never the keys themselves.
@@ -156,6 +159,9 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
   const start = dateParam(url, "start");
   const end = dateParam(url, "end");
   const q = p.get("q") || undefined;
+  if (q && new TextEncoder().encode(q).length > MAX_SEARCH_BYTES) {
+    throw unprocessable(`search text must be at most ${MAX_SEARCH_BYTES} characters (fewer with accents or emoji)`);
+  }
   const tags = normaliseTags(p.getAll("tag"));
   const tagMode = p.get("tag_mode") ?? "any";
   if (tagMode !== "any" && tagMode !== "all") throw unprocessable("tag_mode must be 'any' or 'all'");
@@ -245,8 +251,9 @@ export async function listTags(env: Env): Promise<Response> {
 export async function setTags(env: Env, request: Request, txnId: number): Promise<Response> {
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    body = await jsonBody(request);
+  } catch (e) {
+    if (e instanceof HttpError) throw e;          // too large
     throw unprocessable("body must be JSON: {\"tags\": [...]}");
   }
   const tags = (body as { tags?: unknown } | null)?.tags;

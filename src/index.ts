@@ -1,7 +1,8 @@
 import type { Env } from "./env";
 import { checkAccess } from "./access";
 import { ConfigError, loadConfig, type Config } from "./config";
-import { HttpError, json, unprocessable } from "./http";
+import { HttpError, MAX_BODY_BYTES, bodyTooLarge, json, unprocessable } from "./http";
+import { COUNT_ABOVE_ROWS, budgetRefusal, countingDb, isHeavyRead, pruneReadCounts, rateLimited, recordReads } from "./limits";
 import * as data from "./routes/data";
 import * as abc from "./routes/benefits";
 import * as syncReq from "./routes/syncrequest";
@@ -67,12 +68,27 @@ export default {
     const auth = await checkAccess(request, env);
     if (!auth.ok) return json({ detail: auth.detail }, 403);
 
+    // Before any D1 or Plaid work (src/limits.ts).
+    if (await rateLimited(env, auth.email, request.method, url)) {
+      return json({ detail: "Too many requests. Wait a minute and try again." }, 429, { "retry-after": "60" });
+    }
+    if (Number(request.headers.get("content-length")) > MAX_BODY_BYTES) {
+      const e = bodyTooLarge();
+      return json({ detail: e.detail }, e.status);
+    }
+
     const hit = matches.find(([m]) => m === request.method);
     if (!hit) return json({ detail: "method not allowed" }, 405);
 
+    // Every statement the handler runs is counted; a request that read a lot adds to the day's total.
+    const counted = countingDb(env.DB);
     try {
       const config = loadConfig(env);
-      return await hit[2]({ env, config, request, url, params: hit[1]!.slice(1), ctx, email: auth.email });
+      if (isHeavyRead(request.method, url)) {
+        const refusal = await budgetRefusal(env);
+        if (refusal) return json({ detail: refusal }, 429);
+      }
+      return await hit[2]({ env: { ...env, DB: counted.db }, config, request, url, params: hit[1]!.slice(1), ctx, email: auth.email });
     } catch (e) {
       if (e instanceof HttpError) return json({ detail: e.detail }, e.status);
       if (e instanceof ConfigError) return json({ detail: e.message }, 500);
@@ -82,6 +98,11 @@ export default {
       }
       console.error("unhandled error", e instanceof Error ? e.message : e);   // never log request bodies
       return json({ detail: "internal error" }, 500);
+    } finally {
+      const rows = counted.rows();
+      if (rows > COUNT_ABOVE_ROWS) {
+        ctx.waitUntil(recordReads(env.DB, rows).catch((e) => console.error("counting reads failed:", e instanceof Error ? e.message : e)));
+      }
     }
   },
 
@@ -103,6 +124,8 @@ export default {
         return {};
       });
       if (Object.keys(checked).length) console.log("connection check", JSON.stringify(checked));   // item id -> Plaid code or null
+      // The cron reads what it needs whatever the day's read budget says; it only tidies the counters.
+      await pruneReadCounts(env.DB).catch((e) => console.error("pruning read counts failed:", e instanceof Error ? e.message : e));
     }
   },
 } satisfies ExportedHandler<Env>;

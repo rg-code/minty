@@ -126,6 +126,13 @@ Design history and decisions: `docs/serverless-plan.md`.
   blew the budget on 2026-10-12.
   Every page-facing route has a budget in `test/reads.test.ts`: keep new queries index-driven and
   add a line there. Check `rows_read` before running ad-hoc remote queries over transactions.
+- Limits (`src/limits.ts`): every API request passes the per-login rate limits (wrangler.jsonc
+  `ratelimits`) right after the Access check, before any D1 or Plaid work. A missing binding
+  means no limit, never a lockout. Requests that read more than 1,000 rows add to a per-day
+  counter in `app_state`; past `READ_BUDGET_PER_DAY`, `GET /transactions`, `/accounts` and
+  `/benefits` are refused until 00:00 UTC. The cron never checks it. A new route whose reads grow
+  with the transactions goes in `isHeavyRead`. Bodies are read with `jsonBody` (16 KiB cap), never
+  `request.json()`. D1 allows 50 bytes in a LIKE pattern, so user text in a LIKE needs a byte cap.
 - Live demo (`demo/`, `npm run build:demo`, `docs/demo.md`): the real dashboard and Worker in the
   browser over sql.js, with a made-up household. It's built from `public/` and `src/`, so it follows
   their changes; the build checks every edit it makes to `public/index.html` and stops when one no

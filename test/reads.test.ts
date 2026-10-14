@@ -6,6 +6,7 @@ import { FakePlaid, account, page, txn } from "./fake-plaid";
 import { fernetEncrypt } from "../src/fernet";
 import { runSyncAll } from "../src/sync";
 import { vi } from "vitest";
+import { pruneReadCounts, readsToday } from "../src/limits";
 
 // D1 bills rows read: the free plan allows 5,000,000 a day, and one slow query used them up
 // (ABC's first version read ~463,000 rows per request). Every page-facing route gets a budget
@@ -110,5 +111,16 @@ describe("D1 rows read by the cron", () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+});
+
+describe("D1 rows read by the read budget (src/limits.ts)", () => {
+  it("the day's counter is one primary-key read, and pruning old ones stays small", async () => {
+    const lookup = counting(env.DB);
+    await readsToday(lookup.db);
+    expect(lookup.tally.rows).toBeLessThanOrEqual(1);
+    const prune = counting(env.DB);
+    await pruneReadCounts(prune.db);
+    expect(prune.tally.rows).toBeLessThanOrEqual(20);
   });
 });

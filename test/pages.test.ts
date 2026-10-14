@@ -191,3 +191,12 @@ describe("static pages", () => {
     expect((await SELF.fetch("https://minty.example.workers.dev/health")).status).toBe(403);   // in run_worker_first
   });
 });
+
+describe("limits on the dashboard (docs/security-plan.md, step 2)", () => {
+  it("the search box stops at D1's LIKE limit, and a refusal shows its reason instead of sample data", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('id="q" placeholder="Search" aria-label="Search descriptions and merchants" maxlength="48"');
+    expect(html).toContain("if (res.status === 429 || res.status === 422) {");
+    expect(html).toContain('notice(d.detail || "Too many requests. Wait a minute and try again.");');
+  });
+});

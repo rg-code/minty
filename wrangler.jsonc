@@ -17,6 +17,12 @@
 //       SYNC_MAX_PAGES_PER_RUN "10"                Plaid pages (100 transactions each) per cron run
 //       SYNC_MAX_BYTES_PER_RUN "150000"            page text per run (median ~8 ms CPU; free plan allows 10)
 //                                                  on Workers Paid: 20000000 bytes / 50 pages
+//       READ_BUDGET_PER_DAY "3000000"              D1 rows the pages may read per UTC day before
+//                                                  browsing and search pause (sync never does);
+//                                                  the free plan allows 5,000,000. "0" = no limit
+//   * rate limits (the "ratelimits" bindings below) are the same for everyone: 120 API requests a
+//     minute per login, 30 searches / ABC loads, 10 bank-linking calls. Their namespace ids are
+//     fixed numbers, unusual so they don't share counters with another Worker on your account.
 //   * secrets (Plaid keys, TOKEN_ENC_KEY) likewise live only in the dashboard / `wrangler secret put`,
 //     or in .dev.vars locally. See .dev.vars.example.
 {
@@ -55,6 +61,13 @@
       "/link/*"
     ]
   },
+
+  // Per login (the Access email), per minute; counted per Cloudflare location (src/limits.ts).
+  "ratelimits": [
+    { "name": "RL_GENERAL", "namespace_id": "714101", "simple": { "limit": 120, "period": 60 } },
+    { "name": "RL_SEARCH",  "namespace_id": "714102", "simple": { "limit": 30,  "period": 60 } },
+    { "name": "RL_LINK",    "namespace_id": "714103", "simple": { "limit": 10,  "period": 60 } }
+  ],
 
   "d1_databases": [
     {

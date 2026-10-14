@@ -347,7 +347,7 @@
   </div>
   <div class="controls">
     <div class="seg" id="ownerSeg" role="group" aria-label="Filter by person"></div>
-    <input type="search" id="q" placeholder="Search" aria-label="Search descriptions and merchants" />
+    <input type="search" id="q" placeholder="Search" aria-label="Search descriptions and merchants" maxlength="48" />
     <div class="tagpick" id="tagPick">
       <button type="button" class="tagbtn" id="tagBtn" aria-haspopup="true" aria-expanded="false" aria-controls="tagMenu">All tags</button>
       <div class="tagmenu" id="tagMenu" hidden>
@@ -495,6 +495,12 @@ async function load(more = false) {
   let txns;
   try {
     const res = await fetch("/transactions?" + p.toString());
+    if (res.status === 429 || res.status === 422) {  // a limit, or a filter the API refused: say why, keep the list
+      const d = await res.json().catch(() => ({}));
+      if (seq !== loadSeq) return;
+      notice(d.detail || "Too many requests. Wait a minute and try again.");
+      return;
+    }
     if (!res.ok) throw new Error(res.status);
     txns = await res.json();
     if (seq !== loadSeq) return;                     // filters changed meanwhile: a newer load wins
@@ -735,6 +741,13 @@ function banner(show) {
   const b = document.getElementById("banner");
   b.hidden = !show;
   if (show) b.textContent = "Showing sample data — couldn't reach the API. Deploy this file behind the Minty API to see live transactions.";
+}
+
+/** A message from the API in the banner (e.g. a rate limit); the next successful load clears it. */
+function notice(text) {
+  const b = document.getElementById("banner");
+  b.hidden = false;
+  b.textContent = text;
 }
 
 function render(txns) {

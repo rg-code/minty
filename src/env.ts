@@ -4,6 +4,10 @@
 export interface Env {
   DB: D1Database;
   ASSETS: Fetcher;
+  /** Rate limits per login (wrangler.jsonc "ratelimits"). Missing = not limited (src/limits.ts). */
+  RL_GENERAL?: RateLimit;
+  RL_SEARCH?: RateLimit;
+  RL_LINK?: RateLimit;
 
   MINTY_USERS?: string;
   /** Plaid credential slots per person, in overflow order. Default "primary,backup". */
@@ -15,6 +19,8 @@ export interface Env {
   SYNC_MAX_PAGES_PER_RUN?: string;
   /** Page text synced per cron run, in bytes. Default 150,000 (median ~8 ms CPU measured; free plan allows 10). */
   SYNC_MAX_BYTES_PER_RUN?: string;
+  /** D1 rows the pages may read per UTC day before heavy routes pause. Default 3,000,000; "0" = off. */
+  READ_BUDGET_PER_DAY?: string;
 
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;

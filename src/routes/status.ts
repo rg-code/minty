@@ -4,6 +4,7 @@ import { fernetDecrypt, fernetEncrypt } from "../fernet";
 import { plaidHost } from "../plaid";
 import { json } from "../http";
 import { bankHealth, bankRows, syncHealth } from "../health";
+import { DEFAULT_READ_BUDGET, LIMITERS, readBudget, readsToday } from "../limits";
 
 /** GET /status: setup checks for the household, shown on the /add-user page. Behind Access like
  * every API route; reports only whether things are set, never values. */
@@ -31,6 +32,35 @@ export async function status(env: Env, config: Config, email: string): Promise<R
   } else {
     add({ id: "access", ok: true, level: "error", message: `Signed in through Cloudflare Access as ${email}.` });
   }
+
+  // Every admitted login is fully trusted (README, Security model), so say when the Worker accepts
+  // whoever Access lets in.
+  const allowed = (env.ALLOWED_LOGINS ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  add(allowed.length
+    ? { id: "allowed_logins", ok: true, level: "warn", message: `ALLOWED_LOGINS lists ${allowed.length} login${allowed.length === 1 ? "" : "s"}.` }
+    : { id: "allowed_logins", ok: false, level: "warn",
+        message: "ALLOWED_LOGINS is empty, so anyone your Access policy lets in can use Minty, with full access to every person's data.",
+        fix: "Set the variable ALLOWED_LOGINS to the same addresses as your Access policy, comma-separated." });
+
+  const noLimiter = LIMITERS.filter((n) => !env[n]);
+  add(noLimiter.length
+    ? { id: "rate_limits", ok: false, level: "warn", message: `Rate limits are off (missing ${noLimiter.join(", ")}).`,
+        fix: "Sync your fork and redeploy: wrangler.jsonc defines them." }
+    : { id: "rate_limits", ok: true, level: "warn", message: "Rate limits are on (per login, per minute)." });
+
+  const { budget, valid } = readBudget(env);
+  const used = await readsToday(env.DB).catch(() => 0);
+  const fmt = (n: number) => n.toLocaleString("en-US");
+  add(!valid
+    ? { id: "read_budget", ok: false, level: "error", message: `READ_BUDGET_PER_DAY isn't a whole number, so the default (${fmt(DEFAULT_READ_BUDGET)} rows) is used.`,
+        fix: "Set READ_BUDGET_PER_DAY to a whole number of rows (0 = no budget), or delete it." }
+    : !budget
+    ? { id: "read_budget", ok: true, level: "warn", message: `No daily D1 read budget (READ_BUDGET_PER_DAY is 0). Counted today: ${fmt(used)} rows.` }
+    : used > budget
+    ? { id: "read_budget", ok: false, level: "warn",
+        message: `Today's D1 reads (${fmt(used)} rows counted) passed the daily budget of ${fmt(budget)}: browsing and search pause until 00:00 UTC. Sync keeps running.`,
+        fix: "If this happens on a normal day, raise READ_BUDGET_PER_DAY (the free plan allows 5,000,000)." }
+    : { id: "read_budget", ok: true, level: "warn", message: `D1 rows read today: ${fmt(used)} counted, of a daily budget of ${fmt(budget)}.` });
 
   add((await tokenKeyWorks(env.TOKEN_ENC_KEY))
     ? { id: "token_key", ok: true, level: "error", message: "TOKEN_ENC_KEY is set." }
