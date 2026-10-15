@@ -5,9 +5,24 @@ import { SELF } from "cloudflare:test";
 // wiring: pages come from public/, API paths hit the Worker first.
 // (Cloudflare Access sits in front of both at the edge; it isn't simulated locally.)
 
+const fetchText = async (path: string) => (await SELF.fetch(`https://minty.example.workers.dev${path}`)).text();
+
+// The pages' scripts were inline until security step 4 moved them to files (so the CSP can be
+// script-src 'self'). The assertions below are about what a page contains, so `html` is the page
+// with those scripts put back where their <script src> tags are, exactly as it was. Only these
+// four: other scripts (lock.js, abc.js) were always separate files, and still aren't included.
+export const MOVED_SCRIPTS = ["/theme.js", "/app.js", "/connect.js", "/add-user.js"];
+
 const page = async (path: string) => {
   const r = await SELF.fetch(`https://minty.example.workers.dev${path}`);
-  return { status: r.status, type: r.headers.get("content-type") ?? "", html: await r.text() };
+  let html = await r.text();
+  if ((r.headers.get("content-type") ?? "").includes("text/html")) {
+    for (const src of MOVED_SCRIPTS) {
+      const tag = `<script src="${src}"></script>`;
+      if (html.includes(tag)) html = html.replace(tag, `<script>\n${await fetchText(src)}</script>`);
+    }
+  }
+  return { status: r.status, type: r.headers.get("content-type") ?? "", html };
 };
 
 describe("static pages", () => {
@@ -249,3 +264,62 @@ describe("device lock (public/lock.js)", () => {
   });
 });
 
+
+describe("security headers (docs/security-plan.md, step 4)", () => {
+  const raw = async (path: string) => SELF.fetch(`https://minty.example.workers.dev${path}`);
+  const csp = (r: Response) => r.headers.get("content-security-policy-report-only") ?? "";
+
+  it.each(["/", "/connect", "/add-user"])("%s has no inline script or inline event handler left", async (path) => {
+    const html = await (await raw(path)).text();
+    expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);                     // every script is a file
+    expect(html).not.toMatch(/\son[a-z]+="/);
+  });
+
+  it.each(["/", "/add-user", "/app.js", "/theme.js", "/lock.js", "/abc.css", "/manifest.webmanifest"])("%s gets the strict page policy (report-only for now)", async (path) => {
+    const r = await raw(path);
+    expect(r.status).toBe(200);
+    for (const d of ["default-src 'self'", "script-src 'self';", "frame-ancestors 'none'", "object-src 'none'", "base-uri 'none'", "form-action 'self'", "worker-src 'self'", "manifest-src 'self'"])
+      expect(csp(r), path).toContain(d);
+    expect(csp(r)).not.toContain("cdn.plaid.com");
+    expect(r.headers.get("content-security-policy")).toBeNull();                 // nothing enforced yet
+    expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(r.headers.get("referrer-policy")).toBe("same-origin");
+    expect(r.headers.get("permissions-policy")).toContain("camera=()");
+  });
+
+  it("/connect has its own policy, with Plaid Link's script, frame and API hosts only", async () => {
+    const r = await raw("/connect");
+    const policy = csp(r);
+    expect(policy).toContain("script-src 'self' https://cdn.plaid.com/link/v2/stable/link-initialize.js;");
+    expect(policy).toContain("frame-src https://cdn.plaid.com/;");
+    expect(policy).toContain("connect-src 'self' https://production.plaid.com https://sandbox.plaid.com;");
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(policy).not.toContain("unsafe-eval");
+    expect(policy.split("default-src").length).toBe(2);                        // one policy, not the page one plus this
+    expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  it("the Worker's JSON responses may load nothing and can't be framed", async () => {
+    for (const path of ["/healthz", "/users"]) {                                 // /users: refused without Access, still JSON
+      const r = await raw(path);
+      expect(r.headers.get("content-type"), path).toContain("application/json");
+      expect(csp(r), path).toBe("default-src 'none'; frame-ancestors 'none'");
+      expect(r.headers.get("x-content-type-options"), path).toBe("nosniff");
+      expect(r.headers.get("referrer-policy"), path).toBe("same-origin");
+    }
+  });
+
+  it("a Worker path with no route falls through to the assets, which apply the page policy", async () => {
+    const r = await raw("/link/nope");                                           // run_worker_first, but no route: env.ASSETS.fetch
+    expect(csp(r)).toContain("frame-ancestors 'none'");
+    expect(csp(r)).toContain("script-src 'self';");
+    expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  it("the headers file isn't served, and every moved script is in the service worker's shell", async () => {
+    expect((await raw("/_headers")).status).toBe(404);
+    const sw = await (await raw("/sw.js")).text();
+    expect(sw).toContain('const CACHE = "minty-v2";');                          // installed apps refresh their copy once
+    for (const src of MOVED_SCRIPTS) expect(sw, src).toContain(`"${src}"`);
+  });
+});

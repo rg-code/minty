@@ -156,7 +156,26 @@ the pinned key.
      gains `reserved: 0`. None removed.
    - Not in the review, done alongside: the **device lock** (#58), a WebAuthn gate on each device
      before a page shows anything; it never calls the Worker and stores nothing in D1.
-4. **Headers** (§3).
+4. **Headers** (§3). **In progress: report-only (PR 1).**
+   - [x] The inline scripts moved to files: one shared `theme.js` (render-blocking in the head, as
+         before) and `app.js`, `connect.js`, `add-user.js` at the same spot in their pages. No page
+         has an inline `<script>` or `on…=` handler (a test checks). `sw.js` shell lists the new
+         files; its cache is `minty-v2`, so installed apps refresh once.
+   - [x] `public/_headers`: `Content-Security-Policy-Report-Only` for every page and file
+         (`default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'
+         data:`, no framing, no objects, `base-uri 'none'`, `form-action 'self'`), plus `nosniff`,
+         `Referrer-Policy: same-origin` and a Permissions-Policy. `style-src 'unsafe-inline'` is
+         kept on purpose (owner, 2026-10-15): inline styles can't run code, and removing them means
+         rewriting the style attributes the scripts build. `_headers` applies to files the Worker
+         hands back too (`env.ASSETS.fetch`), checked in tests.
+   - [x] `/connect` replaces it with its own: Plaid Link's script, `frame-src https://cdn.plaid.com/`
+         and `connect-src` for Plaid's production and Sandbox hosts, **without** `'unsafe-inline'`,
+         so the report-only phase shows whether Link needs it.
+   - [x] Worker responses (`json()`): report-only `default-src 'none'; frame-ancestors 'none'`,
+         `nosniff`, the same referrer policy.
+   - [ ] Owner: link and reconnect a Sandbox bank with devtools open; note any CSP report. Then
+         PR 2 switches every `-Report-Only` header to `Content-Security-Policy` (with `'unsafe-inline'`
+         on `/connect` only if Link needs it).
 5. **Rotation and disconnect** (§3).
 6. **Fork updates from signed tags** (§3), its own PR, last.
 

@@ -1,7 +1,7 @@
 # Live demo
 
 The landing page (https://minty.milesmaximizer.com, **Try the live demo**) runs Minty with
-made-up data: the real dashboard (`public/index.html`, `abc.js`, `abc.css`) and the real Worker
+made-up data: the real dashboard (`public/index.html`, `app.js`, `theme.js`, `abc.js`, `abc.css`) and the real Worker
 (`src/`), both in the visitor's browser. There's no server behind it: nothing is sent anywhere,
 Plaid is never called, and everything resets on reload.
 
@@ -45,6 +45,6 @@ through the real routes.
 
 Writes a static folder (default `dist/demo`, not committed). `--og-image` and `--og-url` add link-preview
 tags (Slack, iMessage…) for wherever it's published; the image must be a PNG or JPEG. Each change the build makes to
-`public/index.html` is checked, so when the dashboard changes in a way the demo can't follow, the
+`public/index.html`, `app.js` and `theme.js` is checked, so when the dashboard changes in a way the demo can't follow, the
 build stops with the edit that no longer applies. Rebuild and redeploy the landing page after
 dashboard changes: it's in its own private repo, rg-code/minty-site (`node deploy.mjs` there; see its README).

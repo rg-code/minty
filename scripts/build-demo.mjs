@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// Builds Minty's live demo: a static folder with the real dashboard (public/index.html, abc.js,
-// abc.css) and the real Worker (src/) bundled to run in the browser over sql.js, with a made-up
+// Builds Minty's live demo: a static folder with the real dashboard (public/index.html, app.js,
+// theme.js, abc.js, abc.css) and the real Worker (src/) bundled to run in the browser over sql.js, with a made-up
 // household (demo/). No server, no Plaid, nothing leaves the browser. See docs/demo.md.
 //
 //   npm run build:demo -- [--out dist/demo] [--goatcounter https://<code>.goatcounter.com/count]
 //                         [--og-image https://…/og.png --og-url https://…/demo/]   (link previews)
 //
-// Every change to the dashboard's HTML is checked: if public/index.html changes so that one no
-// longer applies, the build stops instead of shipping a demo that half works.
+// Every change to the dashboard's files is checked: if index.html, app.js or theme.js changes so
+// that one no longer applies, the build stops instead of shipping a demo that half works.
 import { build } from "esbuild";
 import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -52,13 +52,16 @@ const result = await build({
   logLevel: "warning",
 });
 
-// The dashboard page, changed only where listed.
-let html = await readFile(join(root, "public/index.html"), "utf8");
-const edit = (what, from, to, count = 1) => {
-  const n = typeof from === "string" ? html.split(from).length - 1 : (html.match(from) ?? []).length;
-  if (count === "some" ? n < 1 : n !== count) throw new Error(`build-demo: "${what}" matched ${n} times in public/index.html (expected ${count})`);
-  html = typeof from === "string" ? html.replaceAll(from, to) : html.replace(from, to);
+// The dashboard page and its own scripts, changed only where listed.
+const files = {};
+for (const f of ["index.html", "app.js", "theme.js"]) files[f] = await readFile(join(root, "public", f), "utf8");
+const editIn = (file, what, from, to, count = 1) => {
+  const text = files[file];
+  const n = typeof from === "string" ? text.split(from).length - 1 : (text.match(from) ?? []).length;
+  if (count === "some" ? n < 1 : n !== count) throw new Error(`build-demo: "${what}" matched ${n} times in public/${file} (expected ${count})`);
+  files[file] = typeof from === "string" ? text.replaceAll(from, to) : text.replace(from, to);
 };
+const edit = (what, from, to, count) => editIn("index.html", what, from, to, count);
 edit("title", /<title>[^<]*<\/title>/, "<title>Minty demo</title>");
 const DESCRIPTION = "Minty with made-up data, in your browser: transactions, card credits (ABC) and more.";
 const og = ogImage ? `
@@ -74,10 +77,11 @@ const og = ogImage ? `
 edit("demo script first", /^<head>$/m, `<head>\n<meta name="robots" content="noindex" />${og}\n<script src="demo.js"></script>`);
 edit("no manifest", /<link rel="manifest"[^>]*>\n?/, "");
 edit("no device lock", '<link rel="stylesheet" href="/lock.css" />\n<script src="/lock.js"></script>\n', "");   // demo visitors are never asked for Face ID
-edit("no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});`, "// the demo registers no service worker");
-edit("light by default", `|| (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")`, `|| "light"`);
-html = html.replace(/(href|src)="\/(favicon\.svg|favicon-32\.png|apple-touch-icon\.png|abc\.css|abc\.js)"/g, (_, a, f) => `${a}="${f}"`);
-if (/(href|src)="\/(?!connect|add-user)[a-z]/.test(html)) throw new Error(`build-demo: an absolute asset path is left: ${html.match(/(href|src)="\/(?!connect|add-user)[^"]*"/)[0]}`);
+editIn("app.js", "no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});`, "// the demo registers no service worker");
+editIn("theme.js", "light by default", `|| (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")`, `|| "light"`);
+edit("relative asset paths", /(href|src)="\/(favicon\.svg|favicon-32\.png|apple-touch-icon\.png|abc\.css|abc\.js|app\.js|theme\.js)"/g, (_, a, f) => `${a}="${f}"`, "some");
+const html0 = files["index.html"];
+if (/(href|src)="\/(?!connect|add-user)[a-z]/.test(html0)) throw new Error(`build-demo: an absolute asset path is left: ${html0.match(/(href|src)="\/(?!connect|add-user)[^"]*"/)[0]}`);
 edit("demo styles", /^<\/head>$/m, `<link rel="stylesheet" href="demo.css" />\n</head>`);
 edit("ABC click event", `id="abcOpen"`, `id="abcOpen" data-goatcounter-click="minty-demo-abc"`);
 edit("needs JavaScript", /^<body>$/m, `<body>\n<noscript><p style="padding:16px;text-align:center">The demo runs in your browser, so it needs JavaScript.</p></noscript>`);
@@ -88,7 +92,7 @@ if (goatcounter) {
 <script data-goatcounter="${goatcounter}" async src="https://gc.zgo.at/count.js"></script>
 </body>`);
 }
-await writeFile(join(out, "index.html"), html);
+for (const [f, text] of Object.entries(files)) await writeFile(join(out, f), text);
 for (const f of ["abc.js", "abc.css", "favicon.svg", "favicon-32.png", "apple-touch-icon.png"]) await copyFile(join(root, "public", f), join(out, f));
 await copyFile(join(root, "demo/demo.css"), join(out, "demo.css"));
 

@@ -141,9 +141,16 @@ Design history and decisions: `docs/serverless-plan.md`.
   `/benefits` are refused until 00:00 UTC. The cron never checks it. A new route whose reads grow
   with the transactions goes in `isHeavyRead`. Bodies are read with `jsonBody` (16 KiB cap), never
   `request.json()`. D1 allows 50 bytes in a LIKE pattern, so user text in a LIKE needs a byte cap.
+- Browser headers (security plan step 4): `public/_headers` sets the pages' Content-Security-Policy
+  (`script-src 'self'`; `/connect` has its own, with Plaid Link's hosts), `nosniff`, a same-origin
+  referrer policy and a Permissions-Policy; `json()` in `src/http.ts` sets the API's. So pages have
+  **no inline scripts or `on…=` handlers** (each page's script is a file: `theme.js`, `app.js`,
+  `connect.js`, `add-user.js`; a test checks). Anything new loaded from another origin needs its
+  host in the policy. The CSP is report-only until a follow-up enforces it. A new page script goes
+  in `sw.js`'s shell too.
 - Live demo (`demo/`, `npm run build:demo`, `docs/demo.md`): the real dashboard and Worker in the
   browser over sql.js, with a made-up household. It's built from `public/` and `src/`, so it follows
-  their changes; the build checks every edit it makes to `public/index.html` and stops when one no
+  their changes; the build checks every edit it makes to `public/index.html`, `app.js` and `theme.js` and stops when one no
   longer applies (fix the edit, never the check). Its data stays made up (`test/demo.test.ts`), and
   it never talks to a real Minty or to Plaid.
 - Fernet reference vectors (`test/fixtures/fernet-vectors.json`, test key only) pin the
