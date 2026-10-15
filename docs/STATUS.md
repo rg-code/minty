@@ -8,9 +8,9 @@ there, gitignored here). If that folder exists, read it too.
 
 ## Where things stand
 
-- **Code:** Minty is Cloudflare-only (a Worker plus D1, on free plans); everything through #54 is
+- **Code:** Minty is Cloudflare-only (a Worker plus D1, on free plans); everything through #59 is
   on `main`. CI (vitest in workerd + typecheck) runs on every PR, and Workers Builds deploys
-  `main`. **Tests: 310** (2026-10-14, 4580951). Migrations 0001–0008.
+  `main`. **Tests: 337** (2026-10-15, ee99fa8). Migrations 0001–0009.
   - Plan and decision log: [serverless-plan.md](serverless-plan.md) §8. ABC: [abc.md](abc.md).
     Finance agent: [agent-plan.md](agent-plan.md). Live demo: [demo.md](demo.md).
     Security: [security-plan.md](security-plan.md).
@@ -45,6 +45,16 @@ there, gitignored here). If that folder exists, read it too.
 
 ## Recently done (2026-10-10 to 10-14)
 
+- **Security step 3, Link sessions (#57, migration 0009).** `/link/token` reserves a slot per
+  login, and `/link/exchange` claims that session once before Plaid's exchange, taking owner and
+  slot from it, never from the browser. New `POST /link/cancel`; a one-a-minute cooldown on
+  reconnects. Linking looks the same.
+- **Device lock (#58):** Face ID, Touch ID, Windows Hello or a fingerprint before Minty shows
+  anything, on by default where the device has a built-in authenticator, never locking anyone
+  out where it hasn't. A visibility gate only (WebAuthn on the device; nothing in D1). Stripped
+  from the live demo.
+- **The coin (#59):** while a sync request is pending it drops and bounces on the ground,
+  instead of spinning.
 - **Security review (2026-10-14).** No unauthenticated path to financial data. Plan, decisions
   and to-do: [security-plan.md](security-plan.md). Step 1 done the same day: a ruleset on `main`,
   preview builds off and a narrower build token, an Emails Access policy. Step 2 (#54): rate
@@ -85,9 +95,9 @@ there, gitignored here). If that folder exists, read it too.
 
 ## To do, in order
 
-1. **Security plan, step 3** (Link sessions, [security-plan.md](security-plan.md) §3–§4), then
-   steps 4–6. Steps 1 (settings and docs) and 2 (rate limits and the D1 budget) were done
-   2026-10-14.
+1. **Security plan, step 4** (headers, [security-plan.md](security-plan.md) §3–§4): its design
+   goes to the owner first. Then steps 5 and 6. Steps 1–3 are done (settings and docs; rate
+   limits and the D1 budget, #54; Link sessions, #57).
 2. **Quick checks on the live deployment** (the owner, in the dashboard):
    - **CPU:** **Worker → Metrics** for "Exceeded CPU", especially `/benefits` and the catch-up
      runs.
