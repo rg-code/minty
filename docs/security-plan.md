@@ -1,6 +1,6 @@
 # Plan: security hardening after the 2026-10-14 review
 
-**Status: decisions made (2026-10-14, §2); steps 1–3 done (step 3: #57, 2026-10-15); step 4 next. To-do list: §4.** Written 2026-10-14.
+**Status: decisions made (2026-10-14, §2); steps 1–3 done (step 3: #57, 2026-10-14); step 4 next. To-do list: §4.** Written 2026-10-14.
 
 An external review of `main` at 183d15b (API, pages, encryption, migrations, workflows, tests)
 found no unauthenticated path to financial data. Its main risks were how updates reach a

@@ -10,7 +10,7 @@ there, gitignored here). If that folder exists, read it too.
 
 - **Code:** Minty is Cloudflare-only (a Worker plus D1, on free plans); everything through #59 is
   on `main`. CI (vitest in workerd + typecheck) runs on every PR, and Workers Builds deploys
-  `main`. **Tests: 337** (2026-10-16, ee99fa8). Migrations 0001–0009.
+  `main`. **Tests: 337** (2026-10-15, ee99fa8). Migrations 0001–0009.
   - Plan and decision log: [serverless-plan.md](serverless-plan.md) §8. ABC: [abc.md](abc.md).
     Finance agent: [agent-plan.md](agent-plan.md). Live demo: [demo.md](demo.md).
     Security: [security-plan.md](security-plan.md).
