@@ -1,5 +1,7 @@
 # Get started with Minty
 
+**No subscription. No ads. No tracking.**
+
 Your central, private home for all your bank and card data. Only you can see or change it: it
 lives in your own Cloudflare account, encrypted at rest, and your bank connections are encrypted
 again with a key only you hold.
