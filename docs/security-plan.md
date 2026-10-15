@@ -1,6 +1,6 @@
 # Plan: security hardening after the 2026-10-14 review
 
-**Status: decisions made (2026-10-14, §2); steps 1–2 done (2026-10-14); step 3 next. To-do list: §4.** Written 2026-10-14.
+**Status: decisions made (2026-10-14, §2); steps 1–3 done (step 3: #57, 2026-10-15); step 4 next. To-do list: §4.** Written 2026-10-14.
 
 An external review of `main` at 183d15b (API, pages, encryption, migrations, workflows, tests)
 found no unauthenticated path to financial data. Its main risks were how updates reach a
@@ -140,7 +140,22 @@ the pinned key.
          cron never checks it and prunes counters after 7 days.
    - [x] Setup checks: `ALLOWED_LOGINS` empty, rate limits off, today's counted reads. A
          household that followed GET-STARTED sees only ✓ (a test pins it).
-3. **Link sessions** (§3, migration 0009).
+3. **Link sessions** (§3, migration 0009). **Done (#57).**
+   - [x] `/link/token` reserves a slot in `link_sessions`, one `INSERT … SELECT` per slot in
+         `PLAID_SLOTS` order, only while banks plus open reservations are under the cap.
+   - [x] `/link/exchange` takes `{session_id, public_token}` and claims the session (once, same
+         email, unexpired) before Plaid's exchange, taking owner and slot from it. A Plaid error
+         releases it; a claimed session that never finishes keeps counting, and Setup checks flag it.
+   - [x] `POST /link/cancel` releases an unused session. Update mode gets a session too, at most
+         one per bank a minute. `/capacity` reports `reserved`; the hourly cron prunes old sessions.
+   - [x] `connect.html` keeps one `localStorage` entry per session with its expiry (plus the
+         tab's own in `sessionStorage`), cleared on success, exit and expiry; the old shared keys
+         are gone. `scripts/sandbox-e2e.ts` opens a session first.
+   - Tests 310 → 331. Changed assertions (owner and slot now come from the session): six exchange
+     tests send a `session_id`, three `toEqual`s gain `session_id` and `expires_at`, `/capacity`
+     gains `reserved: 0`. None removed.
+   - Not in the review, done alongside: the **device lock** (#58), a WebAuthn gate on each device
+     before a page shows anything; it never calls the Worker and stores nothing in D1.
 4. **Headers** (§3).
 5. **Rotation and disconnect** (§3).
 6. **Fork updates from signed tags** (§3), its own PR, last.
