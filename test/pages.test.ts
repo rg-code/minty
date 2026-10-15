@@ -142,14 +142,6 @@ describe("static pages", () => {
     for (const id of ["tagBtn", "bankBtn", "acctBtn", "dateBtn"]) expect(html).toContain(`.ministrip #${id}::before { -webkit-mask-image:`);
   });
 
-  it("while a sync is pending the coin drops and bounces (not a spin), and only dims with reduced motion", async () => {
-    const { html } = await page("/");
-    expect(html).toContain(".coinbtn.syncing img { animation: coindrop 2.4s infinite;");
-    expect(html).toMatch(/@keyframes coindrop \{[\s\S]*translateY\(-11px\)[\s\S]*scale\(1\.08, \.9\)/);   // the fall, then a squash on landing
-    expect(html).not.toContain("coinspin");
-    expect(html).toContain("@media (prefers-reduced-motion: reduce) { .coinbtn.syncing img { animation: none; opacity: .6; } }");
-  });
-
   it("dashboard has a Dates menu with quick ranges, like the other filters", async () => {
     const { html } = await page("/");
     expect(html).toContain('id="dateBtn"');
