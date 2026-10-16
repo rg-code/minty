@@ -227,3 +227,8 @@ From a clone of your fork, you can do the same with Wrangler:
 `npx wrangler login`, then `npx wrangler secret put TOKEN_ENC_KEY` (and each Plaid secret), and
 `npm run deploy`. Variables are easiest to set in the dashboard. `keep_vars` in `wrangler.jsonc`
 makes sure deploys never overwrite them.
+
+## Support Minty
+
+All set? Minty is free and always will be. If it saves you time, you can support it on
+[Ko-fi](https://ko-fi.com/mintyme). Entirely optional.
