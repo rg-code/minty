@@ -49,6 +49,7 @@ export interface ItemRow {
   txn_cursor: string | null;
   sync_start_cursor: string | null;
   status: string;
+  products?: string;                 // 'investments': an Investments-only login, not synced here
 }
 
 const MUTATION = "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION";
@@ -317,7 +318,7 @@ export async function runSyncAll(
 ): Promise<Record<number, ItemResult>> {
   const config = loadConfig(env);
   const { results: items } = await env.DB.prepare(
-    `SELECT * FROM items WHERE status IN ('good', 'login_required')
+    `SELECT * FROM items WHERE status IN ('good', 'login_required') AND products = 'transactions'
      ${opts.updatesOnly ? "AND sync_start_cursor IS NOT NULL" : ""}
      ORDER BY sync_start_cursor IS NOT NULL, coalesce(attempted_at, updated_at), id`,
   ).all<ItemRow>();

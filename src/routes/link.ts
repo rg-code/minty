@@ -119,15 +119,15 @@ export async function chooseAccountFor(env: Env, config: Config, owner: string):
 /** Reserves a slot for `owner`: the first slot in PLAID_SLOTS order that has keys and room (banks
  * plus reservations under the cap). Each try is one statement, so concurrent reservations can't
  * overshoot. Nothing free: chooseAccountFor's error (no keys yet / every slot full). */
-async function reserveSlot(env: Env, config: Config, owner: string, email: string): Promise<{ account: string; id: string; expires: string }> {
+async function reserveSlot(env: Env, config: Config, owner: string, email: string, purpose: LinkPurpose = "reconnect"): Promise<{ account: string; id: string; expires: string }> {
   for (let attempt = 0; attempt < 2; attempt++) {
     for (const account of config.ownerAccounts.get(owner) ?? []) {
       if (!isConfigured(env, config, account)) continue;
       const id = newSessionId(), expires = expiry();
       const row = await env.DB.prepare(
-        `INSERT INTO link_sessions (id, email, operation, owner, plaid_account, expires_at)
-         SELECT ?2, ?3, 'link', ?4, ?1, ?5 WHERE ${USED_SQL} < ?6 RETURNING id`,
-      ).bind(account, id, email, owner, expires, config.itemCap).first<{ id: string }>();
+        `INSERT INTO link_sessions (id, email, operation, owner, plaid_account, expires_at, purpose)
+         SELECT ?2, ?3, 'link', ?4, ?1, ?5, ?7 WHERE ${USED_SQL} < ?6 RETURNING id`,
+      ).bind(account, id, email, owner, expires, config.itemCap, purpose).first<{ id: string }>();
       if (row) return { account, id, expires };
     }
     await chooseAccountFor(env, config, owner);        // throws why nothing is free; a slot freed meanwhile: try again
@@ -135,15 +135,22 @@ async function reserveSlot(env: Env, config: Config, owner: string, email: strin
   throw new HttpError(409, `Every Plaid account for '${owner}' is busy: other banks are being linked right now. Try again in a few minutes.`);
 }
 
+/** A new link's purpose (link_sessions.purpose): a bank for its transactions (the default, stored as
+ * 'reconnect' like every session before it), or a retirement or brokerage login for Plaid
+ * Investments only (EGG, docs/cfa.md §3). */
+type LinkPurpose = "reconnect" | "investments";
+
 export async function createLinkToken(env: Env, config: Config, request: Request, email: string): Promise<Response> {
-  const owner = (await body(request)).owner;
+  const b = await body(request);
+  const owner = b.owner;
   if (typeof owner !== "string" || !config.users.has(owner)) throw new HttpError(400, "unknown owner");
-  const session = await reserveSlot(env, config, owner, email);   // overflow decision happens here
+  if (b.kind !== undefined && b.kind !== "transactions" && b.kind !== "investments") throw unprocessable("kind must be 'transactions' or 'investments'");
+  const investments = b.kind === "investments";
+  const session = await reserveSlot(env, config, owner, email, investments ? "investments" : "reconnect");   // overflow decision happens here
   try {
     const { body: resp } = await plaidPost<{ link_token: string }>(env, credsFor(env, config, session.account), "/link/token/create", {
       ...linkBase(env, owner),
-      products: ["transactions"],
-      transactions: { days_requested: HISTORY_DAYS },
+      ...(investments ? { products: ["investments"] } : { products: ["transactions"], transactions: { days_requested: HISTORY_DAYS } }),
     });
     // The session ties /link/exchange to the SAME credentials; plaid_account is for the page's display.
     return json({ link_token: resp.link_token, plaid_account: session.account, session_id: session.id, expires_at: session.expires });
@@ -176,9 +183,10 @@ export async function exchange(env: Env, config: Config, request: Request, ctx: 
   const session = await env.DB.prepare(
     `UPDATE link_sessions SET used_at = ${NOW}
      WHERE id = ? AND email = ? AND operation = 'link' AND used_at IS NULL AND released_at IS NULL AND expires_at > ${NOW}
-     RETURNING owner, plaid_account`).bind(sessionId, email).first<{ owner: string; plaid_account: string }>();
+     RETURNING owner, plaid_account, purpose`).bind(sessionId, email).first<{ owner: string; plaid_account: string; purpose: string }>();
   if (!session) throw await unclaimable(env, sessionId, email);
   const { owner, plaid_account: plaidAccount } = session;
+  const investments = session.purpose === "investments";
   if (!config.accountOwner.has(plaidAccount) || config.accountOwner.get(plaidAccount) !== owner) {
     await release(env, sessionId);                       // that person or slot was removed meanwhile
     throw new HttpError(400, "unknown plaid_account");
@@ -198,24 +206,32 @@ export async function exchange(env: Env, config: Config, request: Request, ctx: 
 
   // Re-linking the same Plaid Item refreshes its token instead of failing on the unique key.
   // Storing the bank and finishing the session are one batch: the reservation becomes the item.
+  // An Investments-only login gets its holdings from the cron's investments fetch (within about
+  // 10 minutes) instead of a first transaction sync.
   const [stored] = await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, institution_name)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, institution_name, products)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (plaid_item_id) DO UPDATE SET
          access_token_enc = excluded.access_token_enc, status = 'good',
          institution_name = COALESCE(excluded.institution_name, items.institution_name),
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
        RETURNING *`,
-    ).bind(owner, plaidAccount, resp.item_id, enc, institution),
+    ).bind(owner, plaidAccount, resp.item_id, enc, institution, investments ? "investments" : "transactions"),
     env.DB.prepare(`UPDATE link_sessions SET finished_at = ${NOW}, item_id = (SELECT id FROM items WHERE plaid_item_id = ?) WHERE id = ?`)
       .bind(resp.item_id, sessionId),
+    env.DB.prepare(`INSERT INTO investment_sync (item_id, status, next_attempt_at)
+                    SELECT id, 'pending', ${NOW} FROM items WHERE plaid_item_id = ? AND ?
+                    ON CONFLICT (item_id) DO UPDATE SET status = 'pending', next_attempt_at = ${NOW}, last_error = NULL`)
+      .bind(resp.item_id, investments ? 1 : 0),
   ]);
   const item = (stored.results as unknown as ItemRow[])[0];
 
   // Initial backfill in the background; the response doesn't wait for it.
-  ctx.waitUntil(syncItem(env, config, item!, { ...FIRST_SYNC }).catch((e) =>
-    console.error(`first sync of item ${item!.id} failed:`, e instanceof Error ? e.message : e)));
+  if (!investments) {
+    ctx.waitUntil(syncItem(env, config, item!, { ...FIRST_SYNC }).catch((e) =>
+      console.error(`first sync of item ${item!.id} failed:`, e instanceof Error ? e.message : e)));
+  }
   return json({ item_id: item!.id, plaid_account: plaidAccount, status: item!.status });
 }
 
@@ -250,9 +266,10 @@ export async function pruneLinkSessions(db: D1Database): Promise<void> {
      AND NOT (operation = 'link' AND used_at IS NOT NULL AND finished_at IS NULL AND released_at IS NULL)`).run();
 }
 
-/** Update-mode Link for an existing bank: a reconnect, or "statements", which also asks the bank
- * for Liabilities consent (docs/bills.md). Either way it reuses the Item, so no Trial slot. */
-export type UpdatePurpose = "reconnect" | "statements";
+/** Update-mode Link for an existing bank: a reconnect; "statements", which also asks the bank
+ * for Liabilities consent (docs/bills.md); or "investments", which asks for Investments consent
+ * (EGG). Each reuses the Item, so no Trial slot. */
+export type UpdatePurpose = "reconnect" | "statements" | "investments";
 
 export async function updateMode(env: Env, config: Config, request: Request, email: string, purpose: UpdatePurpose = "reconnect"): Promise<Response> {
   const itemId = (await body(request)).item_id;
@@ -277,15 +294,15 @@ export async function updateMode(env: Env, config: Config, request: Request, ema
        AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-${UPDATE_COOLDOWN_SECONDS} seconds'))
      RETURNING id`).bind(id, email, item.owner, item.plaid_account, item.id, expires, purpose, item.id).first();
   if (!opened) {
-    throw new HttpError(429, purpose === "statements"
-      ? "Turning on statement details for this bank was started less than a minute ago. Finish or close that one, or wait a minute."
-      : "Reconnecting this bank was started less than a minute ago. Finish or close that one, or wait a minute.");
+    const what = { statements: "Turning on statement details for", investments: "Adding investment accounts from", reconnect: "Reconnecting" }[purpose];
+    throw new HttpError(429, `${what} this bank was started less than a minute ago. Finish or close that one, or wait a minute.`);
   }
   try {
     const { body: resp } = await plaidPost<{ link_token: string }>(env, credsFor(env, config, item.plaid_account), "/link/token/create", {
       ...linkBase(env, item.owner),
       access_token: accessToken,          // update mode; no products
-      ...(purpose === "statements" ? { additional_consented_products: ["liabilities"] } : {}),
+      ...(purpose === "statements" ? { additional_consented_products: ["liabilities"] }
+        : purpose === "investments" ? { additional_consented_products: ["investments"] } : {}),
     });
     return json({ link_token: resp.link_token, plaid_account: item.plaid_account, session_id: id, expires_at: expires });
   } catch (e) {

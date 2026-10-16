@@ -1,7 +1,7 @@
 # Plan: CFA (Complete financial audit) and EGG (retirement accounts)
 
-**Status (2026-10-16):** decisions made (§6), R0 checked (§5.1), C1 and **C2 built** (§5.2, §5.3).
-Next: E1 and E2 (EGG), then C3 (recommendations and the checklist).
+**Status (2026-10-16):** decisions made (§6), R0 checked (§5.1), C1 and C2 built (§5.2, §5.3),
+**E1 built** (§5.4). Next: E2 (the EGG view), then C3 (recommendations and the checklist).
 
 Two features, planned together because they share their data and charts:
 
@@ -271,6 +271,40 @@ also starts with C1, and every later trend needs it.
   and loan accounts Minty sees, nothing else.
 - **`/audit` reads only the prepared tables:** under 3,000 rows in `test/reads.test.ts`, whatever
   the history.
+
+### 5.4 E1: built (retirement accounts from Plaid Investments)
+
+- **Two ways in** (connect page):
+  - **Link a retirement account:** a new login, with Link asking for `investments` only. It
+    reserves a Trial slot like any bank (Link sessions, `chooseAccountFor`'s order) and is stored
+    with `items.products = 'investments'`.
+  - **Investment accounts → Add:** Investments added to a bank already linked, through update-mode
+    Link (`additional_consented_products`), turned on only after `/item/get` lists the consent,
+    like statement details. It uses no slot. This is the way for Schwab when it's already linked:
+    Schwab allows one connection per person per app, so linking it again would end the first.
+- **The fetch** (`src/investments.ts`), in a quiet 10-minute catch-up run after statement
+  details, one due bank per run, refreshed daily:
+  - `/investments/holdings/get` (accounts, securities and holdings, replacing what each account
+    held);
+  - a page of `/investments/transactions/get` (24 months the first time, then the last 30 days),
+    paged across runs.
+  - SQLite unpacks the text; the page's total is read with a regular expression, so the Worker
+    never parses JSON.
+  - `PRODUCT_NOT_READY` retries in 30 minutes. Failures go on `investment_sync` only, never on
+    `items.status`.
+- **Investments-only logins** are skipped by the transaction sync. Their health verdict comes from
+  the fetch (fetching, consent needed, not supported, or no update for 48 hours), and the new codes
+  have plain-words entries in `MEANING`.
+- **Islanding:** accounts with a retirement subtype (401k, 403b, 457b, IRA, Roth, SEP, SIMPLE,
+  pension, HSA and the Canadian ones) are left out of `/accounts` and `/transactions` (so an HSA's
+  spending leaves the feed), unless `accounts.view` says otherwise
+  (`PUT /accounts/{id}/view`). `/accounts?view=all` lists everything. Brokerage accounts stay on the
+  dashboard.
+- **Migration `0015_investments.sql`:** `items.products`, `accounts.view`, `investment_sync`,
+  `securities`, `holdings`, `investment_txns`.
+- **To check on Plaid Sandbox (the owner):** link a retirement account with a Sandbox
+  institution and `user_good`, then within 10 minutes Setup checks show it fetched. Also try
+  Investment accounts → Add on an existing Sandbox bank.
 
 ## 6. Decisions (owner, 2026-10-16)
 

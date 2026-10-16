@@ -137,6 +137,13 @@ Design history and decisions: `docs/serverless-plan.md`.
   `public/pdf-read.js` is the PDF reader and remembered folder shared by Bills and BAM: each view
   has its own "already added" and skipped lists for the same folder. `GET /points` reads each reading once, with no `ORDER BY` (D1 counts a sort as a second
   read).
+- EGG, retirement accounts (`docs/cfa.md` §3, §5.4): Plaid Investments, through a new
+  Investments-only login (`items.products = 'investments'`, which the transaction sync skips) or
+  update-mode consent on a bank already linked (like statement details). It's fetched only by a
+  quiet catch-up cron run (`src/investments.ts`, one bank per run), never on a request, and a
+  failure there never touches `items.status`. Retirement accounts (HSAs included) are islanded:
+  `/accounts` and `/transactions` leave them out unless `accounts.view` says 'dashboard' (use
+  `IN_RETIREMENT()`).
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

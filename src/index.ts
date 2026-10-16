@@ -12,6 +12,8 @@ import * as bills from "./routes/bills";
 import * as ownBills from "./routes/household-bills";
 import * as points from "./routes/points";
 import * as cfa from "./routes/audit";
+import * as inv from "./routes/investments";
+import { runInvestmentSync } from "./investments";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 import { runStatementSync } from "./statements";
@@ -66,6 +68,11 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["POST", /^\/link\/statements\/complete$/, ({ env, config, request, email }) => bills.completeStatements(env, config, request, email)],
   ["GET", /^\/statements$/, ({ env }) => bills.statementBanks(env)],
   ["POST", /^\/statements\/off$/, ({ env, request }) => bills.statementsOff(env, request)],
+  ["POST", /^\/link\/token\/investments$/, ({ env, config, request, email }) => link.updateMode(env, config, request, email, "investments")],
+  ["POST", /^\/link\/investments\/complete$/, ({ env, config, request, email }) => inv.completeInvestments(env, config, request, email)],
+  ["GET", /^\/investments$/, ({ env }) => inv.investmentBanks(env)],
+  ["POST", /^\/investments\/off$/, ({ env, request }) => inv.investmentsOff(env, request)],
+  ["PUT", /^\/accounts\/(\d+)\/view$/, ({ env, request, params }) => inv.setAccountView(env, request, Number(params[0]))],
   ["POST", /^\/link\/reconnected$/, ({ env, config, request }) => link.reconnected(env, config, request)],
 ];
 
@@ -150,6 +157,12 @@ export default {
         return {};
       });
       if (Object.keys(done).length) console.log("statement details", JSON.stringify(done));   // item id -> status
+      // Then one bank's investments (EGG), if one is due: holdings and a page of its transactions.
+      const invested = await runInvestmentSync(env).catch((e) => {
+        console.error("investments failed:", e instanceof Error ? e.message : e);
+        return {};
+      });
+      if (Object.keys(invested).length) console.log("investments", JSON.stringify(invested));   // item id -> status
       // A correction made on the audit shows within minutes, not at the next hourly run.
       const totals = await refreshTotals(env).catch((e) => {
         console.error("monthly totals failed:", e instanceof Error ? e.message : e);
