@@ -1,20 +1,28 @@
-# Plan: MAP (Miles And Points)
+# BAM (Balance of Award Miles & points)
 
-**Status: proposed 2026-10-16, waiting for the owner's decisions (§5). No code yet.**
+**Status: M1 built (2026-10-16): the view, typing balances in, history. Next: M2 (statement PDFs,
+starting with Amex Membership Rewards), with M3's first two extras. Decisions: §5.**
+
+**Built in M1:**
+- `public/bam.js` and `bam.css`: the BAM button next to ABC, and its popup.
+- `src/routes/points.ts`: `GET`, `POST`, `PUT` and `DELETE /points`.
+- `src/points/programs.ts`: the program list.
+- Migration `0012_point_balances.sql`. It has no index: `GET /points` reads each reading once. D1
+  counts an `ORDER BY` as a second read, so the Worker groups and sorts the rows instead.
 
 Your own award wallet: every miles and points balance in the household, in one view, grouped by
 currency (Chase Ultimate Rewards, Amex Membership Rewards, United, Hyatt, …). Each balance
 shows when it was last updated. Balances come from statement PDFs read on your device (exactly
 like Bills) or are typed in by hand.
 
-MAP never signs in to a loyalty program, never stores a loyalty login, and never scrapes a
+BAM never signs in to a loyalty program, never stores a loyalty login, and never scrapes a
 website. Plaid doesn't report points, so the PDFs and your own numbers are the only sources. That
 is on purpose: it avoids the credentials and the terms-of-service problems that scraping wallets
 have.
 
 ## 1. The view
 
-A header button **MAP**, next to ABC (and EGG), opens a popup like ABC and Bills.
+A header button **BAM**, next to ABC (and EGG later), opens a popup like ABC and Bills.
 
 - **One row per balance:**
   - the currency and its kind (bank points, airline, hotel);
@@ -22,12 +30,19 @@ A header button **MAP**, next to ABC (and EGG), opens a popup like ABC and Bills
   - **the number of miles or points**;
   - **last updated**, as a date with "3 days ago". Balances not updated in 90 days are greyed,
     with "update?".
-- **Grouped by currency,** with a total per currency across the household, because points in the
-  same program often can be combined. The person switch filters, as everywhere.
-- **Update a balance** by editing it in place (a new reading), or with **Add from PDFs** /
-  **Add a folder**, like Bills.
-- **History:** each reading is kept, so a balance's row can open its past values (when, how much,
-  from which PDF). That's a small trend for free, with no extra fetching.
+- **Grouped by kind** (bank and card points, airlines, hotels, then programs typed in), then by
+  currency. Each currency shows a total across the household when it has more than one balance,
+  because points in the same program can often be combined. Each balance names its person, as ABC
+  does.
+- **Update a balance:**
+  - **Update** saves a new reading, with today's date.
+  - **Fix this one** corrects a reading.
+  - **Delete** removes a reading; the one before it shows again.
+  - M2 adds **Add from PDFs** and **Add a folder**, like Bills.
+- **History:** each reading is kept. A balance shows its change since the reading before, and
+  **History (n)** lists the earlier readings with their changes: a small trend for free, with no
+  extra fetching. A reading dated before the newest one (from an old statement) goes into the
+  history, not on top.
 
 ## 2. Reading statements (the Bills way, shared)
 
@@ -68,13 +83,13 @@ A header button **MAP**, next to ABC (and EGG), opens a popup like ABC and Bills
   - They're added to `run_worker_first`, with lines in `test/reads.test.ts` (tiny: one row per
     reading).
   - No Plaid, no cron, no new secret.
-- **Demo:** made-up balances across a few currencies, so the demo shows MAP.
+- **Demo:** made-up balances across a few currencies, so the demo shows BAM.
 
 ## 4. Phases
 
 | Phase | What |
 | --- | --- |
-| **M1** | The view and typing balances in: catalog, table, routes, the MAP popup, history, "update?" |
+| **M1** | The view and typing balances in: catalog, table, routes, the BAM popup, history, "update?" |
 | **M2** | PDFs: `pdf-read.js` shared with Bills, `points-parse.js` for card statements and the first loyalty programs, the review table |
 | **M3** | Optional extras from §5, if wanted |
 
@@ -82,20 +97,23 @@ M1 is small and useful alone. M2 depends on real statement layouts: parser tests
 text modelled on them, never a real statement.
 
 **Possible extras (less is more, so each is optional):**
-- **Which card earns into which currency:** ABC already knows the household's cards. MAP can list
+- **Which card earns into which currency:** ABC already knows the household's cards. BAM can list
   under each currency the cards that earn it.
 - **Expiry reminder:** for programs whose points expire after inactivity, from a rule in the
-  catalog (with source and `CHECKED`). Shown only when MAP knows the last activity date.
+  catalog (with source and `CHECKED`). Shown only when BAM knows the last activity date.
 - **An estimated value** in dollars per currency, at a rate you set (values are opinions, so none
   are built in). Off by default.
 
-## 5. Decisions for the owner
+## 5. Decisions (owner, 2026-10-16)
 
-1. **The name:** MAP = **Miles And Points**? It's short, and it says what's inside. (Avoid naming
-   it after AwardWallet, which is someone else's product.)
-2. **One folder or two?** One remembered folder for Bills and MAP, with each PDF offered to both,
-   or a separate statements folder for MAP. The suggestion is one folder: the same card statement
-   often has both.
-3. **Which programs first,** for M2's patterns: the currencies you hold, and whose statements you
-   have as PDFs.
-4. **The extras in §4:** none, some, or all.
+1. **The name is BAM** (Balance of Award Miles & points), not MAP.
+2. **One folder, shared with Bills,** with each PDF offered to both views (§2).
+3. **Amex Membership Rewards first** for M2's patterns. The statement's box reads:
+   `Membership Rewards® Points` / `Available and Pending as of 08/31/26` / `65,536`. The card is
+   in the header as `Account Ending 8-43005`, which gives a last 4 of `3005`. Tests use made-up text
+   in this layout, never a real statement.
+4. **The first two M3 extras:**
+   - **Which cards earn each currency:** from ABC's card list, with an "earns" field per card.
+   - **Expiry reminders:** a rule per program, with a source and `CHECKED`. For Membership Rewards
+     that's "doesn't expire while a card that earns it is open", shown as a quiet note.
+   - Not now: the dollar values.

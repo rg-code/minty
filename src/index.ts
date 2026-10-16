@@ -10,6 +10,7 @@ import * as link from "./routes/link";
 import * as setup from "./routes/status";
 import * as bills from "./routes/bills";
 import * as ownBills from "./routes/household-bills";
+import * as points from "./routes/points";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 import { runStatementSync } from "./statements";
@@ -52,6 +53,10 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["PUT", /^\/bills\/(\d+)$/, ({ env, config, request, params }) => ownBills.updateBill(env, config, request, Number(params[0]))],
   ["POST", /^\/bills\/(\d+)\/paid$/, ({ env, request, params }) => ownBills.markBillPaid(env, request, Number(params[0]))],
   ["DELETE", /^\/bills\/(\d+)$/, ({ env, params }) => ownBills.deleteBill(env, Number(params[0]))],
+  ["GET", /^\/points$/, ({ env }) => points.listPoints(env)],
+  ["POST", /^\/points$/, ({ env, config, request }) => points.createReading(env, config, request)],
+  ["PUT", /^\/points\/(\d+)$/, ({ env, config, request, params }) => points.updateReading(env, config, request, Number(params[0]))],
+  ["DELETE", /^\/points\/(\d+)$/, ({ env, params }) => points.deleteReading(env, Number(params[0]))],
   ["POST", /^\/link\/token\/statements$/, ({ env, config, request, email }) => link.updateMode(env, config, request, email, "statements")],
   ["POST", /^\/link\/statements\/complete$/, ({ env, config, request, email }) => bills.completeStatements(env, config, request, email)],
   ["GET", /^\/statements$/, ({ env }) => bills.statementBanks(env)],

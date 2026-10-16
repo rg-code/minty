@@ -313,7 +313,7 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
   it("the headers file isn't served, and every moved script is in the service worker's shell", async () => {
     expect((await raw("/_headers")).status).toBe(404);
     const sw = await (await raw("/sw.js")).text();
-    expect(sw).toContain('const CACHE = "minty-v3";');                          // installed apps refresh their copy once (v3: Bills)
+    expect(sw).toContain('const CACHE = "minty-v4";');                          // installed apps refresh their copy once (v3: Bills)
     for (const src of MOVED_SCRIPTS) expect(sw, src).toContain(`"${src}"`);
   });
 });

@@ -24,6 +24,7 @@ export interface DemoData {
   cardStatements: Record<string, string | number | null>[];   // Bills (docs/bills.md)
   statementSync: Record<string, string | number | null>[];
   bills: Record<string, string | number | null>[];            // the household's own bills (part 2)
+  points: Record<string, string | number | null>[];           // BAM (docs/bam.md): miles and points readings
 }
 
 export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", sam: "sam" }): DemoData {
@@ -252,8 +253,20 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
        { source: "pdf", file_sha256: "0d3f1c5a8e2b7d6c4f9a1e3b5c7d9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d1e" });
   bill("Recology", "RECOLOGY", 18975, daysAgo(-12), daysAgo(18), { paid_at: nowIso(60 * 26) });
 
+  // BAM: a few currencies across both people, with a little history, and one balance not
+  // updated in months (it shows "update?").
+  const points: DemoData["points"] = [];
+  const reading = (owner: string, program: string, balance: number, ago: number, hint: string | null = null) =>
+    points.push({ owner, program, account_hint: hint, balance, as_of: daysAgo(ago), source: "manual", file_sha256: null });
+  reading(owners.alex, "amex_mr", 61250, 64); reading(owners.alex, "amex_mr", 72480, 34); reading(owners.alex, "amex_mr", 84210, 4);
+  reading(owners.alex, "chase_ur", 118900, 40); reading(owners.alex, "chase_ur", 132450, 9);
+  reading(owners.sam, "chase_ur", 23700, 12);
+  reading(owners.sam, "united", 41800, 21);
+  reading(owners.alex, "hyatt", 27300, 15);
+  reading(owners.sam, "marriott", 96000, 131);
+
   const users = [`${owners.alex}:Alex`, `${owners.sam}:Sam`, ...CAMEOS.map(([label]) => `${label.toLowerCase()}:${label}`)].join(",");
-  return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills };
+  return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills, points };
 }
 
 /** The Worker settings the demo runs with: its people, and placeholder Plaid keys for each, so no
@@ -277,7 +290,7 @@ export function statements(d: DemoData): [string, (string | number | null)[]][] 
     ...ins("items", d.items), ...ins("accounts", d.accounts), ...ins("transactions", d.transactions),
     ...d.tags.map((t): [string, (string | number | null)[]] => ["INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (?, ?, ?)", t]),
     ...d.marks.map((m): [string, (string | number | null)[]] => ["INSERT INTO benefit_marks (account_id, benefit_id, period_start, marked_by) VALUES (?, ?, ?, 'demo')", m]),
-    ...ins("statement_sync", d.statementSync), ...ins("card_statements", d.cardStatements), ...ins("bills", d.bills),
+    ...ins("statement_sync", d.statementSync), ...ins("card_statements", d.cardStatements), ...ins("bills", d.bills), ...ins("point_balances", d.points),
   ];
 }
 

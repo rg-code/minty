@@ -99,6 +99,10 @@ the secret names to add in the Cloudflare dashboard.
     POST /bills/{id}/paid        {paid}   mark a bill paid or not
     DELETE /bills/{id}           delete a bill
     POST /bills/known            {sha256:[...]}   which bill PDFs were already added
+    GET  /points                 BAM: each miles/points balance (newest reading, with history) + the programs Minty knows (docs/bam.md)
+    POST /points                 {program, balance, as_of?, owner?, account_hint?, source?, file_sha256?}   a new reading of a balance
+    PUT  /points/{id}            correct a reading (only the fields sent)
+    DELETE /points/{id}          delete a reading
     GET  /items                  linked institutions + status
     GET  /accounts               accounts + balances + card members   (?owner=)
     GET  /transactions           unified feed   (?owner= &tag= [repeatable] &tag_mode=any|all &q= &start= &end= &item_id= [repeatable: banks] &account_id= [repeatable: cards / accounts] &card= [repeatable: account_id:card member])
