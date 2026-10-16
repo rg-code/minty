@@ -13,6 +13,7 @@ import * as ownBills from "./routes/household-bills";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 import { runStatementSync } from "./statements";
+import { rekeyTokens } from "./token-key";
 import { isPending, markSwept, syncState } from "./routes/syncrequest";
 
 /** Minty Worker. API paths are listed in wrangler.jsonc assets.run_worker_first; everything
@@ -150,6 +151,13 @@ export default {
       // The cron reads what it needs whatever the day's read budget says; it only tidies the counters.
       await pruneReadCounts(env.DB).catch((e) => console.error("pruning read counts failed:", e instanceof Error ? e.message : e));
       await link.pruneLinkSessions(env.DB).catch((e) => console.error("pruning Link sessions failed:", e instanceof Error ? e.message : e));
+      // While TOKEN_ENC_KEY is being changed: tokens still on the old key, saved under the new one
+      // (banks that synced above already were). Reads nothing when TOKEN_ENC_KEY_PREVIOUS isn't set.
+      const keys = await rekeyTokens(env).catch((e) => {
+        console.error("re-keying tokens failed:", e instanceof Error ? e.message : e);
+        return null;
+      });
+      if (keys && (keys.rekeyed || keys.previous || keys.neither)) console.log("token key", JSON.stringify(keys));   // counts only
     }
   },
 } satisfies ExportedHandler<Env>;

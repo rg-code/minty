@@ -1,6 +1,7 @@
 import type { Env } from "./env";
 import { type Config, credsFor, isConfigured, loadConfig } from "./config";
-import { FernetError, fernetDecrypt } from "./fernet";
+import { FernetError } from "./fernet";
+import { openAccessToken } from "./token-key";
 import { PlaidError, plaidPostText } from "./plaid";
 import type { ItemRow } from "./sync";
 
@@ -73,7 +74,7 @@ export async function syncStatements(env: Env, config: Config, item: ItemRow): P
     }
     let accessToken: string;
     try {
-      accessToken = await fernetDecrypt(item.access_token_enc, env.TOKEN_ENC_KEY);
+      accessToken = await openAccessToken(env, item);
     } catch (e) {
       if (e instanceof FernetError) code = "INVALID_ACCESS_TOKEN";
       throw e;

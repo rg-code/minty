@@ -78,7 +78,7 @@ const MEANING: Record<string, string> = {
   RATE_LIMIT_EXCEEDED: "Plaid asked Minty to slow down. Minty keeps retrying.",
   PRODUCT_NOT_READY: "Plaid is still preparing this bank's transactions (normal just after linking).",
   TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION: "Plaid's data changed during the download, so Minty restarts it automatically.",
-  TOKEN_DOES_NOT_DECRYPT: "The stored connection can't be decrypted with TOKEN_ENC_KEY (the key was changed).",
+  TOKEN_DOES_NOT_DECRYPT: "The stored connection can't be decrypted with TOKEN_ENC_KEY (the key was changed). If you changed it on purpose, add the old key as TOKEN_ENC_KEY_PREVIOUS: the next hourly sync picks this bank up again (SETUP.md, Changing the encryption key).",
   REQUEST_FAILED: "Minty couldn't reach Plaid. It keeps retrying.",
   SAVING_A_PAGE_FAILED: "Saving transactions to the database failed. Minty keeps retrying.",
   INVALID_SYNC_PAGE: "Plaid sent a reply Minty couldn't read. Minty keeps retrying.",

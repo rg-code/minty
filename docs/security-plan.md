@@ -1,6 +1,6 @@
 # Plan: security hardening after the 2026-10-14 review
 
-**Status: decisions made (2026-10-14, §2); steps 1–4 done (step 4 enforced 2026-10-16); step 5 next. To-do list: §4.** Written 2026-10-14.
+**Status: decisions made (2026-10-14, §2); steps 1–4 done (step 4 enforced 2026-10-16); step 5 in progress (5a done). To-do list: §4.** Written 2026-10-14.
 
 An external review of `main` at 183d15b (API, pages, encryption, migrations, workflows, tests)
 found no unauthenticated path to financial data. Its main risks were how updates reach a
@@ -183,7 +183,21 @@ the pinned key.
          worker), the phone strip, `/connect` (Link's script loads), `/add-user`: no violations.
          Changed assertions: the tests read `content-security-policy` instead of the report-only
          header, and "nothing enforced yet" became "no report-only copy left". None removed.
-5. **Rotation and disconnect** (§3).
+5. **Rotation and disconnect** (§3), in three PRs (owner, 2026-10-16), each revertable alone.
+   - [x] **5a, changing the encryption key.** `TOKEN_ENC_KEY_PREVIOUS` (optional secret, unset by
+         default: today's behaviour). Every caller opens tokens through `openAccessToken()`
+         (`src/token-key.ts`): the current key, then the previous one; a token opened with the
+         previous key is saved again under the current one (only if the row still holds that
+         ciphertext, and without touching `updated_at`). The hourly cron (`rekeyTokens`, after
+         sync) moves the rest, including banks sync skips, and clears `TOKEN_DOES_NOT_DECRYPT`, so
+         a key changed without the previous one set recovers once it's added. Setup checks, only
+         while it's set: an invalid previous key, one equal to the current key, "N banks still on
+         the old key", then "isn't needed any more" with how to delete it. SETUP: "Changing the
+         encryption key" (replacing "never change") and "If something leaks". No schema change; a
+         revert leaves every token readable with `TOKEN_ENC_KEY` alone once Setup checks said none
+         were left. Changed assertions: none (12 new tests).
+   - [ ] **5b, disconnect a bank** (decision 3).
+   - [ ] **5c, Plaid token rotation**, and its part of "If something leaks".
 6. **Fork updates from signed tags** (§3), its own PR, last.
 
 Each step: complete files, `npm test` and `npm run typecheck`, and a Sandbox check by the owner

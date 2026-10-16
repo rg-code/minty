@@ -72,6 +72,7 @@ the secret names to add in the Cloudflare dashboard.
   so sync keeps working.
 - **Plaid access tokens are Fernet-encrypted** with `TOKEN_ENC_KEY` before they're stored.
   Plaid keys and `TOKEN_ENC_KEY` are Worker secrets; they never reach the browser or the database.
+  The key can be changed without linking banks again (SETUP, "Changing the encryption key").
 - **Setup checks** on the Add user page show what's configured, never the values.
 - **Device lock:** on a phone or computer with Face ID, a fingerprint sensor or Windows Hello,
   Minty offers to ask for it before showing anything (`public/lock.js`). It hides the screen from
