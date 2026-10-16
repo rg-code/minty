@@ -338,10 +338,15 @@ describe("Bills (docs/bills.md)", () => {
     expect(js).toContain('class="cal" role="grid"');
     expect(js).toContain('data-show="statements"');
     expect(js).toContain('data-show="due"');
-    expect(js).toContain('new URL("vendor/pdfjs/pdf.min.mjs", base)');            // relative, so the demo at /demo/ finds its copy
-    expect(js).toContain("isEvalSupported: false");
-    expect(js).not.toMatch(/https?:\/\/[^"'\s]*pdf/);
-    for (const f of ["/vendor/pdfjs/pdf.min.mjs", "/vendor/pdfjs/pdf.worker.min.mjs", "/bill-parse.js"]) {
+    // The PDF reader is shared with BAM (public/pdf-read.js); both load it, and it loads pdf.js,
+    // by relative URLs, so the demo at /demo/ finds its copies.
+    const reader = await (await SELF.fetch("https://minty.example.workers.dev/pdf-read.js")).text();
+    const bam = await (await SELF.fetch("https://minty.example.workers.dev/bam.js")).text();
+    for (const page of [js, bam]) expect(page).toContain('import(new URL("pdf-read.js", document.baseURI).href)');
+    expect(reader).toContain('import(new URL("vendor/pdfjs/pdf.min.mjs", document.baseURI).href)');
+    expect(reader).toContain("isEvalSupported: false");
+    for (const f of [js, bam, reader]) expect(f).not.toMatch(/https?:\/\/[^"'\s]*pdf/);
+    for (const f of ["/vendor/pdfjs/pdf.min.mjs", "/vendor/pdfjs/pdf.worker.min.mjs", "/bill-parse.js", "/pdf-read.js", "/points-parse.js"]) {
       const r = await SELF.fetch(`https://minty.example.workers.dev${f}`);
       expect(r.status, f).toBe(200);
       expect(r.headers.get("content-type"), f).toMatch(/javascript/);

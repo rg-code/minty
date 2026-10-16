@@ -117,10 +117,10 @@ there, gitignored here). If that folder exists, read it too.
    - **Order:** R0 (check Plaid Investments on Trial) → C1 foundations → C2 audit charts → E1/E2
      EGG → C3 recommendations.
 5. **BAM (Balance of Award Miles & points)**, [bam.md](bam.md).
-   - **M1 is done:** the BAM button next to ABC, typing balances in, and history.
-   - **Next, M2:** statement PDFs in the folder shared with Bills, starting with Amex Membership
-     Rewards.
-   - **With it, M3's first two:** which cards earn each currency, and expiry reminders.
+   - **Done:** M1 (typing balances in, with history), M2 (statement PDFs and the folder shared
+     with Bills, Amex Membership Rewards first), and M3's expiry rules and "likely earned by"
+     cards.
+   - **Next:** more programs' statement layouts, modelled on real PDFs (tests use made-up text).
 6. **Decide where MCP goes.** The live demo shows an "AI connector (MCP), coming soon" button, but
    [agent-plan.md](agent-plan.md) has the MCP server as optional phase **A7**. The options:
    - move MCP earlier, as a read-only server built on A1's query tools, so Claude Desktop and

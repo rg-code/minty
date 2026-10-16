@@ -55,6 +55,7 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["DELETE", /^\/bills\/(\d+)$/, ({ env, params }) => ownBills.deleteBill(env, Number(params[0]))],
   ["GET", /^\/points$/, ({ env }) => points.listPoints(env)],
   ["POST", /^\/points$/, ({ env, config, request }) => points.createReading(env, config, request)],
+  ["POST", /^\/points\/known$/, ({ env, request }) => points.knownPoints(env, request)],
   ["PUT", /^\/points\/(\d+)$/, ({ env, config, request, params }) => points.updateReading(env, config, request, Number(params[0]))],
   ["DELETE", /^\/points\/(\d+)$/, ({ env, params }) => points.deleteReading(env, Number(params[0]))],
   ["POST", /^\/link\/token\/statements$/, ({ env, config, request, email }) => link.updateMode(env, config, request, email, "statements")],

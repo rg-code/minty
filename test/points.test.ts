@@ -21,7 +21,7 @@ describe("GET /points", () => {
   it("lists the programs Minty knows, and no balances yet", async () => {
     const body = await list();
     expect(body.balances).toEqual([]);
-    expect(body.programs.find((p: any) => p.id === "amex_mr")).toEqual({ id: "amex_mr", name: "Amex Membership Rewards", kind: "bank", unit: "points" });
+    expect(body.programs.find((p: any) => p.id === "amex_mr")).toEqual({ id: "amex_mr", name: "Amex Membership Rewards", kind: "bank", unit: "points", expiry: { kind: "while_open" } });
     expect(body.checked).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
@@ -118,5 +118,74 @@ describe("the program list", () => {
       expect(p.site).toMatch(/^[a-z0-9.-]+\.[a-z]+$/);
       expect(p.name.length).toBeLessThanOrEqual(40);
     }
+  });
+});
+
+describe("statement PDFs (part 2)", () => {
+  it("POST /points/known says which PDFs already gave a balance", async () => {
+    const sha = "c".repeat(64);
+    await send("POST", "/points", { program: "amex_mr", balance: 84210, as_of: day(-40), source: "pdf", file_sha256: sha });
+    expect((await send("POST", "/points/known", { sha256: [sha, "d".repeat(64)] })).body).toEqual({ known: [sha] });
+    expect((await send("POST", "/points/known", { sha256: [] })).body).toEqual({ known: [] });
+    expect((await send("POST", "/points/known", { sha256: ["not-a-sha"] })).status).toBe(422);
+    expect((await send("POST", "/points/known", { sha256: Array(201).fill(sha) })).status).toBe(422);
+  });
+
+  it("a bill's PDF and a points balance from the same PDF don't block each other", async () => {
+    const sha = "e".repeat(64);
+    await send("POST", "/bills", { biller: "American Express", amount_cents: 3500, due_date: day(10), source: "pdf", file_sha256: sha });
+    expect((await send("POST", "/points/known", { sha256: [sha] })).body.known).toEqual([]);
+    expect((await send("POST", "/points", { program: "amex_mr", balance: 1, source: "pdf", file_sha256: sha })).status).toBe(201);
+    await env.DB.prepare("DELETE FROM bills").run();
+  });
+});
+
+describe("expiry rules and the cards that earn each currency (part 3)", () => {
+  it("each program's expiry rule is sent, or null when Minty has none", async () => {
+    const programs = Object.fromEntries((await list()).programs.map((p: any) => [p.id, p.expiry]));
+    expect(programs.amex_mr).toEqual({ kind: "while_open" });
+    expect(programs.united).toEqual({ kind: "never" });
+    expect(programs.marriott).toEqual({ kind: "inactivity", months: 24 });
+    expect(programs.ihg).toBeNull();
+  });
+
+  it.each([
+    ["American Express", "Platinum Card®", "amex_mr"],
+    ["American Express", "Gold Card", "amex_mr"],
+    ["American Express", "Blue Business Plus Card", "amex_mr"],
+    ["American Express", "Delta SkyMiles® Reserve Card", "delta"],
+    ["American Express", "Hilton Honors Aspire Card", "hilton"],
+    ["American Express", "Marriott Bonvoy Brilliant®", "marriott"],
+    ["American Express", "Blue Cash Preferred®", null],
+    ["Chase", "Sapphire Preferred", "chase_ur"],
+    ["JPMorgan Chase", "Chase Freedom Unlimited", "chase_ur"],
+    ["Chase", "Ink Business Cash", "chase_ur"],
+    ["Chase", "United Explorer", "united"],
+    ["Chase", "World of Hyatt Credit Card", "hyatt"],
+    ["Chase", "Amazon Prime Rewards Visa", null],
+    ["Citibank Online", "Citi Strata Premier℠", "citi_typ"],              // Plaid's name for Citi's bank
+    ["Citi", "Citi Strata Premier℠", "citi_typ"],
+    ["Citi", "Citi® / AAdvantage® Platinum Select®", "american"],
+    ["Wells Fargo", "Bilt World Elite Mastercard®", "bilt"],
+    ["Capital One", "Venture X", "capital_one"],
+    ["Capital One", "Quicksilver", null],
+  ])("%s %s likely earns %s", async (bank, name, program) => {
+    const { programForCard } = await import("../src/routes/points");
+    expect(programForCard({ bank, name })?.id ?? null).toBe(program);
+  });
+
+  it("GET /points lists the linked cards that likely earn each currency, with no balance needed", async () => {
+    await env.DB.batch(["transaction_tags", "transactions", "card_products", "accounts", "items"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
+    const item = (await env.DB.prepare(`INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, institution_name, status)
+      VALUES ('me', 'me_primary', 'item-amex', 'x', 'American Express', 'good') RETURNING id`).first<{ id: number }>())!.id;
+    await env.DB.prepare(`INSERT INTO accounts (owner, item_id, plaid_account_id, name, mask, type, subtype) VALUES
+      ('me', ?1, 'a1', 'Platinum Card®', '1004', 'credit', 'credit card'),
+      ('spouse', ?1, 'a2', 'Delta SkyMiles® Gold Card', '2002', 'credit', 'credit card'),
+      ('me', ?1, 'a3', 'Savings', '3003', 'depository', 'savings')`).bind(item).run();
+    const body = await list();
+    expect(body.balances).toEqual([]);
+    expect(body.cards.map((c: any) => [c.name, c.mask, c.owner, c.program])).toEqual([
+      ["Platinum Card®", "1004", "me", "amex_mr"], ["Delta SkyMiles® Gold Card", "2002", "spouse", "delta"]]);
+    await env.DB.batch(["accounts", "items"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
   });
 });
