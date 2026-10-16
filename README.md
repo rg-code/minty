@@ -11,6 +11,8 @@
 
 **See it first:** the [live demo](https://minty.milesmaximizer.com/#demo) runs Minty with made-up data, in your browser ([how](docs/demo.md)).
 
+[![Support Minty on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Minty-ff5e5b?logo=kofi&logoColor=white)](https://ko-fi.com/mintyme)
+
 Minty pulls transactions from your household's banks and cards via Plaid into one private
 dashboard, with tags, search and per-person totals. Each household runs its own copy on
 Cloudflare: one Worker plus a D1 database, on free plans, with no server to look after.
@@ -128,6 +130,11 @@ To run the cron sync by hand locally: `curl "http://localhost:8787/cdn-cgi/handl
 - Minty started as a Python/Docker app; its last version is tagged `python-app-final`.
 
 Status and next steps: [docs/STATUS.md](docs/STATUS.md).
+
+## Support Minty
+
+Minty is free, with no subscription and no ads. If it's useful to you, you can support it on
+[Ko-fi](https://ko-fi.com/mintyme). It's entirely optional, and Minty works the same either way.
 
 ## License
 
