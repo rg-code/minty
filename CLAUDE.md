@@ -156,7 +156,7 @@ Design history and decisions: `docs/serverless-plan.md`.
   referrer policy and a Permissions-Policy; `json()` in `src/http.ts` sets the API's. So pages have
   **no inline scripts or `on…=` handlers** (each page's script is a file: `theme.js`, `app.js`,
   `connect.js`, `add-user.js`; a test checks). Anything new loaded from another origin needs its
-  host in the policy. The CSP is report-only until a follow-up enforces it. A new page script goes
+  host in the policy. The CSP is enforced (since 2026-10-16), so a missing host breaks it. A new page script goes
   in `sw.js`'s shell too.
 - Live demo (`demo/`, `npm run build:demo`, `docs/demo.md`): the real dashboard and Worker in the
   browser over sql.js, with a made-up household. It's built from `public/` and `src/`, so it follows

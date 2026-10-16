@@ -95,9 +95,10 @@ there, gitignored here). If that folder exists, read it too.
 
 ## To do, in order
 
-1. **Security plan, step 4** (headers, [security-plan.md](security-plan.md) §3–§4): its design
-   goes to the owner first. Then steps 5 and 6. Steps 1–3 are done (settings and docs; rate
-   limits and the D1 budget, #54; Link sessions, #57).
+1. **Security plan, step 5** (rotation and disconnect, [security-plan.md](security-plan.md) §3–§4),
+   in three PRs: 5a encryption-key rotation, 5b disconnect a bank, 5c Plaid token rotation. Then
+   step 6. Steps 1–4 are done (settings and docs; rate limits and the D1 budget, #54; Link
+   sessions, #57; browser headers, report-only in #61 and enforced on 2026-10-16).
 2. **Quick checks on the live deployment** (the owner, in the dashboard):
    - **CPU:** **Worker → Metrics** for "Exceeded CPU", especially `/benefits` and the catch-up
      runs.
