@@ -14,6 +14,7 @@ import * as points from "./routes/points";
 import * as cfa from "./routes/audit";
 import * as inv from "./routes/investments";
 import * as egg from "./routes/retirement";
+import * as advice from "./routes/advice";
 import { runInvestmentSync } from "./investments";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
@@ -60,6 +61,8 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["DELETE", /^\/bills\/(\d+)$/, ({ env, params }) => ownBills.deleteBill(env, Number(params[0]))],
   ["GET", /^\/audit$/, ({ env, config, url }) => cfa.audit(env, config, url)],
   ["PUT", /^\/audit\/buckets$/, ({ env, request }) => cfa.setBucket(env, request)],
+  ["GET", /^\/audit\/advice$/, ({ env, config, url }) => advice.advice(env, config, url)],
+  ["PUT", /^\/audit\/checklist$/, ({ env, request }) => advice.setChecklist(env, request)],
   ["GET", /^\/points$/, ({ env }) => points.listPoints(env)],
   ["POST", /^\/points$/, ({ env, config, request }) => points.createReading(env, config, request)],
   ["POST", /^\/points\/known$/, ({ env, request }) => points.knownPoints(env, request)],

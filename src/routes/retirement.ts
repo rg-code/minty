@@ -57,6 +57,11 @@ const PROFILE_KEY = (owner: string) => `retirement_profile:${owner}`;
 export async function retirement(env: Env, config: Config, url: URL): Promise<Response> {
   const owner = url.searchParams.get("owner");
   if (owner !== null && !config.users.has(owner)) throw unprocessable("owner must be one of the people in MINTY_USERS");
+  return json(await retirementData(env, owner));
+}
+
+/** What GET /retirement returns (the audit's advice reads it too). */
+export async function retirementData(env: Env, owner: string | null) {
   const year = new Date().getUTCFullYear();
   const by = (col: string) => (owner === null ? "" : ` AND ${col} = ?`);
   const who = owner === null ? [] : [owner];
@@ -75,7 +80,7 @@ export async function retirement(env: Env, config: Config, url: URL): Promise<Re
     env.DB.prepare(`SELECT i.id AS item_id, i.institution_name AS bank, s.status, s.synced_at FROM investment_sync s JOIN items i ON i.id = s.item_id`),
   ]);
   const limits = LIMITS[year] ?? null;
-  return json({
+  return {
     today: new Date().toISOString().slice(0, 10), year, owner,
     accounts: (accounts.results as Record<string, unknown>[]).map((a) => ({ ...a, in_retirement: Boolean(a.in_retirement), kind: kindOf(a.subtype as string | null) })),
     snapshots: snapshots.results,
@@ -85,7 +90,7 @@ export async function retirement(env: Env, config: Config, url: URL): Promise<Re
     profiles: Object.fromEntries((profiles.results as { key: string; value: string }[]).map((p) => [p.key.slice("retirement_profile:".length), safeJson(p.value)])),
     banks: banks.results,
     limits: limits ? { ...limits, year, checked: CHECKED } : null,
-  });
+  };
 }
 
 const safeJson = (s: string) => { try { return JSON.parse(s); } catch { return {}; } };

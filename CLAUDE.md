@@ -129,7 +129,10 @@ Design history and decisions: `docs/serverless-plan.md`.
   correction shows within minutes). `/audit` reads `monthly_totals`, `net_worth` and
   `recurring_charges`, never the transactions. Corrections live in `bucket_overrides`, which sync
   never writes. Changing the bucket rules means bumping `RULES_VERSION`. The popup is
-  `public/cfa.js`, with `public/charts.js` (our own SVG charts, no library).
+  `public/cfa.js`, with `public/charts.js` (our own SVG charts, no library). Recommendations are
+  rules in `src/audit/rules.ts` (pure, tested, each with its basis and `CHECKED`), run by
+  `GET /audit/advice` on prepared data. Every finding shows its numbers, and the pages say
+  "educational, not financial advice".
 - BAM, miles and points (`docs/bam.md`): balances typed in or read from statement PDFs in the
   browser, never from a loyalty login, scraping or Plaid. Each update is a new reading in
   `point_balances`. The program list, expiry rules and "earned by" rules are code
