@@ -91,7 +91,7 @@
     if (put12 > 0) finds.push(`Contributions Minty saw in the last 12 months: ${money(put12)}.`);
     if (fees > 0) finds.push(`Fees charged inside the accounts this year: ${money(fees)}.`);
     html += section("Trend", `<div class="bill-ranges cfa-ranges" role="group" aria-label="How far back">${RANGES.map(([n, l]) => `<button type="button" data-range="${n}" aria-pressed="${n === range}">${l}</button>`).join("")}</div>` +
-      (shown.length >= 2 ? C().lines({ labels: shown.map(p => p.date), series: [{ name: "Retirement accounts", cls: "net", values: shown.map(p => p.cents) }], width: width(), fmt: short, short: dayLabel }) : `<p class="cfa-big">${money(total)}</p>`), finds);
+      (shown.length >= 2 ? C().lines({ labels: shown.map(p => p.date), series: [{ name: "Retirement accounts", cls: "net", values: shown.map(p => p.cents) }], width: width(), fmt: short, short: dayLabel, gap: 72 }) : `<p class="cfa-big">${money(total)}</p>`), finds);
 
     // 2. Forecast, in today's dollars
     const k = person(), prof = profileOf(k);
