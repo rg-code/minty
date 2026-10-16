@@ -109,20 +109,18 @@ there, gitignored here). If that folder exists, read it too.
    to `src/benefits/catalog.ts`, with sources and `CHECKED`. Re-check the existing benefits when
    issuers change them; the last check was 2026-10-12.
 4. **CFA (Complete financial audit) and EGG (retirement accounts).** Plan and decisions waiting:
-   [cfa.md](cfa.md).
+   [cfa.md](cfa.md). Decided 2026-10-16: the name stays CFA (here it means Complete financial audit), and the retirement button is EGG.
    - **CFA:** charts and trends for spending, saving, debt and retirement, plus findings ranked by
      dollars a year and a planner's checklist.
    - **EGG:** retirement accounts islanded in their own view: a trend, a forecast, and this year's
      contributions against the limits.
    - **Order:** R0 (check Plaid Investments on Trial) → C1 foundations → C2 audit charts → E1/E2
      EGG → C3 recommendations.
-5. **MAP (Miles And Points).** Plan and decisions waiting: [map.md](map.md).
-   - **What it is:** every miles and points balance in one view, grouped by currency, with the
-     date each was last updated.
-   - **Where the numbers come from:** statement PDFs read on the device, exactly like Bills
-     (folder included), or typed in by hand. No loyalty logins, no scraping, no Plaid.
-   - **Order:** M1 (typing balances in, and the view) → M2 (PDFs, sharing Bills' reader) → M3
-     (optional extras).
+5. **BAM (Balance of Award Miles & points)**, [bam.md](bam.md).
+   - **M1 is done:** the BAM button next to ABC, typing balances in, and history.
+   - **Next, M2:** statement PDFs in the folder shared with Bills, starting with Amex Membership
+     Rewards.
+   - **With it, M3's first two:** which cards earn each currency, and expiry reminders.
 6. **Decide where MCP goes.** The live demo shows an "AI connector (MCP), coming soon" button, but
    [agent-plan.md](agent-plan.md) has the MCP server as optional phase **A7**. The options:
    - move MCP earlier, as a read-only server built on A1's query tools, so Claude Desktop and

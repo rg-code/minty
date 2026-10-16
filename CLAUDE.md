@@ -122,6 +122,11 @@ Design history and decisions: `docs/serverless-plan.md`.
   The dashboard's ⋯ menu holds Bills (a calendar) and is where new features go. Own bills (`bills`)
   are one row per bill; PDFs are read in the browser (pdf.js in `public/vendor/pdfjs/`, never a CDN;
   `public/bill-parse.js`) and never uploaded, only their fields and SHA-256.
+- BAM, miles and points (`docs/bam.md`): balances typed in or read from statement PDFs in the
+  browser (sharing Bills' folder and pdf.js), never from a loyalty login, scraping or Plaid. Each
+  update is a new reading in `point_balances`. The program list is code (`src/points/programs.ts`,
+  `CHECKED`). `GET /points` reads each reading once, with no `ORDER BY` (D1 counts a sort as a second
+  read).
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

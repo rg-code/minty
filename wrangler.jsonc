@@ -62,6 +62,8 @@
       "/bills/*",
       "/statements",
       "/statements/*",
+      "/points",
+      "/points/*",
       "/link/*"
     ]
   },

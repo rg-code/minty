@@ -1,6 +1,6 @@
 # Plan: CFA (Complete financial audit) and EGG (retirement accounts)
 
-**Status: proposed 2026-10-16, waiting for the owner's decisions (§6). No code yet.**
+**Status: proposed 2026-10-16. Decided: the name stays CFA (Complete financial audit, its own meaning here), and the retirement button is EGG. Still open: §6 items 3–5. No code yet.**
 
 Two features, planned together because they share their data and charts:
 

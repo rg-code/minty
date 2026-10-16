@@ -12,7 +12,7 @@ const envOverrides = demoEnv(data) as any;
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   await db.batch(statements(data).map(([sql, params]) => db.prepare(sql).bind(...params)));
 });
 
@@ -91,6 +91,19 @@ describe("demo bills", () => {
     expect(by["Citi Strata Premier℠ Card"]).toMatchObject({ status: "unpaid", attention: false });
     for (const c of Object.values(by) as any[]) expect(c.history.length).toBeGreaterThan(0);
     expect(body.cards.filter((c: any) => c.history.some((h: any) => h.status !== "paid"))).toEqual([]);   // older statements are paid
+  });
+});
+
+describe("demo BAM", () => {
+  it("shows made-up balances by currency, with history and one not updated in months", async () => {
+    const { status, body } = await getJson<any>("/points", { envOverrides });
+    expect(status).toBe(200);
+    const amex = body.balances.find((b: any) => b.program === "amex_mr");
+    expect(amex).toMatchObject({ name: "Amex Membership Rewards", balance: 84210, kind: "bank" });
+    expect(amex.history.map((h: any) => h.balance)).toEqual([72480, 61250]);
+    expect(body.balances.filter((b: any) => b.program === "chase_ur")).toHaveLength(2);       // both people
+    const marriott = body.balances.find((b: any) => b.program === "marriott");
+    expect(Date.parse(body.today) - Date.parse(marriott.as_of)).toBeGreaterThan(90 * 864e5);
   });
 });
 

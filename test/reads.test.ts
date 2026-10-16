@@ -44,7 +44,7 @@ async function readsOf(path: string, init: RequestInit = {}) {
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   // The first three are banks ABC's catalog recognises (src/benefits/catalog.ts); the rest are made up.
   const banks = ["American Express", "Citibank Online", "U.S. Bank", "Example Bank A", "Example Bank B", "Example Bank C", "Example Bank D", "Example Bank E"];
   await db.batch(banks.map((b, i) => db.prepare(
@@ -84,6 +84,10 @@ beforeAll(async () => {
   await db.prepare(`INSERT INTO bills (owner, biller, match_name, amount_cents, due_date, source)
     SELECT 'me', b.value, upper(b.value), 21240, date('2025-02-25', '+' || (m.value * 3) || ' months'), 'manual'
     FROM json_each('["Water District","Recology"]') b, json_each('[0,1,2,3,4,5,6,7]') m`).run();
+  // BAM: three years of monthly readings of 8 balances (more updating than anyone does).
+  await db.prepare(`INSERT INTO point_balances (owner, program, balance, as_of, source)
+    SELECT 'me', p.value, 1000 * m.value, date('now', '-' || m.value || ' months'), 'manual'
+    FROM json_each('["amex_mr","chase_ur","united","delta","hyatt","marriott","hilton","bilt"]') p, json_each('${JSON.stringify([...Array(36).keys()])}') m`).run();
 });
 
 describe("D1 rows read per request (budgets)", () => {
@@ -101,6 +105,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/users", 10],
     ["/capacity", 100],
     ["/sync-request", 40],
+    ["/points", 400],                    // every reading once (288 here; no ORDER BY, which D1 counts as a second read)
   ])("%s reads at most %i rows", async (path, budget) => {
     const rows = await readsOf(path);
     console.warn(`${path}: ${rows} rows read`);
