@@ -122,6 +122,11 @@ Design history and decisions: `docs/serverless-plan.md`.
   The dashboard's ⋯ menu holds Bills (a calendar) and is where new features go. Own bills (`bills`)
   are one row per bill; PDFs are read in the browser (pdf.js in `public/vendor/pdfjs/`, never a CDN;
   `public/bill-parse.js`) and never uploaded, only their fields and SHA-256.
+- CFA, the audit (`docs/cfa.md`): `src/audit/totals.ts` puts each posted transaction in one bucket
+  (income, spend, saving, transfer, debt) in SQL, and keeps `monthly_totals` and `balance_snapshots`
+  from the hourly cron, never on a request. A full rebuild runs weekly or after a correction; other
+  runs refresh only from the earliest new transaction's month. Pages read `monthly_totals`, never
+  the transactions. Corrections live in `bucket_overrides`, which sync never writes.
 - BAM, miles and points (`docs/bam.md`): balances typed in or read from statement PDFs in the
   browser, never from a loyalty login, scraping or Plaid. Each update is a new reading in
   `point_balances`. The program list, expiry rules and "earned by" rules are code

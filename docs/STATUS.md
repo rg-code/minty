@@ -108,14 +108,13 @@ there, gitignored here). If that folder exists, read it too.
 3. **ABC coverage.** Cards ABC doesn't know show as untracked; add the ones the household holds
    to `src/benefits/catalog.ts`, with sources and `CHECKED`. Re-check the existing benefits when
    issuers change them; the last check was 2026-10-12.
-4. **CFA (Complete financial audit) and EGG (retirement accounts).** Plan and decisions waiting:
-   [cfa.md](cfa.md). Decided 2026-10-16: the name stays CFA (here it means Complete financial audit), and the retirement button is EGG.
-   - **CFA:** charts and trends for spending, saving, debt and retirement, plus findings ranked by
-     dollars a year and a planner's checklist.
-   - **EGG:** retirement accounts islanded in their own view: a trend, a forecast, and this year's
-     contributions against the limits.
-   - **Order:** R0 (check Plaid Investments on Trial) → C1 foundations → C2 audit charts → E1/E2
-     EGG → C3 recommendations.
+4. **CFA (Complete financial audit) and EGG (retirement accounts)**, [cfa.md](cfa.md).
+   - **Decided:** CFA keeps its name, the retirement button is EGG, HSAs count as retirement
+     accounts, the profile is optional, and Schwab is linked first.
+   - **Done:** R0 (Investments is on the Trial plan; Schwab is automatic) and C1 (buckets, monthly
+     totals and daily balance snapshots, kept by the hourly cron).
+   - **Next:** C2 (the audit's charts), then E1 and E2 (the EGG data and view), then C3
+     (recommendations).
 5. **BAM (Balance of Award Miles & points)**, [bam.md](bam.md).
    - **Done:** M1 (typing balances in, with history), M2 (statement PDFs and the folder shared
      with Bills, Amex Membership Rewards first), and M3's expiry rules and "likely earned by"

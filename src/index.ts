@@ -15,6 +15,7 @@ import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 import { runStatementSync } from "./statements";
 import { rekeyTokens } from "./token-key";
+import { refreshTotals, snapshotBalances } from "./audit/totals";
 import { isPending, markSwept, syncState } from "./routes/syncrequest";
 
 /** Minty Worker. API paths are listed in wrangler.jsonc assets.run_worker_first; everything
@@ -164,6 +165,14 @@ export default {
         return null;
       });
       if (keys && (keys.rekeyed || keys.previous || keys.neither)) console.log("token key", JSON.stringify(keys));   // counts only
+      // CFA (docs/cfa.md): today's balances, and the monthly totals where something changed. After
+      // sync, so they include this run's transactions; all SQL, so it costs the Worker no CPU to speak of.
+      await snapshotBalances(env).catch((e) => console.error("balance snapshots failed:", e instanceof Error ? e.message : e));
+      const totals = await refreshTotals(env).catch((e) => {
+        console.error("monthly totals failed:", e instanceof Error ? e.message : e);
+        return null;
+      });
+      if (totals?.from) console.log("monthly totals", JSON.stringify(totals));
     }
   },
 } satisfies ExportedHandler<Env>;

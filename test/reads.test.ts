@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import type { Env } from "../src/env";
 import { call } from "./helpers";
+import { refreshTotals, snapshotBalances } from "../src/audit/totals";
 import { FakePlaid, account, page, txn } from "./fake-plaid";
 import { fernetEncrypt } from "../src/fernet";
 import { runSyncAll } from "../src/sync";
@@ -132,6 +133,25 @@ describe("D1 rows read by the cron", () => {
     } finally {
       vi.restoreAllMocks();
     }
+  });
+});
+
+describe("D1 rows read by the audit's cron step (docs/cfa.md, C1)", () => {
+  it("a full rebuild (weekly) reads about 3 rows per transaction; a run with nothing new reads almost nothing", async () => {
+    const E = env as unknown as Env;
+    await env.DB.prepare("DELETE FROM app_state WHERE key LIKE 'audit_%'").run();
+    const full = counting(env.DB);
+    expect(await refreshTotals({ ...E, DB: full.db })).toMatchObject({ full: true });
+    const n = (await env.DB.prepare("SELECT count(*) AS n FROM transactions").first<{ n: number }>())!.n;
+    console.warn(`audit rebuild: ${full.tally.rows} rows read for ${n} transactions`);
+    expect(full.tally.rows).toBeLessThanOrEqual(3.2 * n);          // 3.0 when written: the scan, and the grouping's sort (D1 counts it
+                                                                   // again); the pair probe reads the index only, accounts are read once
+    const quiet = counting(env.DB);
+    expect(await refreshTotals({ ...E, DB: quiet.db })).toEqual({ from: null, full: false });
+    expect(quiet.tally.rows).toBeLessThanOrEqual(10);
+    const snap = counting(env.DB);
+    await snapshotBalances({ ...E, DB: snap.db });
+    expect(snap.tally.rows).toBeLessThanOrEqual(200);              // one row per account, plus each one's snapshot by its key
   });
 });
 
