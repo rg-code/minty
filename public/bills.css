@@ -20,6 +20,11 @@
 .bills .bill-ranges button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 11px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; }
 .bills .bill-ranges button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px var(--shadow); }
 
+.bills .bill-folderline { font-size: 13px; color: var(--muted); margin: -2px 0 10px; }
+.bills .bill-folderline b { color: var(--ink); font-weight: 650; }
+.bills .bill-folderline button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; margin-left: 6px; cursor: pointer; }
+.bills .bill-folderline .bill-tip { font-size: 12px; }
+@media (pointer: coarse) { .bills .bill-folderline { display: none; } }
 .bills .bill-attention { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px; margin-bottom: 12px; border-radius: 12px;
                          border: 1px solid color-mix(in srgb, var(--out) 50%, var(--hairline)); background: color-mix(in srgb, var(--out) 6%, var(--surface)); }
 .bills .bill-attention strong { color: var(--out); font-size: 13px; margin-right: 4px; }
