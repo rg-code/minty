@@ -103,6 +103,8 @@ the secret names to add in the Cloudflare dashboard.
     POST /link/investments/complete {session_id}   (turns investments on once Plaid confirms the consent)
     GET  /investments            every bank + whether its investment accounts are fetched (EGG)
     POST /investments/off        {item_id}   (stop fetching; what was saved stays)
+    GET  /retirement             EGG: retirement accounts, balance history, contributions per year, fees, mix, profiles, this year's IRS limits   (?owner=)
+    PUT  /retirement/profile     {owner, birth_year?, retire_age?, target_cents?, target_age?, match_pct?, hsa_coverage?, beneficiaries_checked_on?}
     PUT  /accounts/{id}/view     {view: dashboard | retirement | null}   where an account shows (retirement accounts default to EGG)
     GET  /audit                  CFA: monthly totals by bucket and category, net worth by day, recurring charges, card balances, corrections   (?months=12|24 &owner=)
     PUT  /audit/buckets          {merchant, bucket | null}   correct what a merchant counts as (applied at the next cron run)

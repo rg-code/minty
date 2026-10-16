@@ -1,7 +1,7 @@
 # Plan: CFA (Complete financial audit) and EGG (retirement accounts)
 
-**Status (2026-10-16):** decisions made (§6), R0 checked (§5.1), C1 and C2 built (§5.2, §5.3),
-**E1 built** (§5.4). Next: E2 (the EGG view), then C3 (recommendations and the checklist).
+**Status (2026-10-16):** decisions made (§6), R0 checked (§5.1), C1, C2, E1 and **E2 built**
+(§5.2–§5.5). Next: C3 (recommendations and the planner's checklist).
 
 Two features, planned together because they share their data and charts:
 
@@ -305,6 +305,42 @@ also starts with C1, and every later trend needs it.
 - **To check on Plaid Sandbox (the owner):** link a retirement account with a Sandbox
   institution and `user_good`, then within 10 minutes Setup checks show it fetched. Also try
   Investment accounts → Add on an existing Sandbox bank.
+
+### 5.5 E2: built (the EGG view)
+
+- **Where:** a header button **EGG** next to ABC and BAM (and `/?egg`), in ABC's frame with CFA's
+  section and chart styles.
+- **The pieces:**
+  - `public/egg.js` and `egg.css`;
+  - `src/routes/retirement.ts`: `GET /retirement` and `PUT /retirement/profile`;
+  - `src/retirement/limits.ts`: the IRS limits as code, with sources and `CHECKED`.
+- **Trend:** the retirement accounts' total by day (each account's newest snapshot carried
+  forward), over 1 or 5 years or all of it. Once there's a year of history, it shows what went in
+  apart from what it earned.
+- **Forecast,** in today's dollars: the current total and the last 12 months' contributions,
+  grown at 3, 5 and 7% real a year to the retirement age (65 without a profile).
+  - The 4% withdrawal income.
+  - For a target: on track, or how much more a month would reach it.
+  - In the Everyone view it covers everyone, over 20 years.
+- **This year's contributions** against the limits for 401(k)/403(b)/457(b), IRA, SIMPLE and HSA
+  (self or family), with the catch-ups by age (50+; 60–63 for workplace plans; 55+ for an HSA)
+  and an even-pace marker.
+  - Behind the pace, it gives the monthly amount that reaches the limit.
+  - It reminds you about the employer match.
+  - Only contributions and deposits count, never a rollover or a dividend.
+  - 2026 figures: IRS Notice 2025-67 and Rev. Proc. 2025-19.
+- **Mix:** stocks, target-date and balanced, bonds, cash and other, sorted by fund names (Plaid's
+  security types don't tell a bond fund from a stock fund, and the page says so). It flags cash
+  over 10% before 55.
+- **Accounts,** each with "Show on the dashboard too", and the other investment accounts, which can
+  be moved in.
+- **The profile** (optional, in `app_state` per person): birth year, retirement age, target, match
+  %, HSA coverage, and the date beneficiaries were last checked (the beneficiary reminder).
+- **Reads:** every query starts from the accounts (`CROSS JOIN`), so it reads only the retirement
+  accounts' rows by index. Left to itself, SQLite walked all 8,000 transactions; it's now 1,460
+  rows for 3 accounts with a year of daily balances.
+- **Demo:** made-up 401(k), Roth IRA, HSA and rollover IRA, with holdings, two years of
+  contributions and five months of balances.
 
 ## 6. Decisions (owner, 2026-10-16)
 

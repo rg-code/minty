@@ -13,6 +13,7 @@ import * as ownBills from "./routes/household-bills";
 import * as points from "./routes/points";
 import * as cfa from "./routes/audit";
 import * as inv from "./routes/investments";
+import * as egg from "./routes/retirement";
 import { runInvestmentSync } from "./investments";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
@@ -70,6 +71,8 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["POST", /^\/statements\/off$/, ({ env, request }) => bills.statementsOff(env, request)],
   ["POST", /^\/link\/token\/investments$/, ({ env, config, request, email }) => link.updateMode(env, config, request, email, "investments")],
   ["POST", /^\/link\/investments\/complete$/, ({ env, config, request, email }) => inv.completeInvestments(env, config, request, email)],
+  ["GET", /^\/retirement$/, ({ env, config, url }) => egg.retirement(env, config, url)],
+  ["PUT", /^\/retirement\/profile$/, ({ env, config, request }) => egg.setProfile(env, config, request)],
   ["GET", /^\/investments$/, ({ env }) => inv.investmentBanks(env)],
   ["POST", /^\/investments\/off$/, ({ env, request }) => inv.investmentsOff(env, request)],
   ["PUT", /^\/accounts\/(\d+)\/view$/, ({ env, request, params }) => inv.setAccountView(env, request, Number(params[0]))],

@@ -26,6 +26,11 @@ export interface DemoData {
   bills: Record<string, string | number | null>[];            // the household's own bills (part 2)
   points: Record<string, string | number | null>[];           // BAM (docs/bam.md): miles and points readings
   netWorth: Record<string, string | number | null>[];         // CFA (docs/cfa.md): a made-up history up to yesterday
+  investmentSync: Record<string, string | number | null>[];   // EGG (docs/cfa.md §3): retirement accounts
+  securities: Record<string, string | number | null>[];
+  holdings: Record<string, string | number | null>[];
+  investmentTxns: Record<string, string | number | null>[];
+  snapshots: Record<string, string | number | null>[];
 }
 
 export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", sam: "sam" }): DemoData {
@@ -266,6 +271,51 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   reading(owners.alex, "hyatt", 27300, 15);
   reading(owners.sam, "marriott", 96000, 131);
 
+  // EGG: an Investments-only login per person (made-up balances), with two years of contributions,
+  // what each account holds, and five months of balance history.
+  const investmentSync: DemoData["investmentSync"] = [], holdings: DemoData["holdings"] = [];
+  const investmentTxns: DemoData["investmentTxns"] = [], snapshots: DemoData["snapshots"] = [];
+  const securities: DemoData["securities"] = [
+    { security_id: "demo-sec-500", name: "Sample 500 Index Fund", ticker: "SXAIX", type: "mutual fund", is_cash_equivalent: 0, close_price: 214.18 },
+    { security_id: "demo-sec-bond", name: "Sample Total Bond Index Fund", ticker: "SXBDX", type: "mutual fund", is_cash_equivalent: 0, close_price: 9.87 },
+    { security_id: "demo-sec-2055", name: "Sample Target Date 2055 Fund", ticker: "STDFX", type: "mutual fund", is_cash_equivalent: 0, close_price: 18.42 },
+    { security_id: "demo-sec-cash", name: "Cash", ticker: "CUR:USD", type: "cash", is_cash_equivalent: 1, close_price: 1 },
+  ];
+  const RETIRE: [string, [string, string, string, number, [string, number][], number][]][] = [
+    // person, accounts: [name, last-4, subtype, balance, holdings [security, share of balance], contribution a month]
+    ["alex", [["Northwind Labs 401(k)", "4401", "401k", 128450, [["demo-sec-500", 0.7], ["demo-sec-bond", 0.2], ["demo-sec-cash", 0.1]], 1625],
+              ["Roth IRA", "5512", "roth", 41200, [["demo-sec-2055", 1]], 500]]],
+    ["sam", [["Health Savings Account", "6623", "hsa", 9850, [["demo-sec-500", 0.6], ["demo-sec-cash", 0.4]], 300],
+             ["Rollover IRA", "7734", "ira", 63000, [["demo-sec-2055", 0.85], ["demo-sec-bond", 0.15]], 0]]],
+  ];
+  RETIRE.forEach(([person, accts], k) => {
+    const itemId = items.length + 1;
+    items.push({ id: itemId, owner: who(person), plaid_account: `${who(person)}_primary`, plaid_item_id: `demo-item-${itemId}`,
+                 access_token_enc: "demo-no-token", institution_name: "Sample Brokerage", txn_cursor: null, status: "good", products: "investments",
+                 updated_at: nowIso(400), attempted_at: null, checked_at: nowIso(90), consent_expires_at: null });
+    investmentSync.push({ item_id: itemId, status: "ready", synced_at: nowIso(30 + k * 7), next_attempt_at: nowIso(-600), txn_offset: 0 });
+    accts.forEach(([name, mask, subtype, bal, held, monthly], j) => {
+      const id = itemId * 10 + j;
+      accounts.push({ id, owner: who(person), item_id: itemId, plaid_account_id: `demo-acct-${id}`, name, mask, type: "investment", subtype,
+                      balance_current_cents: cents(bal), balance_available_cents: null, currency: "USD" });
+      for (const [sec, share] of held) {
+        const price = Number(securities.find((x) => x.security_id === sec)!.close_price);
+        holdings.push({ account_id: id, security_id: sec, quantity: Math.round((bal * share / price) * 1000) / 1000, value_cents: cents(bal * share), cost_basis_cents: cents(bal * share * 0.82), price });
+      }
+      for (let m = 0; m < 24 && monthly; m++) {
+        investmentTxns.push({ account_id: id, plaid_inv_txn_id: `demo-inv-${id}-${m}`, date: iso(Y, M - m, 15), name: "Contribution", type: "cash", subtype: "contribution",
+                              amount_cents: -cents(monthly), quantity: 0, fees_cents: 0, security_id: null });
+      }
+      if (j === 0) investmentTxns.push({ account_id: id, plaid_inv_txn_id: `demo-inv-${id}-fee`, date: iso(Y, 2, 31), name: "Account fee", type: "fee", subtype: "account fee",
+                                         amount_cents: 2500, quantity: 0, fees_cents: 2500, security_id: null });
+      // a balance history that ends at today's balance: contributions, and markets going up and down
+      for (let d = 150; d >= 1; d--) {
+        const market = 1 - d * 0.00045 + Math.sin(d / 11) * 0.018;
+        snapshots.push({ account_id: id, date: daysAgo(d), current_cents: cents(bal * market - monthly * d / 30) });
+      }
+    });
+  });
+
   // CFA: net worth by day for each person, drifting towards today's balances (today's row comes
   // from the demo's own snapshot of the accounts).
   const netWorth: DemoData["netWorth"] = [];
@@ -280,7 +330,8 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   }
 
   const users = [`${owners.alex}:Alex`, `${owners.sam}:Sam`, ...CAMEOS.map(([label]) => `${label.toLowerCase()}:${label}`)].join(",");
-  return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills, points, netWorth };
+  return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills, points, netWorth,
+           investmentSync, securities, holdings, investmentTxns, snapshots };
 }
 
 /** The Worker settings the demo runs with: its people, and placeholder Plaid keys for each, so no
@@ -305,6 +356,8 @@ export function statements(d: DemoData): [string, (string | number | null)[]][] 
     ...d.tags.map((t): [string, (string | number | null)[]] => ["INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (?, ?, ?)", t]),
     ...d.marks.map((m): [string, (string | number | null)[]] => ["INSERT INTO benefit_marks (account_id, benefit_id, period_start, marked_by) VALUES (?, ?, ?, 'demo')", m]),
     ...ins("statement_sync", d.statementSync), ...ins("card_statements", d.cardStatements), ...ins("bills", d.bills), ...ins("point_balances", d.points), ...ins("net_worth", d.netWorth),
+    ...ins("investment_sync", d.investmentSync), ...ins("securities", d.securities), ...ins("holdings", d.holdings),
+    ...ins("investment_txns", d.investmentTxns), ...ins("balance_snapshots", d.snapshots),
   ];
 }
 

@@ -118,8 +118,10 @@ there, gitignored here). If that folder exists, read it too.
        charges, fees and debt, net worth, corrections).
      - E1: retirement accounts from Plaid Investments (a new login, or added to a bank already
        linked), the cron's daily fetch, and islanding from the dashboard.
-   - **Next:** E2 (the EGG view: trend, forecast, contributions against limits, mix and cash),
-     then C3 (recommendations and the planner's checklist). The owner checks E1 on Plaid Sandbox.
+     - E2: the EGG view (trend, forecast, this year's contributions against the IRS limits, mix
+       and cash, accounts, profile).
+   - **Next:** C3 (recommendations and the planner's checklist). The owner checks E1 on Plaid
+     Sandbox; the IRS limits need next year's figures each autumn (`src/retirement/limits.ts`).
 5. **BAM (Balance of Award Miles & points)**, [bam.md](bam.md).
    - **Done:** M1 (typing balances in, with history), M2 (statement PDFs and the folder shared
      with Bills, Amex Membership Rewards first), and M3's expiry rules and "likely earned by"
