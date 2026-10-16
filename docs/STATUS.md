@@ -122,8 +122,10 @@ there, gitignored here). If that folder exists, read it too.
        and cash, accounts, profile).
      - C3: "What to do" (rules in `src/audit/rules.ts`, ranked by dollars a year), the planner's
        checklist, and the printable yearly audit.
-   - **Next:** the owner checks E1 on Plaid Sandbox. The IRS limits need next year's figures each
-     autumn (`src/retirement/limits.ts`), and the rules' thresholds a look each year (`CHECKED`).
+     - The IRS limits are fetched from irs.gov once a year (`src/retirement/irs.ts`; `IRS_LIMITS=off`
+       turns it off).
+   - **Next:** the owner checks E1 on Plaid Sandbox. The rules' thresholds want a look each year
+     (`CHECKED` in `src/audit/rules.ts`).
 5. **BAM (Balance of Award Miles & points)**, [bam.md](bam.md).
    - **Done:** M1 (typing balances in, with history), M2 (statement PDFs and the folder shared
      with Bills, Amex Membership Rewards first), and M3's expiry rules and "likely earned by"

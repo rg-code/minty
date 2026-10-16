@@ -147,8 +147,11 @@ Design history and decisions: `docs/serverless-plan.md`.
   failure there never touches `items.status`. Retirement accounts (HSAs included) are islanded:
   `/accounts` and `/transactions` leave them out unless `accounts.view` says 'dashboard' (use
   `IN_RETIREMENT()`). The view is `public/egg.js` with `GET /retirement`, whose queries start from the
-  accounts (`CROSS JOIN`) so they never walk every transaction. IRS limits are code
-  (`src/retirement/limits.ts`, sources and `CHECKED`); add each new year's.
+  accounts (`CROSS JOIN`) so they never walk every transaction. IRS limits are fetched from irs.gov
+  once a year (`src/retirement/irs.ts`): the COLA table and Publication 969, asked from a quiet
+  catch-up run only while a year isn't settled, at most weekly, never on a request. Every figure
+  is sanity-checked against `src/retirement/limits.ts`, which stays the fallback. `IRS_LIMITS=off`
+  never asks; tests run with it off.
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

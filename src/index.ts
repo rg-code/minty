@@ -16,6 +16,7 @@ import * as inv from "./routes/investments";
 import * as egg from "./routes/retirement";
 import * as advice from "./routes/advice";
 import { runInvestmentSync } from "./investments";
+import { refreshIrsLimits } from "./retirement/irs";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 import { runStatementSync } from "./statements";
@@ -169,6 +170,9 @@ export default {
         return {};
       });
       if (Object.keys(invested).length) console.log("investments", JSON.stringify(invested));   // item id -> status
+      // The IRS contribution limits (EGG): asked only while a year isn't settled, at most once a week.
+      const irs = await refreshIrsLimits(env).catch((e) => ({ failed: e instanceof Error ? e.message : String(e) }));
+      if (Object.keys(irs).length) console.log("irs limits", JSON.stringify(irs));
       // A correction made on the audit shows within minutes, not at the next hourly run.
       const totals = await refreshTotals(env).catch((e) => {
         console.error("monthly totals failed:", e instanceof Error ? e.message : e);

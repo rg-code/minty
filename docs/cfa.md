@@ -1,7 +1,7 @@
 # Plan: CFA (Complete financial audit) and EGG (retirement accounts)
 
-**Status (2026-10-16): every phase built** (R0, C1–C3, E1–E2; §5). Next: the owner's Sandbox check
-of E1, and new IRS limits each autumn.
+**Status (2026-10-16): every phase built** (R0, C1–C3, E1–E2; §5), and the IRS limits are fetched
+once a year (§5.7). Next: the owner's Sandbox check of E1.
 
 Two features, planned together because they share their data and charts:
 
@@ -370,6 +370,30 @@ also starts with C1, and every later trend needs it.
   - EGG's beneficiary tick counts too.
 - **Print the audit:** a print stylesheet keeps only the audit, light whatever the theme, with the
   date at the top and without the controls. Print → Save as PDF gives the yearly report.
+
+### 5.7 The IRS limits, fetched once a year (owner, 2026-10-16)
+
+- **Two IRS pages, each at a stable address.** The yearly press release's address changes, so it
+  isn't one of them.
+  - **The COLA table:** 401(k)/403(b)/457(b) deferrals and catch-up, IRA, SIMPLE, and the 60–63
+    catch-up in its footnote. It has a column per year.
+  - **Publication 969:** HSA limits ("For 2026, if you have self-only HDHP coverage, you can
+    contribute up to $4,400 …") and the 55+ catch-up.
+- **When:** from a quiet catch-up cron run, never on a request.
+  - Each page is asked only while a year it should have isn't settled: this year, and from
+    November next year (the COLA table; the HSA figures come with the new year's Publication 969).
+    Retries are at most once a week.
+  - Once settled, a page isn't asked again for that year, so it's one request a year when the IRS
+    has published.
+- **Checked before it's kept:** whole dollars in $50 steps, within 0.9× to 1.5× the last known
+  value (the code's, or an earlier year fetched). A page that changed shape gives nothing, never a
+  wrong number.
+- **Fallbacks:** the code's values (`src/retirement/limits.ts`). For a figure not published yet for
+  this year, last year's, listed as `provisional` (EGG says so).
+- **CPU:** only the tables' stretch of each page is turned into text (the pages are ~100 KB and
+  ~300 KB).
+- **`IRS_LIMITS=off`** never asks irs.gov. Tests run with it off, and test the parsers on parts of
+  the real pages.
 
 ## 6. Decisions (owner, 2026-10-16)
 
