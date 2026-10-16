@@ -1,0 +1,47 @@
+/* Bills (public/bills.js) in ABC's popup frame (abc.css): rows by due date, a status chip each. */
+.bills .bill-ranges { display: inline-flex; gap: 4px; padding: 3px; margin: 4px 0 10px; border: 1px solid var(--hairline);
+                      border-radius: 999px; background: var(--bg); }
+.bills .bill-ranges button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 5px 12px; border: 0; border-radius: 999px;
+                             background: transparent; color: var(--muted); cursor: pointer; }
+.bills .bill-ranges button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px var(--shadow); }
+.bills .bill-h { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 8px; }
+.bills .bill-h.attention { color: var(--out); }
+.bills .bill-hint, .bills .bill-fine { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
+.bills .bill-fine { font-size: 12px; margin-top: 18px; }
+.bills .bill { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; margin-bottom: 8px;
+               border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); }
+.bills .bill.attention { border-color: color-mix(in srgb, var(--out) 55%, var(--hairline)); }
+.bills .bill.quiet { opacity: .85; }
+.bills .bill-main { min-width: 0; }
+.bills .bill-name { font-weight: 650; font-size: 14.5px; }
+.bills .bill-where { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
+.bills .bill-meta { font-size: 13px; color: var(--muted); margin-top: 3px; }
+.bills .bill-why { color: var(--ink); }
+.bills .bill-more { font: inherit; font-size: 12.5px; color: var(--accent); background: none; border: 0; padding: 0; margin-top: 6px; cursor: pointer; }
+.bills .bill-chip { flex: none; font-size: 12px; font-weight: 650; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+                    background: var(--tag-bg); color: var(--ink); }
+.bills .bill-chip.paid, .bills .bill-chip.nothing_due { background: color-mix(in srgb, var(--in) 16%, var(--surface)); color: var(--in); }
+.bills .bill-chip.partial { background: color-mix(in srgb, #f08c00 18%, var(--surface)); color: #c66a00; }
+.bills .bill-chip.overdue { background: color-mix(in srgb, var(--out) 16%, var(--surface)); color: var(--out); }
+.bills .bill-chip.unknown { background: var(--tag-bg); color: var(--muted); }
+.bills .bill-history { width: 100%; border-collapse: collapse; font-size: 13px; margin: -2px 0 12px; }
+.bills .bill-history th, .bills .bill-history td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
+.bills .bill-history th { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.bills .bill-notes { margin-top: 14px; font-size: 13px; }
+.bills .bill-notes p { margin: 0 0 6px; }
+.bills a { color: var(--accent); }
+@media (max-width: 560px) {
+  .bills .bill { flex-direction: column; }
+  .bills .bill-where { display: block; margin-left: 0; }
+}
+
+/* The ⋯ menu in the dashboard header: Bills now, more features later */
+.more { position: relative; }
+.more .pill { padding: 5px 10px; }
+.moremenu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 25; min-width: 230px; padding: 6px; background: var(--surface);
+            border: 1px solid var(--hairline); border-radius: 12px; box-shadow: 0 12px 30px -12px var(--shadow), 0 2px 8px var(--shadow); }
+.moremenu[hidden] { display: none; }
+.moremenu button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; width: 100%; text-align: left; font: inherit;
+                   font-size: 14px; font-weight: 600; padding: 8px 10px; border: 0; border-radius: 8px; background: none; color: var(--ink); cursor: pointer; }
+.moremenu button:hover, .moremenu button:focus-visible { background: var(--row-hover); }
+.moremenu small { font-size: 12px; font-weight: 400; color: var(--muted); }

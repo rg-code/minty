@@ -21,6 +21,8 @@ export interface DemoData {
   transactions: Record<string, string | number | null>[];
   tags: [number, string, number][];                 // transaction_id, tag, position
   marks: [number, string, string][];                // account_id, benefit_id, period_start
+  cardStatements: Record<string, string | number | null>[];   // Bills (docs/bills.md)
+  statementSync: Record<string, string | number | null>[];
 }
 
 export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", sam: "sam" }): DemoData {
@@ -124,11 +126,6 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
     if (dom === 18) add(sapphire, day, 15.49, "Netflix", "Netflix", "ENTERTAINMENT", { tags: ["subscriptions"] });
     if (dom === 21) add(strata, day, 11.99, "Spotify", "Spotify", "ENTERTAINMENT", { tags: ["subscriptions"] });
     if (dom === 27) add(savings, day, -between(70, 95), "Interest Payment", null, "INCOME");
-    if (dom === 20) for (const [card, bank] of [[sapphire, "CHASE"], [platinum, "AMEX"], [gold, "AMEX"], [strata, "CITI"]] as const) {
-      const paid = between(600, 2400);
-      add(card, day, -paid, "AUTOPAY PAYMENT - THANK YOU", null, "LOAN_PAYMENTS");
-      add(checking, day, paid, `${bank} EPAYMENT`, null, "LOAN_PAYMENTS");
-    }
   }
   add(checking, daysAgo(33), 1500, "Transfer to Ally Savings", null, "TRANSFER_OUT");
   add(savings, daysAgo(32), -1500, "Transfer from Chase Checking", null, "TRANSFER_IN");
@@ -206,8 +203,42 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
     add(acct[`${label.toLowerCase()}:${name}`], daysAgo(2 + Math.floor(rand() * 12)), between(lo, hi), txn, txn, category);
   }
 
+  // Bills: four statements per card, paid from checking about two weeks after each closes, except
+  // the latest, planned to show each state: Platinum paid, Business Gold partly paid, Sapphire not
+  // paid and due in 3 days (Needs attention), Strata Premier not paid yet, due later.
+  const cardStatements: DemoData["cardStatements"] = [], statementSync: DemoData["statementSync"] = [];
+  const BILLS: [number, string, number[], number, number][] = [
+    [platinum, "AMEX", [1234.56, 980.1, 1410.75, 760.2], 1, 13],
+    [gold, "AMEX", [845.2, 512.3, 690, 430.55], 0.35, 9],
+    [sapphire, "CHASE", [512.4, 610.95, 455.1, 380], 0, 3],
+    [strata, "CITI", [214.8, 198.4, 260.1, 175.25], 0, 18],
+  ];
+  const seenAt = nowIso(25);
+  for (const [card, bankName, balances, latestPaid, dueIn] of BILLS) {
+    const latestIssue = dueIn - 25;                                  // closes 25 days before it's due
+    let lastPay: [number, string] | null = null;
+    balances.map((bal, k) => ({ bal, k, issue: daysAgo(-(latestIssue - 30 * k)), due: daysAgo(-(latestIssue - 30 * k + 25)) }))
+      .reverse()                                                    // oldest first, so the last payment is the latest one
+      .forEach(({ bal, k, issue, due }) => {
+        const share = k === 0 ? latestPaid : 1;
+        const payDay = k === 0 ? daysAgo(2) : daysAgo(-(latestIssue - 30 * k + 15));
+        if (share > 0) {
+          const paid = Math.round(bal * share * 100) / 100;
+          add(card, payDay, -paid, "AUTOPAY PAYMENT - THANK YOU", null, "LOAN_PAYMENTS");
+          add(checking, payDay, paid, `${bankName} EPAYMENT`, null, "LOAN_PAYMENTS");
+          lastPay = [cents(paid), payDay];
+        }
+        cardStatements.push({ account_id: card, issue_date: issue, balance_cents: cents(bal),
+          minimum_payment_cents: cents(Math.max(35, Math.round(bal * 0.02))), due_date: due,
+          last_payment_cents: lastPay?.[0] ?? null, last_payment_date: lastPay?.[1] ?? null, is_overdue: 0,
+          first_seen_at: seenAt, last_seen_at: seenAt });
+      });
+    const itemId = accounts.find((a) => a.id === card)!.item_id as number;
+    if (!statementSync.some((r) => r.item_id === itemId)) statementSync.push({ item_id: itemId, status: "ready", synced_at: seenAt, enabled_at: seenAt });
+  }
+
   const users = [`${owners.alex}:Alex`, `${owners.sam}:Sam`, ...CAMEOS.map(([label]) => `${label.toLowerCase()}:${label}`)].join(",");
-  return { users, items, accounts, transactions, tags, marks };
+  return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync };
 }
 
 /** The Worker settings the demo runs with: its people, and placeholder Plaid keys for each, so no
@@ -231,6 +262,7 @@ export function statements(d: DemoData): [string, (string | number | null)[]][] 
     ...ins("items", d.items), ...ins("accounts", d.accounts), ...ins("transactions", d.transactions),
     ...d.tags.map((t): [string, (string | number | null)[]] => ["INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (?, ?, ?)", t]),
     ...d.marks.map((m): [string, (string | number | null)[]] => ["INSERT INTO benefit_marks (account_id, benefit_id, period_start, marked_by) VALUES (?, ?, ?, 'demo')", m]),
+    ...ins("statement_sync", d.statementSync), ...ins("card_statements", d.cardStatements),
   ];
 }
 

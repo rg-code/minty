@@ -8,8 +8,10 @@ import * as abc from "./routes/benefits";
 import * as syncReq from "./routes/syncrequest";
 import * as link from "./routes/link";
 import * as setup from "./routes/status";
+import * as bills from "./routes/bills";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
+import { runStatementSync } from "./statements";
 import { isPending, markSwept, syncState } from "./routes/syncrequest";
 
 /** Minty Worker. API paths are listed in wrangler.jsonc assets.run_worker_first; everything
@@ -42,6 +44,11 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["POST", /^\/link\/exchange$/, ({ env, config, request, ctx, email }) => link.exchange(env, config, request, ctx, email)],
   ["POST", /^\/link\/cancel$/, ({ env, request, email }) => link.cancel(env, request, email)],
   ["POST", /^\/link\/token\/update$/, ({ env, config, request, email }) => link.updateMode(env, config, request, email)],
+  ["GET", /^\/bills$/, ({ env, config }) => bills.bills(env, config)],
+  ["POST", /^\/link\/token\/statements$/, ({ env, config, request, email }) => link.updateMode(env, config, request, email, "statements")],
+  ["POST", /^\/link\/statements\/complete$/, ({ env, config, request, email }) => bills.completeStatements(env, config, request, email)],
+  ["GET", /^\/statements$/, ({ env }) => bills.statementBanks(env)],
+  ["POST", /^\/statements\/off$/, ({ env, request }) => bills.statementsOff(env, request)],
   ["POST", /^\/link\/reconnected$/, ({ env, config, request }) => link.reconnected(env, config, request)],
 ];
 
@@ -117,6 +124,15 @@ export default {
     if (!updatesOnly) await markSwept(env).catch((e) => console.error("marking the sweep failed:", e instanceof Error ? e.message : e));
     if (!updatesOnly || Object.keys(results).length) {          // quiet when nothing is downloading
       console.log(requested ? "requested sync complete" : updatesOnly ? "catch-up sync complete" : "scheduled sync complete", JSON.stringify(results));   // item id -> result; no data
+    }
+    if (updatesOnly && !Object.keys(results).length) {
+      // A quiet catch-up run (nothing downloading): one bank's statement details, if one is due
+      // (docs/bills.md). Never in a run that synced, so it never takes sync's CPU or subrequests.
+      const done = await runStatementSync(env).catch((e) => {
+        console.error("statement details failed:", e instanceof Error ? e.message : e);
+        return {};
+      });
+      if (Object.keys(done).length) console.log("statement details", JSON.stringify(done));   // item id -> status
     }
     if (!catchUp) {
       // After sync, so a failed check never costs a sync; each bank about once a day.

@@ -311,7 +311,32 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
   it("the headers file isn't served, and every moved script is in the service worker's shell", async () => {
     expect((await raw("/_headers")).status).toBe(404);
     const sw = await (await raw("/sw.js")).text();
-    expect(sw).toContain('const CACHE = "minty-v2";');                          // installed apps refresh their copy once
+    expect(sw).toContain('const CACHE = "minty-v3";');                          // installed apps refresh their copy once (v3: Bills)
     for (const src of MOVED_SCRIPTS) expect(sw, src).toContain(`"${src}"`);
+  });
+});
+
+describe("Bills (docs/bills.md)", () => {
+  it("opens from the ⋯ menu on the dashboard, in a popup fed by /bills", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<button type="button" class="pill" id="moreBtn" aria-haspopup="true" aria-expanded="false" aria-controls="moreMenu"');
+    expect(html).toMatch(/<div class="moremenu" id="moreMenu" hidden>\s*<button type="button" data-open-bills>Bills/);
+    expect(html).toContain('<dialog id="bills" class="abc bills"');
+    expect(html).toContain('<script src="/bills.js" defer></script>');
+    expect(html).toContain('<link rel="stylesheet" href="/bills.css" />');
+    const js = await (await SELF.fetch("https://minty.example.workers.dev/bills.js")).text();
+    expect(js).toContain('fetch("/bills")');
+    expect(js).toContain("data-open-bills");
+    const sw = await (await SELF.fetch("https://minty.example.workers.dev/sw.js")).text();
+    for (const f of ["/bills.js", "/bills.css"]) expect(sw).toContain(`"${f}"`);
+  });
+
+  it("the connect page turns statement details on through Link update mode, and checks the consent after", async () => {
+    const { html } = await page("/connect");
+    expect(html).toContain('<div class="reconnect statements" id="statements" hidden></div>');
+    expect(html).toContain('fetch("/statements")');
+    expect(html).toContain('fetch("/link/token/statements"');
+    expect(html).toMatch(/entry\.mode === "statements"[\s\S]*fetch\("\/link\/statements\/complete"[\s\S]*session_id: entry\.id/);
+    expect(html).toContain('fetch("/statements/off"');
   });
 });

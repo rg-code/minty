@@ -110,6 +110,14 @@ Design history and decisions: `docs/serverless-plan.md`.
   `items.status`. An update spanning runs keeps the cursor it began from
   (`items.sync_start_cursor`); `TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION` restarts from there,
   never from the run's own cursor (that fails forever).
+- Bills (`docs/bills.md`): card statements come from Plaid Liabilities, turned on per bank with
+  update-mode Link (`link_sessions.purpose = 'statements'`, `additional_consented_products`), and
+  only after `/item/get` confirms the consent. They're fetched only by a catch-up cron run that had
+  nothing to download (`src/statements.ts`, one bank per run), never on a request, and a failure
+  there never touches `items.status` or sync. "Paid" is an estimate from payments on the card
+  inside the statement window; a bank whose feed isn't current says "Can't tell yet", never "Not
+  paid". Statement-window queries bound both ends (an `OR` on the upper end read 85,000 rows).
+  The dashboard's ⋯ menu holds Bills and is where new features go.
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

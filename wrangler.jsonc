@@ -58,6 +58,9 @@
       "/sync-request",
       "/benefits",
       "/benefits/*",
+      "/bills",
+      "/statements",
+      "/statements/*",
       "/link/*"
     ]
   },

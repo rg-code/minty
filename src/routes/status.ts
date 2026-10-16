@@ -10,7 +10,7 @@ import { DEFAULT_READ_BUDGET, LIMITERS, readBudget, readsToday } from "../limits
  * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql"];
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql", "0010_card_statements.sql"];
 
 interface Check { id: string; ok: boolean; level: "error" | "warn"; message: string; fix?: string }
 
@@ -202,6 +202,22 @@ export async function status(env: Env, config: Config, email: string): Promise<R
   }
 
   const sync = syncHealth(env, config, rows);
+  // Statement details for Bills (docs/bills.md): only the banks that need something. A problem here
+  // never stops transaction sync, so these are warnings.
+  const statementIssues = await env.DB.prepare(
+    `SELECT ss.item_id, ss.status, ss.last_error, i.institution_name FROM statement_sync ss JOIN items i ON i.id = ss.item_id
+     WHERE ss.status IN ('consent_required', 'unsupported', 'error') ORDER BY ss.item_id`).all<{ item_id: number; status: string; last_error: string | null; institution_name: string | null }>()
+    .then((r) => r.results).catch(() => []);
+  for (const r of statementIssues) {
+    const bank = r.institution_name ?? "A bank";
+    add(r.status === "consent_required"
+      ? { id: `statements_${r.item_id}`, ok: false, level: "warn", message: `${bank} needs your consent again for statement details (Bills).`,
+          fix: "Open + Add account → Statement details and turn them on again for this bank." }
+      : r.status === "unsupported"
+      ? { id: `statements_${r.item_id}`, ok: false, level: "warn", message: `${bank} doesn't share statement details through Plaid (Bills shows its balance only).`,
+          fix: "Turn statement details off for this bank under + Add account → Statement details." }
+      : { id: `statements_${r.item_id}`, ok: false, level: "warn", message: `${bank}: fetching statement details failed (${r.last_error ?? "error"}). Minty retries every hour.` });
+  }
   if (sync) add({ id: "sync", level: "warn", ...sync });
 
   return json({ backend: "workers", plaid_env: plaidEnv, checks, items: byStatus });
