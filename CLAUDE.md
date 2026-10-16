@@ -47,7 +47,9 @@ Design history and decisions: `docs/serverless-plan.md`.
 - A Plaid Item = one institution login (not one account). The Trial cap is
   10 Items per credential set (`TRIAL_ITEM_CAP`); routing logic depends on this.
 - Plaid access tokens are stored Fernet-encrypted (`src/fernet.ts`, `TOKEN_ENC_KEY`).
-  Never log, print, or return decrypted tokens.
+  Never log, print, or return decrypted tokens. Open them with `openAccessToken()`
+  (`src/token-key.ts`), never `fernetDecrypt` directly: it also takes `TOKEN_ENC_KEY_PREVIOUS`
+  while the key is being changed, and moves each token to the new key.
 - Transaction sync is cursor-based and incremental.
 - There is NO HTTP sync endpoint, by design. Sync runs only from the cron triggers
   (`/link/exchange` starts the first sync of a new Item internally). Do not add one.

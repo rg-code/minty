@@ -1,6 +1,7 @@
 import type { Env } from "../env";
 import { type Config, ConfigError, credsFor, isConfigured, secretNames } from "../config";
-import { FernetError, fernetDecrypt, fernetEncrypt } from "../fernet";
+import { FernetError, fernetEncrypt } from "../fernet";
+import { openAccessToken } from "../token-key";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { PlaidError, plaidPost } from "../plaid";
 import { type ItemRow, checkItem, syncItem } from "../sync";
@@ -261,10 +262,11 @@ export async function updateMode(env: Env, config: Config, request: Request, ema
   if (!config.accountOwner.has(item.plaid_account)) throw new HttpError(400, "item's plaid_account is not configured");
   let accessToken: string;
   try {
-    accessToken = await fernetDecrypt(item.access_token_enc, tokenKey(env));
+    tokenKey(env);                        // a clear error when TOKEN_ENC_KEY isn't set
+    accessToken = await openAccessToken(env, item);
   } catch (e) {
     if (!(e instanceof FernetError)) throw e;
-    throw new HttpError(409, "This bank's stored token can't be decrypted with TOKEN_ENC_KEY; link it again instead.");
+    throw new HttpError(409, "This bank's stored token can't be decrypted with TOKEN_ENC_KEY (or TOKEN_ENC_KEY_PREVIOUS); link it again instead.");
   }
   // One reconnect per bank a minute (a cancelled one doesn't count): each makes a Plaid link token.
   const id = newSessionId(), expires = expiry();

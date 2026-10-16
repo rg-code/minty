@@ -5,6 +5,7 @@ import { plaidHost } from "../plaid";
 import { json } from "../http";
 import { bankHealth, bankRows, syncHealth } from "../health";
 import { DEFAULT_READ_BUDGET, LIMITERS, readBudget, readsToday } from "../limits";
+import { tokenKeys } from "../token-key";
 
 /** GET /status: setup checks for the household, shown on the /add-user page. Behind Access like
  * every API route; reports only whether things are set, never values. */
@@ -66,6 +67,27 @@ export async function status(env: Env, config: Config, email: string): Promise<R
     ? { id: "token_key", ok: true, level: "error", message: "TOKEN_ENC_KEY is set." }
     : { id: "token_key", ok: false, level: "error", message: "TOKEN_ENC_KEY is missing or not a valid key, so banks can't be linked.",
         fix: "Add a secret TOKEN_ENC_KEY. Generate one with: openssl rand -base64 32 | tr '+/' '-_'" });
+
+  // Changing the key (SETUP.md, "Changing the encryption key"): only shown while
+  // TOKEN_ENC_KEY_PREVIOUS is set, until every stored token is on the new key.
+  if (env.TOKEN_ENC_KEY_PREVIOUS !== undefined) {
+    const fixDelete = "Delete the secret TOKEN_ENC_KEY_PREVIOUS (Workers & Pages → minty → Settings → Variables and secrets).";
+    if (!(await tokenKeyWorks(env.TOKEN_ENC_KEY_PREVIOUS))) {
+      add({ id: "token_key_previous", ok: false, level: "error", message: "TOKEN_ENC_KEY_PREVIOUS isn't a valid key, so it opens nothing.",
+            fix: "Set it to the old TOKEN_ENC_KEY exactly as it was, or delete it." });
+    } else if (env.TOKEN_ENC_KEY_PREVIOUS.trim() === (env.TOKEN_ENC_KEY ?? "").trim()) {
+      add({ id: "token_key_previous", ok: false, level: "warn", message: "TOKEN_ENC_KEY_PREVIOUS is the same as TOKEN_ENC_KEY, so the key isn't being changed.", fix: fixDelete });
+    } else {
+      const k = await tokenKeys(env);
+      const banks = (n: number) => `${n} bank${n === 1 ? "" : "s"}`;
+      add(k.previous
+        ? { id: "token_key_previous", ok: false, level: "warn",
+            message: `Changing the encryption key: ${banks(k.previous)} still on the old key. The hourly sync moves them; keep TOKEN_ENC_KEY_PREVIOUS until this says none are left.` }
+        : { id: "token_key_previous", ok: false, level: "warn",
+            message: `Every stored bank connection is on the new TOKEN_ENC_KEY${k.neither ? ` (${banks(k.neither)} open with neither key: link ${k.neither === 1 ? "it" : "them"} again)` : ""}. The old key isn't needed any more.`,
+            fix: fixDelete });
+    }
+  }
 
   let plaidEnv = (env.PLAID_ENV ?? "sandbox").trim() || "sandbox";
   try {
