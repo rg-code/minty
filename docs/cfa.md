@@ -1,6 +1,7 @@
 # Plan: CFA (Complete financial audit) and EGG (retirement accounts)
 
-**Status: proposed 2026-10-16. Decided: the name stays CFA (Complete financial audit, its own meaning here), and the retirement button is EGG. Still open: §6 items 3–5. No code yet.**
+**Status (2026-10-16):** decisions made (§6), R0 checked (§5.1), **C1 built** (§5.2). Next: C2, the
+audit's charts.
 
 Two features, planned together because they share their data and charts:
 
@@ -199,7 +200,49 @@ retirement accounts, so they stay on the dashboard unless you move them.
 C1–C2 ship value with no new Plaid product and no slots, so they come first. Balance history
 also starts with C1, and every later trend needs it.
 
-## 6. Decisions for the owner
+### 5.1 R0: what Plaid offers (checked 2026-10-16)
+
+- **Investments is on the Trial plan.** Plaid's billing docs list "Investments (including
+  Investments Refresh)" with Liabilities and Transactions among the Trial plan's products. It's a
+  subscription product: free on Trial, but charged per bank after an upgrade to a paid plan.
+- **Schwab** (first, decision 5): access is automatic, but can take up to 5 business days. Plaid
+  allows one active Schwab login per person per app, so linking Schwab again with the same login
+  cancels the earlier connection. Reconnect it in update mode instead.
+- **Fidelity:** must be requested by hand (the Plaid dashboard's OAuth institutions page).
+  **Vanguard and Betterment:** not confirmed from Plaid's own pages. Try them in Link before
+  counting on them.
+- Investment transactions go back up to 24 months.
+- Sources: https://plaid.com/docs/account/billing/ and https://plaid.com/docs/investments/
+
+### 5.2 C1: built
+
+- **Migration `0013_audit.sql`:** `balance_snapshots`, `monthly_totals`, `bucket_overrides`, and
+  `idx_txn_pair` on transactions.
+- **`src/audit/totals.ts`,** run by the hourly cron after sync:
+  - **The buckets** (§2.2), in SQL. A transfer pair also needs one side to be a Plaid transfer or
+    loan payment, so a $100 purchase and an unrelated $100 deposit in the same week stay what
+    they are. An unpaired TRANSFER_OUT counts as spending until a correction says otherwise (for
+    example "BETTERMENT" → saving).
+  - **Monthly totals,** refreshed from the month of the earliest new transaction (3 days earlier,
+    for a transfer's other side). Nothing new means nothing is done. They're rebuilt whole once a
+    week, or after a correction, which also catches edits and removals.
+  - **A balance snapshot** per account per day, written only when the balance changed. After a
+    year, one a week (Sundays) is kept.
+- **D1 cost, measured:**
+  - A full rebuild reads about 3 rows per transaction (about 21,000 for 7,000), once a week.
+    Joining accounts would read an account row for every transaction, so the Worker reads the few
+    accounts once and passes their types into the query as JSON.
+  - A run with nothing new reads under 10 rows.
+  - The new index adds one index row written per transaction synced.
+- **Moved to C2:** `charts.js`, so it's built where it's first used and can be checked on screen.
+
+## 6. Decisions (owner, 2026-10-16)
+
+Made: **CFA** keeps its name (Complete financial audit); the retirement button is **EGG**; an
+**HSA counts as a retirement account** (islanded, switchable); the **profile** is stored, every
+field optional; **Schwab** first.
+
+The questions as they were asked:
 
 1. **The name "CFA".** "CFA" is a registered mark of CFA Institute, for a professional
    credential, so a button labelled CFA could read as credentialed advice.
