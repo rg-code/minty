@@ -259,7 +259,7 @@ describe("device lock (public/lock.js)", () => {
 
 describe("security headers (docs/security-plan.md, step 4)", () => {
   const raw = async (path: string) => SELF.fetch(`https://minty.example.workers.dev${path}`);
-  const csp = (r: Response) => r.headers.get("content-security-policy-report-only") ?? "";
+  const csp = (r: Response) => r.headers.get("content-security-policy") ?? "";
 
   it.each(["/", "/connect", "/add-user"])("%s has no inline script or inline event handler left", async (path) => {
     const html = await (await raw(path)).text();
@@ -267,13 +267,13 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
     expect(html).not.toMatch(/\son[a-z]+="/);
   });
 
-  it.each(["/", "/add-user", "/app.js", "/theme.js", "/lock.js", "/abc.css", "/manifest.webmanifest"])("%s gets the strict page policy (report-only for now)", async (path) => {
+  it.each(["/", "/add-user", "/app.js", "/theme.js", "/lock.js", "/abc.css", "/manifest.webmanifest"])("%s gets the strict page policy, enforced", async (path) => {
     const r = await raw(path);
     expect(r.status).toBe(200);
     for (const d of ["default-src 'self'", "script-src 'self';", "frame-ancestors 'none'", "object-src 'none'", "base-uri 'none'", "form-action 'self'", "worker-src 'self'", "manifest-src 'self'"])
       expect(csp(r), path).toContain(d);
     expect(csp(r)).not.toContain("cdn.plaid.com");
-    expect(r.headers.get("content-security-policy")).toBeNull();                 // nothing enforced yet
+    expect(r.headers.get("content-security-policy-report-only")).toBeNull();     // enforced, no report-only copy left
     expect(r.headers.get("x-content-type-options")).toBe("nosniff");
     expect(r.headers.get("referrer-policy")).toBe("same-origin");
     expect(r.headers.get("permissions-policy")).toContain("camera=()");
@@ -288,6 +288,7 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
     expect(policy).toContain("frame-ancestors 'none'");
     expect(policy).not.toContain("unsafe-eval");
     expect(policy.split("default-src").length).toBe(2);                        // one policy, not the page one plus this
+    expect(r.headers.get("content-security-policy-report-only")).toBeNull();
     expect(r.headers.get("x-content-type-options")).toBe("nosniff");
   });
 
@@ -296,6 +297,7 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
       const r = await raw(path);
       expect(r.headers.get("content-type"), path).toContain("application/json");
       expect(csp(r), path).toBe("default-src 'none'; frame-ancestors 'none'");
+      expect(r.headers.get("content-security-policy-report-only"), path).toBeNull();
       expect(r.headers.get("x-content-type-options"), path).toBe("nosniff");
       expect(r.headers.get("referrer-policy"), path).toBe("same-origin");
     }
@@ -343,7 +345,7 @@ describe("Bills (docs/bills.md)", () => {
       const r = await SELF.fetch(`https://minty.example.workers.dev${f}`);
       expect(r.status, f).toBe(200);
       expect(r.headers.get("content-type"), f).toMatch(/javascript/);
-      expect(r.headers.get("content-security-policy-report-only"), f).toContain("script-src 'self';");
+      expect(r.headers.get("content-security-policy"), f).toContain("script-src 'self';");
     }
   });
 
