@@ -95,7 +95,7 @@ there, gitignored here). If that folder exists, read it too.
 
 ## To do, in order
 
-1. **Security plan, step 5** (rotation and disconnect, [security-plan.md](security-plan.md) §3–§4),
+1. **Security plan, step 5** (rotation and disconnect, [security-plan.md](security-plan.md) §3–§4; 5a done),
    in three PRs: 5a encryption-key rotation, 5b disconnect a bank, 5c Plaid token rotation. Then
    step 6. Steps 1–4 are done (settings and docs; rate limits and the D1 budget, #54; Link
    sessions, #57; browser headers, report-only in #61 and enforced on 2026-10-16).

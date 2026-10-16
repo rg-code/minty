@@ -1,6 +1,7 @@
 import type { Env } from "../env";
 import { type Config, credsFor, isConfigured } from "../config";
-import { FernetError, fernetDecrypt } from "../fernet";
+import { FernetError } from "../fernet";
+import { openAccessToken } from "../token-key";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { plaidPost } from "../plaid";
 import { bankHealth, bankRows } from "../health";
@@ -159,10 +160,10 @@ export async function completeStatements(env: Env, config: Config, request: Requ
   }
   let accessToken: string;
   try {
-    accessToken = await fernetDecrypt(item.access_token_enc, env.TOKEN_ENC_KEY);
+    accessToken = await openAccessToken(env, item);
   } catch (e) {
     if (!(e instanceof FernetError)) throw e;
-    throw new HttpError(409, "This bank's stored token can't be decrypted with TOKEN_ENC_KEY; link it again instead.");
+    throw new HttpError(409, "This bank's stored token can't be decrypted with TOKEN_ENC_KEY (or TOKEN_ENC_KEY_PREVIOUS); link it again instead.");
   }
   const got = await plaidPost<{ item?: { consented_products?: string[]; products?: string[] } }>(
     env, credsFor(env, config, item.plaid_account), "/item/get", { access_token: accessToken });
