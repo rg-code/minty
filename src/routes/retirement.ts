@@ -2,7 +2,8 @@ import type { Env } from "../env";
 import type { Config } from "../config";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { IN_RETIREMENT } from "../investments";
-import { CHECKED, LIMITS, kindOf } from "../retirement/limits";
+import { CHECKED, kindOf } from "../retirement/limits";
+import { limitsFor } from "../retirement/irs";
 
 /** EGG, phase E2 (docs/cfa.md §3): what the retirement view shows. Reads only what's stored (the
  * accounts, their daily balance snapshots, the holdings and investment transactions the cron
@@ -79,7 +80,7 @@ export async function retirementData(env: Env, owner: string | null) {
     env.DB.prepare("SELECT key, value FROM app_state WHERE key LIKE 'retirement_profile:%'"),
     env.DB.prepare(`SELECT i.id AS item_id, i.institution_name AS bank, s.status, s.synced_at FROM investment_sync s JOIN items i ON i.id = s.item_id`),
   ]);
-  const limits = LIMITS[year] ?? null;
+  const limits = await limitsFor(env, year, CHECKED);    // fetched from irs.gov once a year, else the code's
   return {
     today: new Date().toISOString().slice(0, 10), year, owner,
     accounts: (accounts.results as Record<string, unknown>[]).map((a) => ({ ...a, in_retirement: Boolean(a.in_retirement), kind: kindOf(a.subtype as string | null) })),
@@ -89,7 +90,7 @@ export async function retirementData(env: Env, owner: string | null) {
     mix: mix.results,
     profiles: Object.fromEntries((profiles.results as { key: string; value: string }[]).map((p) => [p.key.slice("retirement_profile:".length), safeJson(p.value)])),
     banks: banks.results,
-    limits: limits ? { ...limits, year, checked: CHECKED } : null,
+    limits,
   };
 }
 

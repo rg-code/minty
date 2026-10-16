@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { checklist, fullMonths, recommend, type AdviceInput, type Month } from "../src/audit/rules";
+import { LIMITS } from "../src/retirement/limits";
 import { call, getJson } from "./helpers";
 
 // CFA, phase C3 (docs/cfa.md §2.3): the audit's recommendations as rules, and the planner's checklist.
@@ -10,7 +11,7 @@ const month = (back: number, o: Partial<Month> = {}): Month => ({ month: ym(back
 const months = (f: (back: number) => Partial<Month> = () => ({})) => Array.from({ length: 13 }, (_, i) => month(12 - i, f(12 - i)));
 const base = (o: Partial<AdviceInput> = {}): AdviceInput => ({
   today: TODAY, months: months(), recurring: [], checkingCents: 500000, savingsCents: 2000000,
-  retirement: { accounts: [{ owner: "me", subtype: "401k", in_retirement: true, balance: 10000000 }], contributions: [], profiles: {}, mix: [] },
+  retirement: { accounts: [{ owner: "me", subtype: "401k", in_retirement: true, balance: 10000000 }], contributions: [], profiles: {}, mix: [], limits: LIMITS[2026] },
   holdings: [], hasBrokerage: false, people: ["me"], labels: { me: "Me" }, checklist: {}, ...o,
 });
 const ids = (x: AdviceInput) => recommend(x).map((f) => f.id);
@@ -81,14 +82,14 @@ describe("spending", () => {
 
 describe("retirement and investing", () => {
   it("no retirement accounts linked for a person", () => {
-    expect(find(base({ retirement: { accounts: [], contributions: [], profiles: {}, mix: [] } }), "no_retirement")!.title).toBe("No retirement accounts linked");
+    expect(find(base({ retirement: { accounts: [], contributions: [], profiles: {}, mix: [], limits: LIMITS[2026] } }), "no_retirement")!.title).toBe("No retirement accounts linked");
     const two = base({ people: ["me", "sam"], labels: { me: "Me", sam: "Sam" } });
     expect(find(two, "no_retirement")!.title).toBe("No retirement accounts linked for Sam");
   });
 
   it("behind an even pace for this year's limit, with the catch-up by age; the match reminder", () => {
     const x = base({ retirement: { accounts: [{ owner: "me", subtype: "401k", in_retirement: true, balance: 1 }],
-      contributions: [{ owner: "me", subtype: "401k", year: "2026", cents: 1000000 }], profiles: { me: { birth_year: 1970, match_pct: 4 } }, mix: [] } });
+      contributions: [{ owner: "me", subtype: "401k", year: "2026", cents: 1000000 }], profiles: { me: { birth_year: 1970, match_pct: 4 } }, mix: [], limits: LIMITS[2026] } });
     const pace = find(x, "pace_workplace_me")!;
     expect(pace.title).toBe("401(k): $10,000 of the $32,500 limit this year");   // 56 years old: $24,500 + $8,000
     expect(pace.action).toMatch(/^About \$7,500 a month would reach the 2026 limit by December 31/);
@@ -98,7 +99,7 @@ describe("retirement and investing", () => {
   });
 
   it("cash over 10% of the retirement accounts before 55; one stock over 10% of investments, never a fund", () => {
-    expect(ids(base({ retirement: { accounts: base().retirement.accounts, contributions: [], profiles: {}, mix: [{ class: "stocks", cents: 800 }, { class: "cash", cents: 200 }] } }))).toContain("cash_drag");
+    expect(ids(base({ retirement: { accounts: base().retirement.accounts, contributions: [], profiles: {}, mix: [{ class: "stocks", cents: 800 }, { class: "cash", cents: 200 }], limits: LIMITS[2026] } }))).toContain("cash_drag");
     const holdings = [{ name: "Acme Corp", type: "equity", cents: 3000 }, { name: "Total Stock Market Index Fund", type: "mutual fund", cents: 7000 }];
     expect(ids(base({ holdings }))).toContain("concentration_Acme Corp");
     expect(ids(base({ holdings: [{ name: "S&P 500 ETF", type: "etf", cents: 9000 }, { name: "Acme Corp", type: "equity", cents: 500 }] }))).toEqual(expect.not.arrayContaining([expect.stringMatching(/^concentration/)]));

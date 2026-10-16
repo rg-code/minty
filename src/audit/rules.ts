@@ -4,7 +4,7 @@
  * every rule is tested; nothing is fetched. The thresholds are planners' common rules of thumb,
  * named in each `basis`, checked on CHECKED. Educational, not financial advice. */
 
-import { LIMITS, kindOf } from "../retirement/limits";
+import { kindOf, type Limits } from "../retirement/limits";
 
 export const CHECKED = "2026-10-16";
 
@@ -28,6 +28,7 @@ export interface AdviceInput {
     contributions: { owner: string; subtype: string | null; year: string; cents: number }[];
     profiles: Record<string, { birth_year?: number; match_pct?: number; hsa_coverage?: string; beneficiaries_checked_on?: string }>;
     mix: { class: string; cents: number }[];
+    limits: Limits | null;                        // this year's (src/retirement/irs.ts: fetched, else the code's)
   };
   holdings: Holding[];                            // every investment account's, for concentration
   hasBrokerage: boolean;
@@ -156,7 +157,7 @@ export function recommend(x: AdviceInput): Finding[] {
   }
 
   // Retirement
-  const year = Number(x.today.slice(0, 4)), L = LIMITS[year];
+  const year = Number(x.today.slice(0, 4)), L = x.retirement.limits;
   const ret = x.retirement.accounts.filter((a) => a.in_retirement);
   for (const p of x.people) {
     const prof = x.retirement.profiles[p] ?? {}, who = x.people.length > 1 ? `${x.labels[p] ?? p}: ` : "";
