@@ -69,6 +69,8 @@
       "/audit/*",
       "/investments",
       "/investments/*",
+      "/retirement",
+      "/retirement/*",
       "/link/*"
     ]
   },

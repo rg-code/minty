@@ -45,7 +45,7 @@ async function readsOf(path: string, init: RequestInit = {}) {
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["investment_txns", "holdings", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   // The first three are banks ABC's catalog recognises (src/benefits/catalog.ts); the rest are made up.
   const banks = ["American Express", "Citibank Online", "U.S. Bank", "Example Bank A", "Example Bank B", "Example Bank C", "Example Bank D", "Example Bank E"];
   await db.batch(banks.map((b, i) => db.prepare(
@@ -90,6 +90,15 @@ beforeAll(async () => {
   await refreshTotals(env as unknown as Env);
   await db.prepare(`INSERT INTO net_worth (date, owner, assets_cents, debts_cents)
     SELECT date('now', '-' || d.value || ' days'), o.value, 1000000 + d.value, 50000 FROM json_each('${JSON.stringify([...Array(400).keys()])}') d, json_each('["me","spouse"]') o`).run();
+  // EGG: three retirement accounts with a year of daily balances and two years of contributions.
+  await db.prepare(`INSERT INTO accounts (id, owner, item_id, plaid_account_id, name, type, subtype, balance_current_cents)
+    VALUES (901, 'me', 8, 'ret-1', '401(k)', 'investment', '401k', 10000000), (902, 'me', 8, 'ret-2', 'Roth IRA', 'investment', 'roth', 3000000),
+           (903, 'me', 8, 'ret-3', 'HSA', 'investment', 'hsa', 500000)`).run();
+  await db.prepare(`INSERT INTO balance_snapshots (account_id, date, current_cents)
+    SELECT a.value, date('now', '-' || d.value || ' days'), 1000000 + d.value FROM json_each('[901,902,903]') a, json_each('${JSON.stringify([...Array(365).keys()])}') d`).run();
+  await db.prepare(`INSERT INTO investment_txns (account_id, plaid_inv_txn_id, date, name, type, subtype, amount_cents)
+    SELECT a.value, 'inv-' || a.value || '-' || m.value, date('now', '-' || m.value || ' months'), 'Contribution', 'cash', 'contribution', -50000
+    FROM json_each('[901,902,903]') a, json_each('${JSON.stringify([...Array(24).keys()])}') m`).run();
   // BAM: three years of monthly readings of 8 balances (more updating than anyone does).
   await db.prepare(`INSERT INTO point_balances (owner, program, balance, as_of, source)
     SELECT 'me', p.value, 1000 * m.value, date('now', '-' || m.value || ' months'), 'manual'
@@ -111,7 +120,8 @@ describe("D1 rows read per request (budgets)", () => {
     ["/users", 10],
     ["/capacity", 100],
     ["/sync-request", 40],
-    ["/investments", 400],               // one row per bank, each counting its own accounts (a few dozen)
+    ["/investments", 400],
+    ["/retirement", 3000],               // 3 retirement accounts: a year of daily snapshots (~1,100) and their contributions, by index               // one row per bank, each counting its own accounts (a few dozen)
     ["/audit", 3000],                    // monthly_totals for 12 months (the grouping's sort counts twice), net worth by day, recurring
     ["/points", 400],                    // every reading once (288 here; no ORDER BY, which D1 counts as a second read)
   ])("%s reads at most %i rows", async (path, budget) => {

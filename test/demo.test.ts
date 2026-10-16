@@ -12,7 +12,7 @@ const envOverrides = demoEnv(data) as any;
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["investment_txns", "holdings", "securities", "investment_sync", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   await db.batch(statements(data).map(([sql, params]) => db.prepare(sql).bind(...params)));
 });
 
@@ -106,6 +106,19 @@ describe("demo CFA", () => {
     expect(body.totals.some((t: any) => t.bucket === "saving" && t.cents === 150000)).toBe(true);     // the transfer to savings
     expect(body.recurring.map((r: any) => r.name)).toEqual(expect.arrayContaining(["Netflix", "Spotify", "Maple Court Apartments Rent"]));
     expect(body.net_worth.length).toBeGreaterThan(100);
+  });
+});
+
+describe("demo EGG", () => {
+  it("made-up retirement accounts, islanded from the dashboard, with contributions, holdings and history", async () => {
+    const { status, body } = await getJson<any>("/retirement", { envOverrides });
+    expect(status).toBe(200);
+    expect(body.accounts.filter((a: any) => a.in_retirement).map((a: any) => a.subtype).sort()).toEqual(["401k", "hsa", "ira", "roth"]);
+    expect(body.contributions.some((c: any) => c.kind === "workplace" && c.cents > 0)).toBe(true);
+    expect(body.mix.map((m: any) => m.class).sort()).toEqual(["blend", "bonds", "cash", "stocks"]);
+    expect(body.snapshots.length).toBeGreaterThan(500);
+    const dash = (await getJson<any[]>("/accounts", { envOverrides })).body;
+    expect(dash.some((a: any) => a.subtype === "401k")).toBe(false);
   });
 });
 

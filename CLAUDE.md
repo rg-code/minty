@@ -143,7 +143,9 @@ Design history and decisions: `docs/serverless-plan.md`.
   quiet catch-up cron run (`src/investments.ts`, one bank per run), never on a request, and a
   failure there never touches `items.status`. Retirement accounts (HSAs included) are islanded:
   `/accounts` and `/transactions` leave them out unless `accounts.view` says 'dashboard' (use
-  `IN_RETIREMENT()`).
+  `IN_RETIREMENT()`). The view is `public/egg.js` with `GET /retirement`, whose queries start from the
+  accounts (`CROSS JOIN`) so they never walk every transaction. IRS limits are code
+  (`src/retirement/limits.ts`, sources and `CHECKED`); add each new year's.
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

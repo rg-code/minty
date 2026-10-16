@@ -328,6 +328,7 @@
 <link rel="stylesheet" href="/bills.css" />
 <link rel="stylesheet" href="/bam.css" />
 <link rel="stylesheet" href="/cfa.css" />
+<link rel="stylesheet" href="/egg.css" />
 <link rel="stylesheet" href="/lock.css" />
 <script src="/lock.js"></script>
 </head>
@@ -342,6 +343,8 @@
               title="All but coupon clipping: your cards' credits, used and still open"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.4V5.5A1.5 1.5 0 0 1 5.5 4h6.9l7.6 7.6a1.5 1.5 0 0 1 0 2.1l-6.3 6.3a1.5 1.5 0 0 1-2.1 0z"/><circle cx="8.5" cy="8.5" r="1.4"/></svg><span>ABC</span></button>
       <button type="button" class="pill" id="bamOpen" aria-haspopup="dialog" data-open-bam
               title="Balance of award miles &amp; points: every program's balance, and when it was last updated"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.6L12 16.4l-5.1 2.7 1-5.6-4.1-4 5.7-.8z"/></svg><span>BAM</span></button>
+      <button type="button" class="pill" id="eggOpen" aria-haspopup="dialog" data-open-egg
+              title="Your nest egg: retirement accounts, their trend and a forecast"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><path d="M12 3c-3.7 0-6.5 5.3-6.5 9.6C5.5 17.4 8.4 21 12 21s6.5-3.6 6.5-8.4C18.5 8.3 15.7 3 12 3z"/></svg><span>EGG</span></button>
       <div class="more" id="morePick">
         <button type="button" class="pill" id="moreBtn" aria-haspopup="true" aria-expanded="false" aria-controls="moreMenu" aria-label="More" title="More"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
         <div class="moremenu" id="moreMenu" hidden>
@@ -470,6 +473,19 @@
   </div>
   <div id="cfaMain"></div>
 </dialog>
+<!-- EGG: retirement accounts, in a popup (public/egg.js, egg.css, with cfa.css and charts.js). /?egg opens it. -->
+<dialog id="egg" class="abc cfa egg" aria-labelledby="eggTitle" tabindex="-1">
+  <div class="abc-top">
+    <header>
+      <h2 id="eggTitle">EGG</h2>
+      <span class="sub">Your nest egg: retirement accounts, kept off the dashboard, with their trend and a forecast.</span>
+    </header>
+    <form method="dialog" class="abc-close"><button aria-label="Close" title="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button></form>
+  </div>
+  <div id="eggMain"></div>
+</dialog>
 <!-- BAM: miles and points balances, in a popup (public/bam.js, bam.css). /?bam opens it. -->
 <dialog id="bam" class="abc bam" aria-labelledby="bamTitle" tabindex="-1">
   <div class="abc-top">
@@ -492,5 +508,6 @@
 <script src="/bam.js" defer></script>
 <script src="/charts.js" defer></script>
 <script src="/cfa.js" defer></script>
+<script src="/egg.js" defer></script>
 </body>
 </html>
