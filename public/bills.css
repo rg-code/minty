@@ -1,33 +1,111 @@
-/* Bills (public/bills.js) in ABC's popup frame (abc.css): rows by due date, a status chip each. */
-.bills .bill-ranges { display: inline-flex; gap: 4px; padding: 3px; margin: 4px 0 10px; border: 1px solid var(--hairline);
-                      border-radius: 999px; background: var(--bg); }
-.bills .bill-ranges button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 5px 12px; border: 0; border-radius: 999px;
-                             background: transparent; color: var(--muted); cursor: pointer; }
+/* Bills (public/bills.js) in ABC's popup frame (abc.css): a calendar of statements (purple) and
+   payments & bills due (green), then the selected day's details. Colours come from the dashboard's
+   tokens, so it follows light and dark. */
+.bills { --stmt: #8b6fd6; --stmt-bg: color-mix(in srgb, #8b6fd6 14%, var(--surface));
+         --due: #2b9a66; --due-bg: color-mix(in srgb, #2b9a66 13%, var(--surface)); }
+.bills .bill-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 2px 0 10px; }
+.bills .bill-sum { font-size: 13.5px; color: var(--muted); }
+.bills .bill-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.bills .pill.solid { background: var(--accent); color: #fff; border-color: var(--accent); }
+@media (pointer: coarse) { .bills .bill-folder { display: none; } }          /* phones can't pick a folder */
+.bills .bill-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.bills .bill-toggle { font: inherit; font-size: 13px; font-weight: 650; padding: 6px 12px 6px 10px; border-radius: 10px; cursor: pointer;
+                      display: inline-flex; align-items: center; gap: 7px; background: var(--surface); color: var(--muted); border: 1.5px solid var(--hairline); }
+.bills .bill-toggle::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: currentColor; opacity: .5; }
+.bills .bill-toggle[aria-pressed="true"]::after { content: "✓"; }
+.bills .bill-toggle.statement[aria-pressed="true"] { color: var(--stmt); border-color: var(--stmt); background: var(--stmt-bg); }
+.bills .bill-toggle.due[aria-pressed="true"] { color: var(--due); border-color: var(--due); background: var(--due-bg); }
+.bills .bill-toggle[aria-pressed="true"]::before { opacity: 1; }
+.bills .bill-ranges { display: inline-flex; gap: 3px; padding: 3px; margin-left: auto; border: 1px solid var(--hairline); border-radius: 999px; background: var(--bg); }
+.bills .bill-ranges button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 11px; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; }
 .bills .bill-ranges button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px var(--shadow); }
-.bills .bill-h { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 8px; }
-.bills .bill-h.attention { color: var(--out); }
+
+.bills .bill-attention { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px; margin-bottom: 12px; border-radius: 12px;
+                         border: 1px solid color-mix(in srgb, var(--out) 50%, var(--hairline)); background: color-mix(in srgb, var(--out) 6%, var(--surface)); }
+.bills .bill-attention strong { color: var(--out); font-size: 13px; margin-right: 4px; }
+.bills .bill-att { font: inherit; font-size: 12.5px; font-weight: 600; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+                   border: 1px solid color-mix(in srgb, var(--out) 40%, var(--hairline)); background: var(--surface); color: var(--ink); }
+.bills .bill-attention .bill-hint { flex-basis: 100%; margin: 2px 0 0; font-size: 12px; }
+
+/* The calendar */
+.bills .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.bills .cal-dow { font-size: 12px; font-weight: 650; color: var(--muted); padding: 0 4px 2px; }
+.bills .cal-day { font: inherit; text-align: left; min-height: 92px; padding: 6px; border-radius: 10px; cursor: pointer; display: flex; flex-direction: column;
+                  gap: 4px; border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); min-width: 0; }
+.bills .cal-day:hover { border-color: var(--muted); }
+.bills .cal-day.past, .bills .cal-day.out { opacity: .5; }
+.bills .cal-day.today { border: 2px solid var(--due); padding: 5px; }
+.bills .cal-day.sel { box-shadow: 0 0 0 2px var(--accent); }
+.bills .cal-n { font-size: 13px; font-weight: 650; }
+.bills .cal-day.today .cal-n { color: var(--due); }
+.bills .cal-mon { font-weight: 500; font-size: 11.5px; color: var(--muted); }
+.bills .cal-ev { display: flex; flex-direction: column; min-width: 0; padding: 3px 6px; border-radius: 6px; border-left: 3px solid; font-size: 11.5px; line-height: 1.25; }
+.bills .cal-ev b { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bills .cal-ev small { font-size: 10.5px; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bills .cal-ev.statement { border-color: var(--stmt); background: var(--stmt-bg); color: color-mix(in srgb, var(--stmt) 75%, var(--ink)); }
+.bills .cal-ev.due { border-color: var(--due); background: var(--due-bg); color: color-mix(in srgb, var(--due) 70%, var(--ink)); }
+.bills .cal-ev.attention { border-color: var(--out); background: color-mix(in srgb, var(--out) 10%, var(--surface)); color: var(--ink); }
+.bills .cal-ic { font-style: normal; margin-right: 4px; }
+.bills .cal-ic.overdue { color: var(--out); }
+.bills .cal-more { font-size: 11px; color: var(--muted); }
+.bills .cal-dots { display: none; gap: 3px; flex-wrap: wrap; }
+.bills .cal-dots i { width: 7px; height: 7px; border-radius: 50%; }
+.bills .cal-dots i.statement { background: var(--stmt); }
+.bills .cal-dots i.due { background: var(--due); }
+.bills .cal-dots i.attention { background: var(--out); }
+@media (max-width: 640px) {                       /* phones: dots in each day, names in the day's details */
+  .bills .cal { gap: 3px; }
+  .bills .cal-day { min-height: 48px; padding: 4px; }
+  .bills .cal-ev, .bills .cal-more, .bills .cal-mon { display: none; }
+  .bills .cal-dots { display: flex; }
+  .bills .bill-ranges { margin-left: 0; }
+}
+
+/* The selected day, and the forms */
+.bills .bill-day { margin-top: 14px; }
+.bills .bill-day h3, .bills .bill-review h3 { font-size: 15px; margin: 0 0 8px; }
 .bills .bill-hint, .bills .bill-fine { font-size: 13px; color: var(--muted); margin: 0 0 8px; }
-.bills .bill-fine { font-size: 12px; margin-top: 18px; }
-.bills .bill { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; margin-bottom: 8px;
-               border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); }
-.bills .bill.attention { border-color: color-mix(in srgb, var(--out) 55%, var(--hairline)); }
-.bills .bill.quiet { opacity: .85; }
+.bills .bill-fine { font-size: 12px; margin-top: 16px; }
+.bills .bill { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px 13px; margin-bottom: 8px;
+               border: 1px solid var(--hairline); border-left: 3px solid var(--due); border-radius: 10px; background: var(--surface); }
+.bills .bill.statement { border-left-color: var(--stmt); }
+.bills .bill.attention { border-color: color-mix(in srgb, var(--out) 55%, var(--hairline)); border-left-color: var(--out); }
 .bills .bill-main { min-width: 0; }
 .bills .bill-name { font-weight: 650; font-size: 14.5px; }
 .bills .bill-where { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
 .bills .bill-meta { font-size: 13px; color: var(--muted); margin-top: 3px; }
 .bills .bill-why { color: var(--ink); }
-.bills .bill-more { font: inherit; font-size: 12.5px; color: var(--accent); background: none; border: 0; padding: 0; margin-top: 6px; cursor: pointer; }
-.bills .bill-chip { flex: none; font-size: 12px; font-weight: 650; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
-                    background: var(--tag-bg); color: var(--ink); }
+.bills .bill-past { margin-top: 6px; font-size: 13px; }
+.bills .bill-past summary { color: var(--accent); cursor: pointer; }
+.bills .bill-row-actions { display: flex; gap: 10px; margin-top: 6px; }
+.bills .bill-row-actions button, .bills .bill-add { font: inherit; font-size: 12.5px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+.bills .bill-add { margin-top: 2px; }
+.bills .bill-chip { flex: none; font-size: 12px; font-weight: 650; padding: 4px 10px; border-radius: 999px; white-space: nowrap; background: var(--tag-bg); color: var(--ink); }
 .bills .bill-chip.paid, .bills .bill-chip.nothing_due { background: color-mix(in srgb, var(--in) 16%, var(--surface)); color: var(--in); }
 .bills .bill-chip.partial { background: color-mix(in srgb, #f08c00 18%, var(--surface)); color: #c66a00; }
 .bills .bill-chip.overdue { background: color-mix(in srgb, var(--out) 16%, var(--surface)); color: var(--out); }
-.bills .bill-chip.unknown { background: var(--tag-bg); color: var(--muted); }
-.bills .bill-history { width: 100%; border-collapse: collapse; font-size: 13px; margin: -2px 0 12px; }
-.bills .bill-history th, .bills .bill-history td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--hairline); }
+.bills .bill-chip.unknown { color: var(--muted); }
+.bills .bill-history { width: 100%; border-collapse: collapse; margin-top: 6px; }
+.bills .bill-history th, .bills .bill-history td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--hairline); }
 .bills .bill-history th { font-size: 11.5px; color: var(--muted); font-weight: 600; }
-.bills .bill-notes { margin-top: 14px; font-size: 13px; }
+.bills .bill-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 12px; padding: 12px 14px; margin: 6px 0 10px;
+                    border: 1px solid var(--hairline); border-radius: 12px; background: var(--bg); }
+.bills .bill-form h4 { grid-column: 1 / -1; margin: 0; font-size: 14px; }
+.bills .bill-form label { display: grid; gap: 3px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.bills .bill-form label.wide { grid-column: 1 / -1; }
+.bills .bill-form input, .bills .bill-form select, .bills .bill-review input, .bills .bill-review select {
+  font: inherit; font-size: 14px; font-weight: 400; padding: 7px 9px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--surface); color: var(--ink); min-width: 0; }
+.bills .bill-form-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.bills .bill-err { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--out); min-height: 0; }
+.bills .bill-err:empty { display: none; }
+.bills .bill-review { padding: 12px 14px; margin-bottom: 12px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--bg); overflow-x: auto; }
+.bills .bill-review table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.bills .bill-review th, .bills .bill-review td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+.bills .bill-review .file { max-width: 180px; overflow-wrap: anywhere; }
+.bills .bill-review small { display: block; color: var(--muted); }
+.bills .bill-review tr.known, .bills .bill-review tr.err { opacity: .6; }
+.bills .bill-review .bill-form-actions { margin-top: 10px; }
+.bills .bill-notes { margin-top: 12px; font-size: 13px; }
 .bills .bill-notes p { margin: 0 0 6px; }
 .bills a { color: var(--accent); }
 @media (max-width: 560px) {

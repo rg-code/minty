@@ -12,7 +12,7 @@ const envOverrides = demoEnv(data) as any;
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   await db.batch(statements(data).map(([sql, params]) => db.prepare(sql).bind(...params)));
 });
 
@@ -91,5 +91,16 @@ describe("demo bills", () => {
     expect(by["Citi Strata Premier℠ Card"]).toMatchObject({ status: "unpaid", attention: false });
     for (const c of Object.values(by) as any[]) expect(c.history.length).toBeGreaterThan(0);
     expect(body.cards.filter((c: any) => c.history.some((h: any) => h.status !== "paid"))).toEqual([]);   // older statements are paid
+  });
+});
+
+describe("demo own bills", () => {
+  it("one matched to its payment, one not paid yet, one from a PDF, one marked paid", async () => {
+    const { body } = await getJson<any>("/bills", { envOverrides });
+    const by = (name: string, status: string) => body.bills.find((b: any) => b.biller === name && b.status === status);
+    expect(by("PG&E", "paid")).toMatchObject({ paid_how: "matched" });
+    expect(by("PG&E", "unpaid")).toMatchObject({ days_left: 8, attention: false });
+    expect(by("Coastside County Water District", "unpaid")).toMatchObject({ source: "pdf" });
+    expect(by("Recology", "paid")).toMatchObject({ paid_how: "marked" });
   });
 });

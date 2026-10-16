@@ -1,6 +1,11 @@
 # Bills
 
-Open **⋯ → Bills** on the dashboard (or `/?bills`). It lists credit card statements by due date, oldest due first, with whether each looks paid, each card's balance, and its past statements. The 7 / 14 / 30 days / All buttons choose how far ahead to look. **Needs attention** lists anything not paid that's due within 5 days, or overdue. Your own bills (PG&E, water and so on), added by hand or from PDFs, join the same list in part 2.
+Open **⋯ → Bills** on the dashboard (or `/?bills`). It's a calendar, from this week's Sunday through 7, 14, 30 or 90 days ahead (30 by default):
+
+- **Statements** (purple): each card's estimated next statement date, the same day of the month as its last one.
+- **Payments & bills** (green): each card's payment due date as the bank reports it, and the household's own bills. A ✓ means paid, ◐ partly paid, ! overdue; red means **Needs attention** (not paid, due within 5 days or overdue), which is also listed above the calendar.
+
+The two toggles show or hide each kind. Select a day for its details: a card's statement (amount, minimum, closing date, balance now, paid since, past statements) or a bill (amount, bill date, how it was paid), with **Mark paid**, **Edit** and **Delete** for bills, and **+ Add a bill due this day**. On phones each day shows dots and the details list the names.
 
 ## Card statements (part 1)
 
@@ -8,6 +13,15 @@ Open **⋯ → Bills** on the dashboard (or `/?bills`). It lists credit card sta
 - **Fetching:** only the cron, never a page request (there's still no HTTP sync endpoint). A 10-minute catch-up run that had nothing to download fetches `/liabilities/get` for one due bank (`src/statements.ts`), so it never competes with transaction sync for the free plan's CPU or subrequests. Each bank is refreshed about once a day, an hour after an error. Plaid's response text goes straight to SQLite, as sync's pages do.
 - **Failures** are recorded on `statement_sync` (status, Plaid's error code) and never change `items.status` or the transaction sync. Bills and Setup checks name the bank: consent needed again, not supported by the bank, or retrying.
 - **What's stored** (`card_statements`, migration 0010): one row per card per statement date, with its amount, minimum, due date, the bank's last payment, and its overdue flag. Liabilities reports only the latest statement, so history builds up from the day statement details are turned on. A later fetch of the same statement updates it; a missing field never erases one seen before. The balance is the one transaction sync already keeps.
+
+## Your own bills (part 2)
+
+PG&E, water, trash and the like, one entry per bill (a quarterly bill is one entry a quarter), in `bills` (migration 0011).
+
+- **By hand:** **+ Add a bill** (or **+ Add a bill due this day** on a selected day): biller, amount, due date (picked on the calendar), bill date, person, and the name its payment goes by in transactions (by default the biller's first word, e.g. PG&E).
+- **From PDFs:** **Add from PDFs** (several files) or **Add a folder** (desktop browsers; phones can't pick a folder). The browser reads each PDF with pdf.js 4.10.38, stored in `public/vendor/pdfjs/` (never a CDN, so the CSP stays `'self'`, and only loaded when used), and `public/bill-parse.js` finds the biller, amount due, due date, bill date and the account's last 4 digits. A review table shows them, editable, with date pickers; a PDF already added is recognised by its SHA-256 (`POST /bills/known`) and skipped. **The PDFs never leave the device**: only those fields and the fingerprint are saved.
+  - pdf.js asks once whether `eval` is allowed (`new Function("")` inside a try/catch). Under the report-only CSP that shows as three `script-src eval` reports while importing; when the CSP is enforced the answer is just "no" and pdf.js works without it (text only, `isEvalSupported: false`). Expected, not a problem.
+- **Paid:** marked by hand, or matched automatically: a posted payment out, named like the bill (its `match_name`, in the description or merchant), within $1 of the amount, from the bill date (or 40 days before the due date) to 15 days after it. Bills marked paid, and bills more than 90 days past due, aren't searched.
 
 ## "Paid" (Minty's estimate)
 
@@ -17,4 +31,4 @@ If the bank's transactions aren't current (downloading, stalled, needing a recon
 
 ## Reads
 
-`GET /bills` reads each card's latest statement and the card's transactions inside each statement window, both ends of each window bounded so `idx_txn_account_date` reads only that range. On the 28-card household in `test/reads.test.ts`, with 12 statements each, that's about 6,000 rows. An unbounded upper end read 85,000. `/bills` counts toward the daily read budget, like `/transactions`.
+`GET /bills` reads each card's latest statement and the card's transactions inside each statement window, both ends of each window bounded so `idx_txn_account_date` reads only that range, and each open bill's date window through the date index. On the household in `test/reads.test.ts` (28 cards with 12 statements each, and 40 bills) that's about 7,500 rows; an unbounded upper end read 85,000. `/bills` counts toward the daily read budget, like `/transactions`.

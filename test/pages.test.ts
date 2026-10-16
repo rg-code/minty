@@ -331,6 +331,22 @@ describe("Bills (docs/bills.md)", () => {
     for (const f of ["/bills.js", "/bills.css"]) expect(sw).toContain(`"${f}"`);
   });
 
+  it("is a calendar of statements and payments & bills, and reads bill PDFs with Minty's own pdf.js (never a CDN)", async () => {
+    const js = await (await SELF.fetch("https://minty.example.workers.dev/bills.js")).text();
+    expect(js).toContain('class="cal" role="grid"');
+    expect(js).toContain('data-show="statements"');
+    expect(js).toContain('data-show="due"');
+    expect(js).toContain('new URL("vendor/pdfjs/pdf.min.mjs", base)');            // relative, so the demo at /demo/ finds its copy
+    expect(js).toContain("isEvalSupported: false");
+    expect(js).not.toMatch(/https?:\/\/[^"'\s]*pdf/);
+    for (const f of ["/vendor/pdfjs/pdf.min.mjs", "/vendor/pdfjs/pdf.worker.min.mjs", "/bill-parse.js"]) {
+      const r = await SELF.fetch(`https://minty.example.workers.dev${f}`);
+      expect(r.status, f).toBe(200);
+      expect(r.headers.get("content-type"), f).toMatch(/javascript/);
+      expect(r.headers.get("content-security-policy-report-only"), f).toContain("script-src 'self';");
+    }
+  });
+
   it("the connect page turns statement details on through Link update mode, and checks the consent after", async () => {
     const { html } = await page("/connect");
     expect(html).toContain('<div class="reconnect statements" id="statements" hidden></div>');

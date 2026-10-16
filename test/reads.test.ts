@@ -44,7 +44,7 @@ async function readsOf(path: string, init: RequestInit = {}) {
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   // The first three are banks ABC's catalog recognises (src/benefits/catalog.ts); the rest are made up.
   const banks = ["American Express", "Citibank Online", "U.S. Bank", "Example Bank A", "Example Bank B", "Example Bank C", "Example Bank D", "Example Bank E"];
   await db.batch(banks.map((b, i) => db.prepare(
@@ -76,13 +76,21 @@ beforeAll(async () => {
     SELECT a.id, date('2025-01-05', '+' || m.value || ' months'), 50000 + a.id, 3500, date('2025-01-30', '+' || m.value || ' months'), 'x', 'x'
     FROM accounts a, json_each('[0,1,2,3,4,5,6,7,8,9,10,11]') m WHERE a.type = 'credit'`).run();
   await db.prepare("INSERT INTO statement_sync (item_id, status) SELECT id, 'ready' FROM items").run();
+  // Two years of the household's own bills: monthly electricity, quarterly water and trash.
+  await db.prepare(`INSERT INTO bills (owner, biller, match_name, amount_cents, due_date, statement_date, source)
+    SELECT 'me', b.value ->> 0, b.value ->> 1, 10000 + m.value * 37, date('2025-01-25', '+' || m.value || ' months'),
+           date('2025-01-02', '+' || m.value || ' months'), 'manual'
+    FROM json_each('[["PG&E","PG&E"]]') b, json_each('[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]') m`).run();
+  await db.prepare(`INSERT INTO bills (owner, biller, match_name, amount_cents, due_date, source)
+    SELECT 'me', b.value, upper(b.value), 21240, date('2025-02-25', '+' || (m.value * 3) || ' months'), 'manual'
+    FROM json_each('["Water District","Recology"]') b, json_each('[0,1,2,3,4,5,6,7]') m`).run();
 });
 
 describe("D1 rows read per request (budgets)", () => {
   it.each([
     ["/benefits", 3000],                 // only the tracked cards' rows, once each (the first version read every row once per pattern)
     ["/statements", 100],                // one row per bank
-    ["/bills", 7000],                    // 28 cards x 12 statements: each window an index range (an OR there read 85,000)
+    ["/bills", 9000],                    // 28 cards x 12 statements (each window an index range: an OR there read 85,000), plus 40 own bills
     ["/health", 100],
     ["/items", 100],
     ["/transactions", 2500],             // newest 500, via the date index

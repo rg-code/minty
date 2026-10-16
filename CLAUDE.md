@@ -117,7 +117,9 @@ Design history and decisions: `docs/serverless-plan.md`.
   there never touches `items.status` or sync. "Paid" is an estimate from payments on the card
   inside the statement window; a bank whose feed isn't current says "Can't tell yet", never "Not
   paid". Statement-window queries bound both ends (an `OR` on the upper end read 85,000 rows).
-  The dashboard's ⋯ menu holds Bills and is where new features go.
+  The dashboard's ⋯ menu holds Bills (a calendar) and is where new features go. Own bills (`bills`)
+  are one row per bill; PDFs are read in the browser (pdf.js in `public/vendor/pdfjs/`, never a CDN;
+  `public/bill-parse.js`) and never uploaded, only their fields and SHA-256.
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

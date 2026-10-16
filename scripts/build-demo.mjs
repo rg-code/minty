@@ -93,8 +93,11 @@ if (goatcounter) {
 </body>`);
 }
 for (const [f, text] of Object.entries(files)) await writeFile(join(out, f), text);
-for (const f of ["abc.js", "abc.css", "bills.js", "bills.css", "favicon.svg", "favicon-32.png", "apple-touch-icon.png"]) await copyFile(join(root, "public", f), join(out, f));
+for (const f of ["abc.js", "abc.css", "bills.js", "bills.css", "bill-parse.js", "favicon.svg", "favicon-32.png", "apple-touch-icon.png"]) await copyFile(join(root, "public", f), join(out, f));
 await copyFile(join(root, "demo/demo.css"), join(out, "demo.css"));
+// pdf.js for reading bill PDFs in the demo too (still only in the visitor's browser).
+await mkdir(join(out, "vendor/pdfjs"), { recursive: true });
+for (const f of ["pdf.min.mjs", "pdf.worker.min.mjs", "LICENSE"]) await copyFile(join(root, "public/vendor/pdfjs", f), join(out, "vendor/pdfjs", f));
 
 const kb = (n) => `${(n / 1024).toFixed(0)} KB`;
 console.log(`demo built in ${out}: demo.js ${kb(Object.values(result.metafile.outputs)[0].bytes)}, ${migrations.length} migrations, ${apiPaths.length} API paths${goatcounter ? ", GoatCounter on" : ""}${ogImage ? ", link preview on" : ""}`);

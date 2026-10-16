@@ -90,7 +90,12 @@ the secret names to add in the Cloudflare dashboard.
     POST /link/statements/complete {session_id}   (turns statement details on once Plaid confirms the consent)
     GET  /statements             banks with credit cards + whether statement details are on
     POST /statements/off         {item_id}   (stop fetching; saved statements stay)
-    GET  /bills                  credit card statements by due date, paid estimate, balances, past statements (docs/bills.md)
+    GET  /bills                  credit card statements and the household's bills: due dates, paid estimate, balances, past statements (docs/bills.md)
+    POST /bills                  {biller, amount_cents, due_date, statement_date?, owner?, match_name?, account_hint?, source?, file_sha256?}   add a bill
+    PUT  /bills/{id}             change a bill (only the fields sent)
+    POST /bills/{id}/paid        {paid}   mark a bill paid or not
+    DELETE /bills/{id}           delete a bill
+    POST /bills/known            {sha256:[...]}   which bill PDFs were already added
     GET  /items                  linked institutions + status
     GET  /accounts               accounts + balances + card members   (?owner=)
     GET  /transactions           unified feed   (?owner= &tag= [repeatable] &tag_mode=any|all &q= &start= &end= &item_id= [repeatable: banks] &account_id= [repeatable: cards / accounts] &card= [repeatable: account_id:card member])

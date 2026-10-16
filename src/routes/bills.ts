@@ -5,6 +5,7 @@ import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { plaidPost } from "../plaid";
 import { bankHealth, bankRows } from "../health";
 import type { ItemRow } from "../sync";
+import { billStatus, listBills } from "./household-bills";
 
 /** Bills (docs/bills.md), part 1: credit cards. GET /bills lists every credit card with its balance
  * and, where statement details are on for its bank, the latest statement (amount, minimum, due
@@ -124,7 +125,12 @@ export async function bills(env: Env, config: Config): Promise<Response> {
   // Banks with credit cards, for turning statement details on or off.
   const seen = new Map<number, { item_id: number; bank: string | null; owner: string; statements: string }>();
   for (const c of cards) if (!seen.has(c.item_id)) seen.set(c.item_id, { item_id: c.item_id, bank: c.bank, owner: c.owner, statements: c.statements.status });
-  return json({ today, attention_days: ATTENTION_DAYS, cards, banks: [...seen.values()] });
+  // Bills the household added (part 2), with the same status and attention rule.
+  const own = (await listBills(env)).map((b) => {
+    const matched = b.matched ? JSON.parse(b.matched) as { id: number; date: string; amount_cents: number; name: string } : null;
+    return { ...b, matched, paid_how: b.paid_at ? "marked" : matched ? "matched" : null, ...billStatus({ ...b, matched }, today, ATTENTION_DAYS) };
+  });
+  return json({ today, attention_days: ATTENTION_DAYS, cards, banks: [...seen.values()], bills: own });
 }
 
 async function objectBody(request: Request): Promise<Record<string, unknown>> {
