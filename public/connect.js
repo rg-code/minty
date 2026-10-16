@@ -160,6 +160,60 @@ function renderCapacity() {
         : "All Plaid trial accounts are full. Add another slot to PLAID_SLOTS (with its keys) or upgrade Plaid."}</div>`);
 }
 
+// Statement details for Bills (docs/bills.md): per bank, ask it through Plaid Link (update mode,
+// Liabilities consent; the same connection, no new Trial slot), or turn them off.
+const STATEMENT_STATE = {
+  off: "Off",
+  pending: "On: the first statement details arrive within about ten minutes.",
+  ready: "On",
+  consent_required: "The bank needs your consent again: turn it on again.",
+  unsupported: "This bank doesn't share statement details through Plaid.",
+  error: "Couldn't fetch the details; Minty retries every hour.",
+};
+async function loadStatements() {
+  const box = document.getElementById("statements");
+  let banks = [];
+  try { const r = await fetch("/statements"); if (r.ok) banks = await r.json(); } catch {}
+  box.hidden = !banks.length;
+  const label = k => USERS.find(u => u.key === k)?.label ?? k;
+  box.innerHTML = banks.length ? `<div class="title">Statement details (for Bills)</div>` + banks.map(b => {
+    const on = b.statements !== "off";
+    const action = !on || b.statements === "consent_required"
+      ? `<button type="button" data-statements-on="${b.item_id}">Turn on</button>`
+      : `<button type="button" data-statements-off="${b.item_id}">Turn off</button>`;
+    return `<div class="line"><span>${esc(b.bank || "Bank")} · ${esc(label(b.owner))}` +
+      `<span class="why${b.statements === "ready" || b.statements === "pending" ? " on" : ""}">${esc(STATEMENT_STATE[b.statements] ?? b.statements)}</span></span>${action}</div>`;
+  }).join("") : "";
+  if (banks.length && location.hash === "#statements") box.scrollIntoView({ block: "center" });
+}
+
+document.getElementById("statements").addEventListener("click", async e => {
+  const on = e.target.closest("button[data-statements-on]"), off = e.target.closest("button[data-statements-off]");
+  if (!on && !off) return;
+  (on || off).disabled = true;
+  try {
+    if (off) {
+      const res = await fetch("/statements/off", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_id: Number(off.dataset.statementsOff) }) });
+      if (!res.ok) throw new Error(await why(res));
+      setStatus("Statement details are off for that bank. The statements already saved stay in Bills.", "ok");
+      return loadStatements();
+    }
+    setStatus("Preparing…");
+    const itemId = Number(on.dataset.statementsOn);
+    const res = await fetch("/link/token/statements", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item_id: itemId }) });
+    if (!res.ok) throw new Error(await why(res));
+    const { link_token, session_id, expires_at } = await res.json();
+    const entry = { id: session_id, token: link_token, mode: "statements", item: itemId, expires: expires_at };
+    linkStore.save(entry);                               // kept across a bank's OAuth redirect
+    openLink(entry, null);
+  } catch (err) {
+    setStatus("Couldn't change statement details: " + err.message, "err");
+    (on || off).disabled = false;
+  }
+});
+
 // OAuth return: resume with the SAME link_token and session saved before the redirect.
 const params = new URLSearchParams(window.location.search);
 const resumable = linkStore.resume();                    // also clears expired sessions
@@ -196,6 +250,23 @@ function openLink(entry, receivedRedirectUri) {
     receivedRedirectUri,
     onSuccess: async (public_token, metadata) => {
       finished = true;
+      if (entry.mode === "statements") {
+        // Plaid must confirm the bank's consent before Minty fetches anything (src/routes/bills.ts).
+        setStatus("Checking the bank's consent with Plaid…");
+        try {
+          const res = await fetch("/link/statements/complete", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: entry.id }),
+          });
+          linkStore.drop(entry.id);
+          if (!res.ok) throw new Error(await why(res));
+          setStatus("Statement details are on. The first ones arrive within about ten minutes; see Bills on the dashboard.", "ok");
+        } catch (err) {
+          setStatus("Statement details aren't on yet: " + err.message, "err");
+        }
+        loadStatements();
+        return;
+      }
       if (entry.mode === "update") {
         linkStore.drop(entry.id);
         const updateItemId = entry.item;
@@ -243,6 +314,7 @@ function openLink(entry, receivedRedirectUri) {
       else setStatus("");
       connectBtn.disabled = false;
       loadReconnect();
+      loadStatements();
     },
   });
   handler.open();
@@ -266,4 +338,4 @@ function openLink(entry, receivedRedirectUri) {
   });
 })();
 
-loadUsers().then(() => { loadCapacity(); loadReconnect(); });
+loadUsers().then(() => { loadCapacity(); loadReconnect(); loadStatements(); });

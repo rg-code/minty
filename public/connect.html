@@ -68,6 +68,10 @@
   .reconnect .line { display:flex; justify-content:space-between; align-items:center; gap:10px; }
   .reconnect .line + .line { margin-top:6px; }
   .reconnect .why { display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+  /* Statement details (Bills, docs/bills.md): the same box in the page's own colours, not the error red */
+  .reconnect.statements { border-color:var(--hairline); }
+  .reconnect.statements .title { color:var(--ink); }
+  .reconnect.statements .on { color:var(--ok, #2f9e44); font-weight:600; }
   .reconnect button { font:inherit; font-size:12.5px; font-weight:600; padding:5px 10px; border-radius:8px; cursor:pointer;
                       border:1px solid var(--hairline); background:var(--surface); color:var(--ink); }
   .reconnect button:disabled { opacity:.45; cursor:not-allowed; }
@@ -92,6 +96,7 @@
 
   <div class="cap" id="cap" hidden></div>
   <div class="reconnect" id="reconnect" hidden></div>
+  <div class="reconnect statements" id="statements" hidden></div>
 
   <button class="connect" id="connect">Connect with Plaid</button>
   <div class="status" id="status"></div>

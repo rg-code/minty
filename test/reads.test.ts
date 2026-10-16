@@ -44,7 +44,7 @@ async function readsOf(path: string, init: RequestInit = {}) {
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   // The first three are banks ABC's catalog recognises (src/benefits/catalog.ts); the rest are made up.
   const banks = ["American Express", "Citibank Online", "U.S. Bank", "Example Bank A", "Example Bank B", "Example Bank C", "Example Bank D", "Example Bank E"];
   await db.batch(banks.map((b, i) => db.prepare(
@@ -71,11 +71,18 @@ beforeAll(async () => {
       .bind(JSON.stringify(chunk)).run();
   }
   expect((await db.prepare("SELECT count(*) AS n FROM transactions").first<{ n: number }>())!.n).toBe(TXNS);
+  // A year of monthly statements on every card, for /bills (docs/bills.md).
+  await db.prepare(`INSERT INTO card_statements (account_id, issue_date, balance_cents, minimum_payment_cents, due_date, first_seen_at, last_seen_at)
+    SELECT a.id, date('2025-01-05', '+' || m.value || ' months'), 50000 + a.id, 3500, date('2025-01-30', '+' || m.value || ' months'), 'x', 'x'
+    FROM accounts a, json_each('[0,1,2,3,4,5,6,7,8,9,10,11]') m WHERE a.type = 'credit'`).run();
+  await db.prepare("INSERT INTO statement_sync (item_id, status) SELECT id, 'ready' FROM items").run();
 });
 
 describe("D1 rows read per request (budgets)", () => {
   it.each([
     ["/benefits", 3000],                 // only the tracked cards' rows, once each (the first version read every row once per pattern)
+    ["/statements", 100],                // one row per bank
+    ["/bills", 7000],                    // 28 cards x 12 statements: each window an index range (an OR there read 85,000)
     ["/health", 100],
     ["/items", 100],
     ["/transactions", 2500],             // newest 500, via the date index

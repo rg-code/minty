@@ -86,6 +86,11 @@ the secret names to add in the Cloudflare dashboard.
     POST /link/exchange          {session_id, public_token}   (owner and slot come from the session; starts the first sync)
     POST /link/cancel            {session_id}   (Link closed: the reserved slot goes back)
     POST /link/token/update      {item_id} -> {link_token, session_id, ...}   (reconnect a bank; once a minute per bank)
+    POST /link/token/statements  {item_id} -> {link_token, session_id, ...}   (Liabilities consent for Bills; no new Item)
+    POST /link/statements/complete {session_id}   (turns statement details on once Plaid confirms the consent)
+    GET  /statements             banks with credit cards + whether statement details are on
+    POST /statements/off         {item_id}   (stop fetching; saved statements stay)
+    GET  /bills                  credit card statements by due date, paid estimate, balances, past statements (docs/bills.md)
     GET  /items                  linked institutions + status
     GET  /accounts               accounts + balances + card members   (?owner=)
     GET  /transactions           unified feed   (?owner= &tag= [repeatable] &tag_mode=any|all &q= &start= &end= &item_id= [repeatable: banks] &account_id= [repeatable: cards / accounts] &card= [repeatable: account_id:card member])

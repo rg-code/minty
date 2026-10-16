@@ -12,7 +12,7 @@ const envOverrides = demoEnv(data) as any;
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   await db.batch(statements(data).map(([sql, params]) => db.prepare(sql).bind(...params)));
 });
 
@@ -77,5 +77,19 @@ describe("demo data through the real routes", () => {
     expect([...statuses].some((s) => s === "open" || s === "partial")).toBe(true);
     expect(platinum.benefits.find((b: any) => b.id === "uber_cash").how).toBe("outside");
     expect(body.totals.used_cents).toBeGreaterThan(0);
+  });
+});
+
+describe("demo bills", () => {
+  it("shows each statement state: paid, partly paid, due soon (Needs attention), and not paid yet", async () => {
+    const { status, body } = await getJson<any>("/bills", { envOverrides });
+    expect(status).toBe(200);
+    const by = Object.fromEntries(body.cards.filter((c: any) => c.latest).map((c: any) => [c.name, c]));
+    expect(by["The Platinum Card®"]).toMatchObject({ status: "paid", attention: false });
+    expect(by["Business Gold Card"]).toMatchObject({ status: "partial" });
+    expect(by["Sapphire Preferred"]).toMatchObject({ status: "unpaid", attention: true, days_left: 3 });
+    expect(by["Citi Strata Premier℠ Card"]).toMatchObject({ status: "unpaid", attention: false });
+    for (const c of Object.values(by) as any[]) expect(c.history.length).toBeGreaterThan(0);
+    expect(body.cards.filter((c: any) => c.history.some((h: any) => h.status !== "paid"))).toEqual([]);   // older statements are paid
   });
 });

@@ -19,6 +19,7 @@ Plaid is never called, and everything resets on reload.
   later: a new purchase appears, and the dashboard's next check (within a minute) loads it.
 - **AI connector** (demo only, coming soon): a dialog with four example questions. The answers
   are worked out from the demo's data; nothing is connected.
+- **Bills** (⋯ menu): four statements per card, with the latest planned to show each state: one paid, one partly paid, one due in 3 days (Needs attention), one not paid yet.
 - Links that need a real Minty (`/connect`, `/add-user`, `/status`) show a note instead.
 - The demo opens in light mode, registers no service worker and has no install prompt.
 
