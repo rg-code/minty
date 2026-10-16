@@ -125,8 +125,11 @@ Design history and decisions: `docs/serverless-plan.md`.
 - CFA, the audit (`docs/cfa.md`): `src/audit/totals.ts` puts each posted transaction in one bucket
   (income, spend, saving, transfer, debt) in SQL, and keeps `monthly_totals` and `balance_snapshots`
   from the hourly cron, never on a request. A full rebuild runs weekly or after a correction; other
-  runs refresh only from the earliest new transaction's month. Pages read `monthly_totals`, never
-  the transactions. Corrections live in `bucket_overrides`, which sync never writes.
+  runs refresh only from the earliest new transaction's month (quiet 10-minute runs too, so a
+  correction shows within minutes). `/audit` reads `monthly_totals`, `net_worth` and
+  `recurring_charges`, never the transactions. Corrections live in `bucket_overrides`, which sync
+  never writes. Changing the bucket rules means bumping `RULES_VERSION`. The popup is
+  `public/cfa.js`, with `public/charts.js` (our own SVG charts, no library).
 - BAM, miles and points (`docs/bam.md`): balances typed in or read from statement PDFs in the
   browser, never from a loyalty login, scraping or Plaid. Each update is a new reading in
   `point_balances`. The program list, expiry rules and "earned by" rules are code

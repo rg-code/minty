@@ -11,6 +11,7 @@ import * as setup from "./routes/status";
 import * as bills from "./routes/bills";
 import * as ownBills from "./routes/household-bills";
 import * as points from "./routes/points";
+import * as cfa from "./routes/audit";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 import { runStatementSync } from "./statements";
@@ -54,6 +55,8 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["PUT", /^\/bills\/(\d+)$/, ({ env, config, request, params }) => ownBills.updateBill(env, config, request, Number(params[0]))],
   ["POST", /^\/bills\/(\d+)\/paid$/, ({ env, request, params }) => ownBills.markBillPaid(env, request, Number(params[0]))],
   ["DELETE", /^\/bills\/(\d+)$/, ({ env, params }) => ownBills.deleteBill(env, Number(params[0]))],
+  ["GET", /^\/audit$/, ({ env, config, url }) => cfa.audit(env, config, url)],
+  ["PUT", /^\/audit\/buckets$/, ({ env, request }) => cfa.setBucket(env, request)],
   ["GET", /^\/points$/, ({ env }) => points.listPoints(env)],
   ["POST", /^\/points$/, ({ env, config, request }) => points.createReading(env, config, request)],
   ["POST", /^\/points\/known$/, ({ env, request }) => points.knownPoints(env, request)],
@@ -147,6 +150,12 @@ export default {
         return {};
       });
       if (Object.keys(done).length) console.log("statement details", JSON.stringify(done));   // item id -> status
+      // A correction made on the audit shows within minutes, not at the next hourly run.
+      const totals = await refreshTotals(env).catch((e) => {
+        console.error("monthly totals failed:", e instanceof Error ? e.message : e);
+        return null;
+      });
+      if (totals?.from) console.log("monthly totals", JSON.stringify(totals));
     }
     if (!catchUp) {
       // After sync, so a failed check never costs a sync; each bank about once a day.

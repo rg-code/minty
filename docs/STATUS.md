@@ -111,10 +111,13 @@ there, gitignored here). If that folder exists, read it too.
 4. **CFA (Complete financial audit) and EGG (retirement accounts)**, [cfa.md](cfa.md).
    - **Decided:** CFA keeps its name, the retirement button is EGG, HSAs count as retirement
      accounts, the profile is optional, and Schwab is linked first.
-   - **Done:** R0 (Investments is on the Trial plan; Schwab is automatic) and C1 (buckets, monthly
-     totals and daily balance snapshots, kept by the hourly cron).
-   - **Next:** C2 (the audit's charts), then E1 and E2 (the EGG data and view), then C3
-     (recommendations).
+   - **Done:**
+     - R0: Investments is on the Trial plan; Schwab access is automatic.
+     - C1: buckets, monthly totals and daily balance snapshots, kept by the hourly cron.
+     - C2: the CFA popup in the ⋯ menu (cash flow and savings rate, categories, recurring
+       charges, fees and debt, net worth, corrections).
+   - **Next:** E1 and E2 (the EGG data and view), then C3 (recommendations and the planner's
+     checklist).
 5. **BAM (Balance of Award Miles & points)**, [bam.md](bam.md).
    - **Done:** M1 (typing balances in, with history), M2 (statement PDFs and the folder shared
      with Bills, Amex Membership Rewards first), and M3's expiry rules and "likely earned by"
