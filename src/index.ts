@@ -9,6 +9,7 @@ import * as syncReq from "./routes/syncrequest";
 import * as link from "./routes/link";
 import * as setup from "./routes/status";
 import * as bills from "./routes/bills";
+import * as ownBills from "./routes/household-bills";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 import { runStatementSync } from "./statements";
@@ -45,6 +46,11 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["POST", /^\/link\/cancel$/, ({ env, request, email }) => link.cancel(env, request, email)],
   ["POST", /^\/link\/token\/update$/, ({ env, config, request, email }) => link.updateMode(env, config, request, email)],
   ["GET", /^\/bills$/, ({ env, config }) => bills.bills(env, config)],
+  ["POST", /^\/bills$/, ({ env, config, request }) => ownBills.createBill(env, config, request)],
+  ["POST", /^\/bills\/known$/, ({ env, request }) => ownBills.knownBills(env, request)],
+  ["PUT", /^\/bills\/(\d+)$/, ({ env, config, request, params }) => ownBills.updateBill(env, config, request, Number(params[0]))],
+  ["POST", /^\/bills\/(\d+)\/paid$/, ({ env, request, params }) => ownBills.markBillPaid(env, request, Number(params[0]))],
+  ["DELETE", /^\/bills\/(\d+)$/, ({ env, params }) => ownBills.deleteBill(env, Number(params[0]))],
   ["POST", /^\/link\/token\/statements$/, ({ env, config, request, email }) => link.updateMode(env, config, request, email, "statements")],
   ["POST", /^\/link\/statements\/complete$/, ({ env, config, request, email }) => bills.completeStatements(env, config, request, email)],
   ["GET", /^\/statements$/, ({ env }) => bills.statementBanks(env)],

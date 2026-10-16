@@ -23,6 +23,7 @@ export interface DemoData {
   marks: [number, string, string][];                // account_id, benefit_id, period_start
   cardStatements: Record<string, string | number | null>[];   // Bills (docs/bills.md)
   statementSync: Record<string, string | number | null>[];
+  bills: Record<string, string | number | null>[];            // the household's own bills (part 2)
 }
 
 export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", sam: "sam" }): DemoData {
@@ -237,8 +238,22 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
     if (!statementSync.some((r) => r.item_id === itemId)) statementSync.push({ item_id: itemId, status: "ready", synced_at: seenAt, enabled_at: seenAt });
   }
 
+  // The household's own bills: last month's PG&E (matched to the payment from checking), this
+  // month's (not paid yet), a quarterly water bill read from a PDF, and a quarterly trash bill
+  // marked paid by hand.
+  const bills: DemoData["bills"] = [];
+  const lastPge = transactions.filter((t) => t.name === "PG&E" && String(t.date) <= daysAgo(3)).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+  const bill = (biller: string, match: string, amount: number, due: string, statement: string | null, extra: Record<string, string | null> = {}) =>
+    bills.push({ owner: owners.alex, biller, match_name: match, amount_cents: amount, due_date: due, statement_date: statement,
+                 account_hint: null, source: "manual", file_sha256: null, paid_at: null, ...extra });
+  if (lastPge) bill("PG&E", "PG&E", Number(lastPge.amount_cents), addDays(String(lastPge.date), 2), addDays(String(lastPge.date), -20), { account_hint: "4410" });
+  bill("PG&E", "PG&E", 14218, daysAgo(-8), daysAgo(12), { account_hint: "4410" });
+  bill("Coastside County Water District", "COASTSIDE", 21240, daysAgo(-20), daysAgo(5),
+       { source: "pdf", file_sha256: "0d3f1c5a8e2b7d6c4f9a1e3b5c7d9f0a2b4c6d8e0f1a3b5c7d9e1f3a5b7c9d1e" });
+  bill("Recology", "RECOLOGY", 18975, daysAgo(-12), daysAgo(18), { paid_at: nowIso(60 * 26) });
+
   const users = [`${owners.alex}:Alex`, `${owners.sam}:Sam`, ...CAMEOS.map(([label]) => `${label.toLowerCase()}:${label}`)].join(",");
-  return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync };
+  return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills };
 }
 
 /** The Worker settings the demo runs with: its people, and placeholder Plaid keys for each, so no
@@ -262,12 +277,15 @@ export function statements(d: DemoData): [string, (string | number | null)[]][] 
     ...ins("items", d.items), ...ins("accounts", d.accounts), ...ins("transactions", d.transactions),
     ...d.tags.map((t): [string, (string | number | null)[]] => ["INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (?, ?, ?)", t]),
     ...d.marks.map((m): [string, (string | number | null)[]] => ["INSERT INTO benefit_marks (account_id, benefit_id, period_start, marked_by) VALUES (?, ?, ?, 'demo')", m]),
-    ...ins("statement_sync", d.statementSync), ...ins("card_statements", d.cardStatements),
+    ...ins("statement_sync", d.statementSync), ...ins("card_statements", d.cardStatements), ...ins("bills", d.bills),
   ];
 }
 
 function iso(y: number, m: number, d: number): string {
   return new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
+}
+function addDays(d: string, n: number): string {
+  return new Date(Date.parse(d) + n * 864e5).toISOString().slice(0, 10);
 }
 function daysBetween(a: string, b: string): number {
   return Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
