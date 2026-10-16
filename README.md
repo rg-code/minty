@@ -85,7 +85,7 @@ the secret names to add in the Cloudflare dashboard.
     GET  /                       dashboard
     GET  /connect                link a bank/card
     GET  /add-user               setup checks + the values to add a person
-    POST /link/token             {owner} -> {link_token, plaid_account, session_id, expires_at}   (reserves a slot for 30 min)
+    POST /link/token             {owner, kind?: transactions | investments} -> {link_token, plaid_account, session_id, expires_at}   (reserves a slot for 30 min)
     POST /link/exchange          {session_id, public_token}   (owner and slot come from the session; starts the first sync)
     POST /link/cancel            {session_id}   (Link closed: the reserved slot goes back)
     POST /link/token/update      {item_id} -> {link_token, session_id, ...}   (reconnect a bank; once a minute per bank)
@@ -99,6 +99,11 @@ the secret names to add in the Cloudflare dashboard.
     POST /bills/{id}/paid        {paid}   mark a bill paid or not
     DELETE /bills/{id}           delete a bill
     POST /bills/known            {sha256:[...]}   which bill PDFs were already added
+    POST /link/token/investments {item_id}   (update mode: add a bank's investment accounts for EGG; no new Item)
+    POST /link/investments/complete {session_id}   (turns investments on once Plaid confirms the consent)
+    GET  /investments            every bank + whether its investment accounts are fetched (EGG)
+    POST /investments/off        {item_id}   (stop fetching; what was saved stays)
+    PUT  /accounts/{id}/view     {view: dashboard | retirement | null}   where an account shows (retirement accounts default to EGG)
     GET  /audit                  CFA: monthly totals by bucket and category, net worth by day, recurring charges, card balances, corrections   (?months=12|24 &owner=)
     PUT  /audit/buckets          {merchant, bucket | null}   correct what a merchant counts as (applied at the next cron run)
     GET  /points                 BAM: each miles/points balance (newest reading, with history) + the programs Minty knows (docs/bam.md)

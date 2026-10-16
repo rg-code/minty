@@ -116,8 +116,10 @@ there, gitignored here). If that folder exists, read it too.
      - C1: buckets, monthly totals and daily balance snapshots, kept by the hourly cron.
      - C2: the CFA popup in the ⋯ menu (cash flow and savings rate, categories, recurring
        charges, fees and debt, net worth, corrections).
-   - **Next:** E1 and E2 (the EGG data and view), then C3 (recommendations and the planner's
-     checklist).
+     - E1: retirement accounts from Plaid Investments (a new login, or added to a bank already
+       linked), the cron's daily fetch, and islanding from the dashboard.
+   - **Next:** E2 (the EGG view: trend, forecast, contributions against limits, mix and cash),
+     then C3 (recommendations and the planner's checklist). The owner checks E1 on Plaid Sandbox.
 5. **BAM (Balance of Award Miles & points)**, [bam.md](bam.md).
    - **Done:** M1 (typing balances in, with history), M2 (statement PDFs and the folder shared
      with Bills, Amex Membership Rewards first), and M3's expiry rules and "likely earned by"

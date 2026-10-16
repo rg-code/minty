@@ -111,6 +111,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/users", 10],
     ["/capacity", 100],
     ["/sync-request", 40],
+    ["/investments", 400],               // one row per bank, each counting its own accounts (a few dozen)
     ["/audit", 3000],                    // monthly_totals for 12 months (the grouping's sort counts twice), net worth by day, recurring
     ["/points", 400],                    // every reading once (288 here; no ORDER BY, which D1 counts as a second read)
   ])("%s reads at most %i rows", async (path, budget) => {

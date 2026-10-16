@@ -69,6 +69,8 @@ function renderOwners() {
   const u = USERS.find(x => x.key === owner);
   const ready = !!u && u.slots.some(s => s.configured);
   connectBtn.disabled = !ready;
+  const retire = document.getElementById("connectRetirement");
+  if (retire) retire.disabled = !ready;                // the same keys and slots as a bank
   if (u && !ready) {
     statusEl.className = "status err";
     statusEl.innerHTML = `Plaid keys for ${esc(u.label)} aren't set yet. See <a href="/add-user">Add user</a>.`;
@@ -214,6 +216,81 @@ document.getElementById("statements").addEventListener("click", async e => {
   }
 });
 
+// Investment accounts for EGG (docs/cfa.md §3): per bank, ask for Investments through Plaid Link
+// (update mode: the same connection, no new Trial slot), or turn it off. Listed: banks with it on,
+// and banks that already show investment accounts.
+const INVESTMENT_STATE = {
+  off: "Off",
+  pending: "On: the accounts arrive within about ten minutes.",
+  ready: "On",
+  consent_required: "The bank needs your consent again: add them again.",
+  unsupported: "This bank doesn't share investment accounts through Plaid.",
+  error: "Couldn't fetch them; Minty retries every hour.",
+};
+async function loadInvestments() {
+  const box = document.getElementById("investments");
+  let banks = [];
+  try { const r = await fetch("/investments"); if (r.ok) banks = await r.json(); } catch {}
+  banks = banks.filter(b => b.investments !== "off" || b.investment_accounts > 0);
+  box.hidden = !banks.length;
+  const label = k => USERS.find(u => u.key === k)?.label ?? k;
+  box.innerHTML = banks.length ? `<div class="title">Investment accounts (for EGG)</div>` + banks.map(b => {
+    const on = b.investments !== "off";
+    const action = b.products === "investments" ? ""
+      : !on || b.investments === "consent_required"
+      ? `<button type="button" data-investments-on="${b.item_id}">Add</button>`
+      : `<button type="button" data-investments-off="${b.item_id}">Turn off</button>`;
+    return `<div class="line"><span>${esc(b.bank || "Bank")} · ${esc(label(b.owner))}` +
+      `<span class="why${b.investments === "ready" || b.investments === "pending" ? " on" : ""}">${esc(INVESTMENT_STATE[b.investments] ?? b.investments)}</span></span>${action}</div>`;
+  }).join("") : "";
+  if (banks.length && location.hash === "#investments") box.scrollIntoView({ block: "center" });
+}
+
+document.getElementById("investments").addEventListener("click", async e => {
+  const on = e.target.closest("button[data-investments-on]"), off = e.target.closest("button[data-investments-off]");
+  if (!on && !off) return;
+  (on || off).disabled = true;
+  try {
+    if (off) {
+      const res = await fetch("/investments/off", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_id: Number(off.dataset.investmentsOff) }) });
+      if (!res.ok) throw new Error(await why(res));
+      setStatus("That bank's investment accounts won't update any more. What was saved stays.", "ok");
+      return loadInvestments();
+    }
+    setStatus("Preparing…");
+    const itemId = Number(on.dataset.investmentsOn);
+    const res = await fetch("/link/token/investments", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ item_id: itemId }) });
+    if (!res.ok) throw new Error(await why(res));
+    const { link_token, session_id, expires_at } = await res.json();
+    const entry = { id: session_id, token: link_token, mode: "investments", item: itemId, expires: expires_at };
+    linkStore.save(entry);
+    openLink(entry, null);
+  } catch (err) {
+    setStatus("Couldn't add the investment accounts: " + err.message, "err");
+    (on || off).disabled = false;
+  }
+});
+
+document.getElementById("connectRetirement").addEventListener("click", async e => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  setStatus("Preparing…");
+  try {
+    const res = await fetch("/link/token", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ owner, kind: "investments" }) });
+    if (!res.ok) throw new Error(await why(res));
+    const { link_token, session_id, expires_at } = await res.json();
+    const entry = { id: session_id, token: link_token, mode: "link-investments", expires: expires_at };
+    linkStore.save(entry);
+    openLink(entry, null);
+  } catch (err) {
+    setStatus("Couldn't start Link: " + err.message, "err");
+    btn.disabled = false;
+  }
+});
+
 // OAuth return: resume with the SAME link_token and session saved before the redirect.
 const params = new URLSearchParams(window.location.search);
 const resumable = linkStore.resume();                    // also clears expired sessions
@@ -267,6 +344,23 @@ function openLink(entry, receivedRedirectUri) {
         loadStatements();
         return;
       }
+      if (entry.mode === "investments") {
+        // Plaid must confirm the bank's consent before Minty fetches anything (src/routes/investments.ts).
+        setStatus("Checking the bank's consent with Plaid…");
+        try {
+          const res = await fetch("/link/investments/complete", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: entry.id }),
+          });
+          linkStore.drop(entry.id);
+          if (!res.ok) throw new Error(await why(res));
+          setStatus("Investment accounts are on. They arrive within about ten minutes, in EGG on the dashboard.", "ok");
+        } catch (err) {
+          setStatus("The investment accounts aren't on yet: " + err.message, "err");
+        }
+        loadInvestments();
+        return;
+      }
       if (entry.mode === "update") {
         linkStore.drop(entry.id);
         const updateItemId = entry.item;
@@ -299,13 +393,17 @@ function openLink(entry, receivedRedirectUri) {
         linkStore.drop(entry.id);                        // used (or refused): a public token works once
         if (!res.ok) throw new Error(await why(res));
         const data = await res.json();
-        setStatus(data.status === "good"
-          ? "Connected. Transactions are syncing." : "Connected (status: " + data.status + ").", "ok");
+        setStatus(entry.mode === "link-investments"
+          ? "Connected. Its investment accounts arrive within about ten minutes, in EGG on the dashboard (not in the feed)."
+          : data.status === "good" ? "Connected. Transactions are syncing." : "Connected (status: " + data.status + ").", "ok");
         loadCapacity();
+        loadInvestments();
         connectBtn.disabled = false;
+        document.getElementById("connectRetirement").disabled = false;
       } catch (e) {
         setStatus("Exchange failed: " + e.message, "err");
         connectBtn.disabled = false;
+        document.getElementById("connectRetirement").disabled = false;
       }
     },
     onExit: (err) => {
@@ -313,8 +411,10 @@ function openLink(entry, receivedRedirectUri) {
       if (err) setStatus("Link closed: " + (err.error_message || err.error_code || "cancelled"), "err");
       else setStatus("");
       connectBtn.disabled = false;
+      document.getElementById("connectRetirement").disabled = false;
       loadReconnect();
       loadStatements();
+      loadInvestments();
     },
   });
   handler.open();
@@ -338,4 +438,4 @@ function openLink(entry, receivedRedirectUri) {
   });
 })();
 
-loadUsers().then(() => { loadCapacity(); loadReconnect(); loadStatements(); });
+loadUsers().then(() => { loadCapacity(); loadReconnect(); loadStatements(); loadInvestments(); });
