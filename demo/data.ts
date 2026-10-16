@@ -25,6 +25,7 @@ export interface DemoData {
   statementSync: Record<string, string | number | null>[];
   bills: Record<string, string | number | null>[];            // the household's own bills (part 2)
   points: Record<string, string | number | null>[];           // BAM (docs/bam.md): miles and points readings
+  netWorth: Record<string, string | number | null>[];         // CFA (docs/cfa.md): a made-up history up to yesterday
 }
 
 export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", sam: "sam" }): DemoData {
@@ -265,8 +266,21 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   reading(owners.alex, "hyatt", 27300, 15);
   reading(owners.sam, "marriott", 96000, 131);
 
+  // CFA: net worth by day for each person, drifting towards today's balances (today's row comes
+  // from the demo's own snapshot of the accounts).
+  const netWorth: DemoData["netWorth"] = [];
+  for (const owner of [owners.alex, owners.sam]) {
+    const mine = accounts.filter((a) => a.owner === owner);
+    const held = mine.filter((a) => a.type === "depository" || a.type === "investment").reduce((s, a) => s + Number(a.balance_current_cents ?? 0), 0);
+    const owed = mine.filter((a) => a.type === "credit" || a.type === "loan").reduce((s, a) => s + Number(a.balance_current_cents ?? 0), 0);
+    for (let d = 150; d >= 1; d--) {
+      const drift = 1 - d * 0.0011 + Math.sin(d / 9) * 0.012;
+      netWorth.push({ date: daysAgo(d), owner, assets_cents: Math.round(held * drift), debts_cents: Math.round(owed * (0.85 + 0.3 * Math.abs(Math.sin(d / 13)))) });
+    }
+  }
+
   const users = [`${owners.alex}:Alex`, `${owners.sam}:Sam`, ...CAMEOS.map(([label]) => `${label.toLowerCase()}:${label}`)].join(",");
-  return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills, points };
+  return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills, points, netWorth };
 }
 
 /** The Worker settings the demo runs with: its people, and placeholder Plaid keys for each, so no
@@ -290,7 +304,7 @@ export function statements(d: DemoData): [string, (string | number | null)[]][] 
     ...ins("items", d.items), ...ins("accounts", d.accounts), ...ins("transactions", d.transactions),
     ...d.tags.map((t): [string, (string | number | null)[]] => ["INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (?, ?, ?)", t]),
     ...d.marks.map((m): [string, (string | number | null)[]] => ["INSERT INTO benefit_marks (account_id, benefit_id, period_start, marked_by) VALUES (?, ?, ?, 'demo')", m]),
-    ...ins("statement_sync", d.statementSync), ...ins("card_statements", d.cardStatements), ...ins("bills", d.bills), ...ins("point_balances", d.points),
+    ...ins("statement_sync", d.statementSync), ...ins("card_statements", d.cardStatements), ...ins("bills", d.bills), ...ins("point_balances", d.points), ...ins("net_worth", d.netWorth),
   ];
 }
 

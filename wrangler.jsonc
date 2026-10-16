@@ -64,6 +64,8 @@
       "/statements/*",
       "/points",
       "/points/*",
+      "/audit",
+      "/audit/*",
       "/link/*"
     ]
   },

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, createScheduledController, waitOnExecutionContext } from "cloudflare:test";
 import worker from "../src/index";
-import { CLASSIFIED, accountMaps, markAuditDirty, refreshTotals, snapshotBalances } from "../src/audit/totals";
+import { CLASSIFIED, RULES_VERSION, accountMaps, markAuditDirty, refreshTotals, snapshotBalances } from "../src/audit/totals";
 import type { Env } from "../src/env";
 
 // CFA, phase C1 (docs/cfa.md): each transaction's bucket, the monthly totals the audit reads, and
@@ -12,7 +12,7 @@ const db = env.DB;
 let acct: Record<string, number>;
 
 async function setup() {
-  await db.batch(["monthly_totals", "balance_snapshots", "bucket_overrides", "transaction_tags", "transactions", "accounts", "items"]
+  await db.batch(["recurring_charges", "net_worth", "monthly_totals", "balance_snapshots", "bucket_overrides", "transaction_tags", "transactions", "accounts", "items"]
     .map((t) => db.prepare(`DELETE FROM ${t}`)));
   await db.prepare("DELETE FROM app_state WHERE key LIKE 'audit_%'").run();
   const item = (await db.prepare(`INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, institution_name, status)
@@ -105,7 +105,7 @@ describe("monthly totals", () => {
     await txn("card", "2026-09-02", 3000, "FOOD_AND_DRINK", "C");
     await txn("spouse", "2026-09-02", 4000, "FOOD_AND_DRINK", "D");
     await txn("checking", "2026-09-15", -500000, "INCOME", "Payroll");
-    expect(await refreshTotals(E)).toEqual({ from: "0000-01-01", full: true });     // the first run rebuilds everything
+    expect(await refreshTotals(E)).toEqual({ from: "0000-01-01", full: true, recurring: true });     // the first run rebuilds everything
     expect(await totals()).toEqual([
       { month: "2026-08", owner: "me", bucket: "spend", category: "FOOD_AND_DRINK", amount_cents: 1000, n: 1 },
       { month: "2026-09", owner: "me", bucket: "income", category: "INCOME", amount_cents: -500000, n: 1 },
@@ -129,10 +129,10 @@ describe("monthly totals", () => {
     expect((await totals())[0]).toMatchObject({ month: "2026-03", bucket: "spend" });
     await db.prepare("INSERT INTO bucket_overrides (merchant, bucket) VALUES ('BETTERMENT', 'saving')").run();
     await markAuditDirty(E);
-    expect(await refreshTotals(E)).toEqual({ from: "0000-01-01", full: true });
+    expect(await refreshTotals(E)).toEqual({ from: "0000-01-01", full: true, recurring: true });
     expect((await totals())[0]).toMatchObject({ month: "2026-03", bucket: "saving", amount_cents: 25000 });
     expect(await refreshTotals(E)).toEqual({ from: null, full: false });
-    expect(await refreshTotals(E, new Date(Date.now() + 8 * 864e5))).toEqual({ from: "0000-01-01", full: true });
+    expect(await refreshTotals(E, new Date(Date.now() + 8 * 864e5))).toEqual({ from: "0000-01-01", full: true, recurring: true });
   });
 
   it("a removed transaction drops out at the weekly rebuild", async () => {
@@ -164,7 +164,7 @@ describe("balance snapshots", () => {
 });
 
 describe("the hourly cron", () => {
-  it("snapshots balances and refreshes the totals after sync; the catch-up run doesn't", async () => {
+  it("the hourly run snapshots balances and refreshes the totals; a quiet catch-up run refreshes the totals only", async () => {
     await txn("card", "2026-09-02", 2000, "FOOD_AND_DRINK", "Lunch");
     await db.prepare("UPDATE items SET status = 'error'").run();          // nothing to sync or check with Plaid
     const run = async (cron: string) => {
@@ -173,9 +173,70 @@ describe("the hourly cron", () => {
       await waitOnExecutionContext(ctx);
     };
     await run("*/10 * * * *");
-    expect(await totals()).toEqual([]);
+    expect((await totals()).length).toBe(1);                            // so a correction shows within minutes
+    expect((await db.prepare("SELECT count(*) AS n FROM balance_snapshots").first<{ n: number }>())!.n).toBe(0);
     await run("17 * * * *");
-    expect((await totals()).length).toBe(1);
     expect((await db.prepare("SELECT count(*) AS n FROM balance_snapshots").first<{ n: number }>())!.n).toBe(5);
+  });
+});
+
+describe("C2: statement credits, recurring charges, net worth, the rules version", () => {
+  it("a statement credit (money back under BANK_FEES) is spending under CREDITS, so fees stay the real fees", async () => {
+    await txn("card", "2026-09-04", 69500, "BANK_FEES", "ANNUAL MEMBERSHIP FEE");
+    await txn("card", "2026-09-16", -999, "BANK_FEES", "Uber One Credit");
+    await refreshTotals(E);
+    expect(await totals()).toEqual([
+      { month: "2026-09", owner: "me", bucket: "spend", category: "BANK_FEES", amount_cents: 69500, n: 1 },
+      { month: "2026-09", owner: "me", bucket: "spend", category: "CREDITS", amount_cents: -999, n: 1 },
+    ]);
+  });
+
+  const recurring = async () => (await db.prepare("SELECT merchant, cadence, n, last_cents, prev_cents, distinct_amounts FROM recurring_charges ORDER BY merchant").all()).results;
+  const ago = (d: number) => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
+
+  it("finds monthly, quarterly and yearly charges, a price rise, a varying utility bill; not groceries", async () => {
+    for (const d of [95, 64, 34, 3]) await txn("card", ago(d), d === 3 ? 1799 : 1549, "ENTERTAINMENT", "NETFLIX.COM", { merchant: "Netflix" });
+    for (const [d, c] of [[100, 9512], [70, 14821], [39, 18904], [9, 12077]]) await txn("checking", ago(d), c, "RENT_AND_UTILITIES", "PG&E", { merchant: "PG&E" });
+    for (const d of [280, 190, 100, 10]) await txn("checking", ago(d), 21240, "RENT_AND_UTILITIES", "WATER DISTRICT");
+    for (const d of [375, 10]) await txn("card", ago(d), 9900, "GENERAL_MERCHANDISE", "AMAZON PRIME", { merchant: "Amazon Prime" });
+    for (let d = 2; d < 120; d += 3 + (d % 5)) await txn("card", ago(d), 4000 + d * 37, "FOOD_AND_DRINK", "WHOLE FOODS", { merchant: "Whole Foods" });
+    await refreshTotals(E);
+    expect(await recurring()).toEqual([
+      { merchant: "AMAZON PRIME", cadence: "yearly", n: 2, last_cents: 9900, prev_cents: 9900, distinct_amounts: 1 },
+      { merchant: "NETFLIX", cadence: "monthly", n: 4, last_cents: 1799, prev_cents: 1549, distinct_amounts: 2 },
+      { merchant: "PG&E", cadence: "monthly", n: 4, last_cents: 12077, prev_cents: 18904, distinct_amounts: 4 },
+      { merchant: "WATER DISTRICT", cadence: "quarterly", n: 4, last_cents: 21240, prev_cents: 21240, distinct_amounts: 1 },
+    ]);
+  });
+
+  it("only spending repeats: a monthly transfer to savings, or one corrected to saving, isn't a recurring charge", async () => {
+    for (const d of [95, 64, 34, 3]) {
+      await txn("checking", ago(d), 50000, "TRANSFER_OUT", "To savings"); await txn("savings", ago(d), -50000, "TRANSFER_IN", "From checking");
+      await txn("checking", ago(d), 25000, "TRANSFER_OUT", "BETTERMENT", { merchant: "Betterment" });
+    }
+    await refreshTotals(E);
+    expect((await recurring()).map((r: any) => r.merchant)).toEqual(["BETTERMENT"]);
+    await db.prepare("INSERT INTO bucket_overrides (merchant, bucket) VALUES ('BETTERMENT', 'saving')").run();
+    await markAuditDirty(E);
+    await refreshTotals(E);
+    expect(await recurring()).toEqual([]);
+  });
+
+  it("net worth per person each day: bank and investment balances held, cards and loans owed", async () => {
+    await db.prepare("UPDATE accounts SET balance_current_cents = 40000 WHERE id = ?").bind(acct.card).run();
+    await snapshotBalances(E);
+    const nw = (await db.prepare("SELECT owner, assets_cents, debts_cents FROM net_worth ORDER BY owner").all()).results;
+    expect(nw).toEqual([{ owner: "me", assets_cents: 300000, debts_cents: 40000 }, { owner: "spouse", assets_cents: 100000, debts_cents: 0 }]);
+    await snapshotBalances(E);                                          // unchanged: nothing written
+    expect((await db.prepare("SELECT count(*) AS n FROM net_worth").first<{ n: number }>())!.n).toBe(2);
+  });
+
+  it("a new rules version rebuilds every month at the next run", async () => {
+    await txn("card", "2026-09-02", 2000, "FOOD_AND_DRINK", "Lunch");
+    await refreshTotals(E);
+    expect(await refreshTotals(E)).toEqual({ from: null, full: false });
+    await db.prepare("UPDATE app_state SET value = 'old' WHERE key = 'audit_version'").run();
+    expect(await refreshTotals(E)).toEqual({ from: "0000-01-01", full: true, recurring: true });
+    expect((await db.prepare("SELECT value FROM app_state WHERE key = 'audit_version'").first<{ value: string }>())!.value).toBe(RULES_VERSION);
   });
 });

@@ -12,7 +12,7 @@ const envOverrides = demoEnv(data) as any;
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   await db.batch(statements(data).map(([sql, params]) => db.prepare(sql).bind(...params)));
 });
 
@@ -91,6 +91,21 @@ describe("demo bills", () => {
     expect(by["Citi Strata Premier℠ Card"]).toMatchObject({ status: "unpaid", attention: false });
     for (const c of Object.values(by) as any[]) expect(c.history.length).toBeGreaterThan(0);
     expect(body.cards.filter((c: any) => c.history.some((h: any) => h.status !== "paid"))).toEqual([]);   // older statements are paid
+  });
+});
+
+describe("demo CFA", () => {
+  it("the audit has made-up totals, recurring charges and a net worth history once the cron step runs", async () => {
+    const { refreshTotals, snapshotBalances } = await import("../src/audit/totals");
+    const E = { ...(env as any), ...envOverrides };
+    await snapshotBalances(E);
+    await refreshTotals(E);
+    const { status, body } = await getJson<any>("/audit", { envOverrides });
+    expect(status).toBe(200);
+    expect(body.totals.some((t: any) => t.bucket === "income" && t.cents < 0)).toBe(true);
+    expect(body.totals.some((t: any) => t.bucket === "saving" && t.cents === 150000)).toBe(true);     // the transfer to savings
+    expect(body.recurring.map((r: any) => r.name)).toEqual(expect.arrayContaining(["Netflix", "Spotify", "Maple Court Apartments Rent"]));
+    expect(body.net_worth.length).toBeGreaterThan(100);
   });
 });
 

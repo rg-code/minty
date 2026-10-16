@@ -99,6 +99,8 @@ the secret names to add in the Cloudflare dashboard.
     POST /bills/{id}/paid        {paid}   mark a bill paid or not
     DELETE /bills/{id}           delete a bill
     POST /bills/known            {sha256:[...]}   which bill PDFs were already added
+    GET  /audit                  CFA: monthly totals by bucket and category, net worth by day, recurring charges, card balances, corrections   (?months=12|24 &owner=)
+    PUT  /audit/buckets          {merchant, bucket | null}   correct what a merchant counts as (applied at the next cron run)
     GET  /points                 BAM: each miles/points balance (newest reading, with history) + the programs Minty knows (docs/bam.md)
     POST /points                 {program, balance, as_of?, owner?, account_hint?, source?, file_sha256?}   a new reading of a balance
     PUT  /points/{id}            correct a reading (only the fields sent)

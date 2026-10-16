@@ -327,6 +327,7 @@
 <link rel="stylesheet" href="/abc.css" />
 <link rel="stylesheet" href="/bills.css" />
 <link rel="stylesheet" href="/bam.css" />
+<link rel="stylesheet" href="/cfa.css" />
 <link rel="stylesheet" href="/lock.css" />
 <script src="/lock.js"></script>
 </head>
@@ -345,6 +346,7 @@
         <button type="button" class="pill" id="moreBtn" aria-haspopup="true" aria-expanded="false" aria-controls="moreMenu" aria-label="More" title="More"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
         <div class="moremenu" id="moreMenu" hidden>
           <button type="button" data-open-bills>Bills<small>Card statements and your bills, by due date</small></button>
+          <button type="button" data-open-cfa>CFA<small>Complete financial audit: cash flow, spending, recurring charges, net worth</small></button>
         </div>
       </div>
       <a class="addlink" href="/connect">+ Add account</a>
@@ -455,6 +457,19 @@
   </div>
   <div id="billsMain"></div>
 </dialog>
+<!-- CFA: the Complete financial audit, in a popup (public/cfa.js, cfa.css, charts.js), from the ⋯ menu. /?audit opens it. -->
+<dialog id="cfa" class="abc cfa" aria-labelledby="cfaTitle" tabindex="-1">
+  <div class="abc-top">
+    <header>
+      <h2 id="cfaTitle">CFA</h2>
+      <span class="sub">Complete financial audit: where the money goes, what repeats, and what you own and owe.</span>
+    </header>
+    <form method="dialog" class="abc-close"><button aria-label="Close" title="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button></form>
+  </div>
+  <div id="cfaMain"></div>
+</dialog>
 <!-- BAM: miles and points balances, in a popup (public/bam.js, bam.css). /?bam opens it. -->
 <dialog id="bam" class="abc bam" aria-labelledby="bamTitle" tabindex="-1">
   <div class="abc-top">
@@ -475,5 +490,7 @@
 <script src="/abc.js" defer></script>
 <script src="/bills.js" defer></script>
 <script src="/bam.js" defer></script>
+<script src="/charts.js" defer></script>
+<script src="/cfa.js" defer></script>
 </body>
 </html>

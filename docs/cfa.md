@@ -1,7 +1,7 @@
 # Plan: CFA (Complete financial audit) and EGG (retirement accounts)
 
-**Status (2026-10-16):** decisions made (§6), R0 checked (§5.1), **C1 built** (§5.2). Next: C2, the
-audit's charts.
+**Status (2026-10-16):** decisions made (§6), R0 checked (§5.1), C1 and **C2 built** (§5.2, §5.3).
+Next: E1 and E2 (EGG), then C3 (recommendations and the checklist).
 
 Two features, planned together because they share their data and charts:
 
@@ -235,6 +235,42 @@ also starts with C1, and every later trend needs it.
   - A run with nothing new reads under 10 rows.
   - The new index adds one index row written per transaction synced.
 - **Moved to C2:** `charts.js`, so it's built where it's first used and can be checked on screen.
+
+### 5.3 C2: built
+
+- **A popup, not a page.** CFA opens from the ⋯ menu (and `/?audit`) in ABC's frame, like Bills and
+  BAM, so the live demo, the device lock, the CSP and the installed app need nothing new; 980px is
+  room enough for the charts.
+- **The pieces:**
+  - `public/cfa.js` and `cfa.css`;
+  - `public/charts.js`: grouped bars, lines and a legend in SVG, drawn at the container's pixel
+    width so the text stays its size on a phone;
+  - `src/routes/audit.ts`: `GET /audit` and `PUT /audit/buckets`;
+  - migration `0014_audit_views.sql`: `net_worth` and `recurring_charges`.
+- **Its sections**, each with plain-words findings:
+  - **Cash flow**, with the savings rate (money in, less spending and loan payments) against the
+    15–20% planners suggest, and its trend by month.
+  - **Spending by category**: each one's last 3 months against its own average, flagged when up
+    20% and $50 a month (after 6 full months).
+  - **Recurring charges**: weekly, monthly, quarterly and yearly, with the price rises and the ones
+    that may have ended. Rent and utilities are counted apart from subscriptions, and each charge
+    has a "counts as" correction.
+  - **Fees, interest and debt**, with the card balances.
+  - **Net worth** by day.
+  - **The household's corrections.**
+- **Where the history starts:** the first month with at least half the usual number of
+  transactions (and at least 5). Otherwise an account linked with a longer history (a card's
+  annual fee from last January) dilutes every average.
+- **Statement credits** (money back under BANK_FEES) are their own category, CREDITS, so fees stay
+  the real fees. `RULES_VERSION` makes a rules change rebuild every month at the next run.
+- **Corrections** apply at the next quiet 10-minute run (the dashboard says so), not on the
+  request.
+- **Recurring charges** are found with the weekly rebuild (about 8 rows read per transaction over
+  a year of spending), so a new subscription shows within a week.
+- **Net worth** is written with the day's balance snapshot. It counts the bank, investment, card
+  and loan accounts Minty sees, nothing else.
+- **`/audit` reads only the prepared tables:** under 3,000 rows in `test/reads.test.ts`, whatever
+  the history.
 
 ## 6. Decisions (owner, 2026-10-16)
 

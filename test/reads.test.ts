@@ -45,7 +45,7 @@ async function readsOf(path: string, init: RequestInit = {}) {
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   // The first three are banks ABC's catalog recognises (src/benefits/catalog.ts); the rest are made up.
   const banks = ["American Express", "Citibank Online", "U.S. Bank", "Example Bank A", "Example Bank B", "Example Bank C", "Example Bank D", "Example Bank E"];
   await db.batch(banks.map((b, i) => db.prepare(
@@ -85,6 +85,11 @@ beforeAll(async () => {
   await db.prepare(`INSERT INTO bills (owner, biller, match_name, amount_cents, due_date, source)
     SELECT 'me', b.value, upper(b.value), 21240, date('2025-02-25', '+' || (m.value * 3) || ' months'), 'manual'
     FROM json_each('["Water District","Recology"]') b, json_each('[0,1,2,3,4,5,6,7]') m`).run();
+  // CFA: the cron's monthly totals and recurring charges for this data, and a year of net worth
+  // for two people (more than a household has yet).
+  await refreshTotals(env as unknown as Env);
+  await db.prepare(`INSERT INTO net_worth (date, owner, assets_cents, debts_cents)
+    SELECT date('now', '-' || d.value || ' days'), o.value, 1000000 + d.value, 50000 FROM json_each('${JSON.stringify([...Array(400).keys()])}') d, json_each('["me","spouse"]') o`).run();
   // BAM: three years of monthly readings of 8 balances (more updating than anyone does).
   await db.prepare(`INSERT INTO point_balances (owner, program, balance, as_of, source)
     SELECT 'me', p.value, 1000 * m.value, date('now', '-' || m.value || ' months'), 'manual'
@@ -106,6 +111,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/users", 10],
     ["/capacity", 100],
     ["/sync-request", 40],
+    ["/audit", 3000],                    // monthly_totals for 12 months (the grouping's sort counts twice), net worth by day, recurring
     ["/points", 400],                    // every reading once (288 here; no ORDER BY, which D1 counts as a second read)
   ])("%s reads at most %i rows", async (path, budget) => {
     const rows = await readsOf(path);
@@ -137,15 +143,17 @@ describe("D1 rows read by the cron", () => {
 });
 
 describe("D1 rows read by the audit's cron step (docs/cfa.md, C1)", () => {
-  it("a full rebuild (weekly) reads about 3 rows per transaction; a run with nothing new reads almost nothing", async () => {
+  it("a full rebuild (weekly) stays near 11 rows per transaction; a run with nothing new reads almost nothing", async () => {
     const E = env as unknown as Env;
     await env.DB.prepare("DELETE FROM app_state WHERE key LIKE 'audit_%'").run();
     const full = counting(env.DB);
     expect(await refreshTotals({ ...E, DB: full.db })).toMatchObject({ full: true });
     const n = (await env.DB.prepare("SELECT count(*) AS n FROM transactions").first<{ n: number }>())!.n;
     console.warn(`audit rebuild: ${full.tally.rows} rows read for ${n} transactions`);
-    expect(full.tally.rows).toBeLessThanOrEqual(3.2 * n);          // 3.0 when written: the scan, and the grouping's sort (D1 counts it
-                                                                   // again); the pair probe reads the index only, accounts are read once
+    // 10.9 when written: monthly totals ~3 (the scan, and the grouping's sort, which D1 counts
+    // again; the pair probe reads the index only, accounts are read once), recurring charges ~8
+    // (a year of spending through two window sorts). Weekly, so ~80,000 rows a week here.
+    expect(full.tally.rows).toBeLessThanOrEqual(12 * n);
     const quiet = counting(env.DB);
     expect(await refreshTotals({ ...E, DB: quiet.db })).toEqual({ from: null, full: false });
     expect(quiet.tally.rows).toBeLessThanOrEqual(10);
