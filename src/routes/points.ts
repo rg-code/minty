@@ -1,11 +1,14 @@
 import type { Env } from "../env";
 import type { Config } from "../config";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
-import { CHECKED, PROGRAMS, PROGRAM_BY_ID } from "../points/programs";
+import { CHECKED, PROGRAMS, PROGRAM_BY_ID, type Program } from "../points/programs";
+import { likeMatcher } from "../benefits/engine";
 
-/** BAM (docs/bam.md), part 1: miles and points balances, typed in. Each POST is a new reading of
- * a balance (a balance is a person + program + account); GET shows the newest reading of each,
- * with its earlier ones. Statement PDFs (part 2) add readings the same way, with source "pdf". */
+/** BAM (docs/bam.md): miles and points balances, typed in or read from a statement PDF in the
+ * browser (source "pdf", with the file's SHA-256; the PDF never leaves the device). Each POST is a
+ * new reading of a balance (a balance is a person + program + account); GET shows the newest
+ * reading of each with its earlier ones, each program's expiry rule, and the linked cards that
+ * likely earn each currency. */
 
 const MAX_BALANCE = 10_000_000_000;                // a typo guard, not a policy
 const MAX_PROGRAM = 40;
@@ -24,9 +27,31 @@ interface Reading {
   as_of: string; source: string; created_at: string;
 }
 
-/** GET /points: the programs Minty knows, and each balance's newest reading with its history. */
+// The linked credit cards, for "earned by" (a few rows: one per card).
+const CARDS_SQL = `SELECT a.id, a.owner, a.name, a.mask, i.institution_name AS bank
+                   FROM accounts a JOIN items i ON i.id = a.item_id WHERE a.type = 'credit'`;
+
+interface Card { id: number; owner: string; name: string | null; mask: string | null; bank: string | null }
+
+/** The program a card likely earns (its bank, then its name), or null. */
+export function programForCard(card: Pick<Card, "name" | "bank">): Program | null {
+  const bank = (card.bank ?? "").toLowerCase(), name = (card.name ?? "").toLowerCase();
+  for (const p of PROGRAMS) {
+    for (const r of p.earnedBy ?? []) {
+      if (!likeMatcher([r.bank])(bank)) continue;
+      if (r.names && !likeMatcher(r.names)(name)) continue;
+      if (r.except && likeMatcher(r.except)(name)) continue;
+      return p;
+    }
+  }
+  return null;
+}
+
+/** GET /points: the programs Minty knows, each balance's newest reading with its history, and the
+ * cards that likely earn each currency. */
 export async function listPoints(env: Env): Promise<Response> {
-  const { results } = await env.DB.prepare(LIST_SQL).all<Reading>();
+  const [{ results }, { results: cardRows }] = await env.DB.batch([env.DB.prepare(LIST_SQL), env.DB.prepare(CARDS_SQL)]) as
+    [D1Result<Reading>, D1Result<Card>];
   const groups = new Map<string, Reading[]>();
   for (const r of results) {
     const key = `${r.owner}\u0000${r.program}\u0000${r.account_hint ?? ""}`;
@@ -40,7 +65,12 @@ export async function listPoints(env: Env): Promise<Response> {
              history: older.slice(0, HISTORY).map(({ id, balance, as_of, source }) => ({ id, balance, as_of, source })) };
   });
   balances.sort((a, b) => a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name) || (a.account_hint ?? "").localeCompare(b.account_hint ?? ""));
-  return json({ today: today(), checked: CHECKED, programs: PROGRAMS.map(({ id, name, kind, unit }) => ({ id, name, kind, unit })), balances });
+  const cards = cardRows.flatMap((c) => {
+    const p = programForCard(c);
+    return p ? [{ account_id: c.id, owner: c.owner, name: c.name, mask: c.mask, program: p.id }] : [];
+  });
+  return json({ today: today(), checked: CHECKED, balances, cards,
+                programs: PROGRAMS.map(({ id, name, kind, unit, expiry }) => ({ id, name, kind, unit, expiry: expiry ?? null })) });
 }
 
 async function objectBody(request: Request): Promise<Record<string, unknown>> {
@@ -116,6 +146,18 @@ export async function updateReading(env: Env, config: Config, request: Request, 
     .bind(...cols.map((c) => f[c]), id).first();
   if (!r) throw new HttpError(404, "balance not found");
   return json({ id });
+}
+
+/** POST /points/known {sha256: [...]}: which of these PDFs already gave a balance (so the review skips them). */
+export async function knownPoints(env: Env, request: Request): Promise<Response> {
+  const list = (await objectBody(request)).sha256;
+  if (!Array.isArray(list) || list.length > 200 || !list.every((s) => typeof s === "string" && /^[0-9a-f]{64}$/.test(s))) {
+    throw unprocessable("sha256 must be a list of up to 200 SHA-256 hex strings");
+  }
+  if (!list.length) return json({ known: [] });
+  const { results } = await env.DB.prepare("SELECT file_sha256 FROM point_balances WHERE file_sha256 IN (SELECT value FROM json_each(?))")
+    .bind(JSON.stringify(list)).all<{ file_sha256: string }>();
+  return json({ known: results.map((r) => r.file_sha256) });
 }
 
 /** DELETE /points/{id}: one reading (the balance then shows its previous one, if any). */

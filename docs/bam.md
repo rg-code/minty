@@ -1,14 +1,36 @@
 # BAM (Balance of Award Miles & points)
 
-**Status: M1 built (2026-10-16): the view, typing balances in, history. Next: M2 (statement PDFs,
-starting with Amex Membership Rewards), with M3's first two extras. Decisions: §5.**
+**Status: M1 and M2 built (2026-10-16), with M3's first two extras.**
+- **M1:** the view, typing balances in, and history.
+- **M2:** statement PDFs, Amex Membership Rewards first.
+- **M3's first two:** expiry rules, and the cards that likely earn each currency.
+- **Next:** more programs' statement layouts, when there are PDFs to model them on. Decisions: §5.
 
-**Built in M1:**
+**Built:**
 - `public/bam.js` and `bam.css`: the BAM button next to ABC, and its popup.
-- `src/routes/points.ts`: `GET`, `POST`, `PUT` and `DELETE /points`.
-- `src/points/programs.ts`: the program list.
+- `public/pdf-read.js`: the PDF reader and the folder, shared with Bills.
+- `public/points-parse.js`: reads a balance from a statement.
+- `src/routes/points.ts`: `GET`, `POST`, `PUT` and `DELETE /points`, and `POST /points/known`.
+- `src/points/programs.ts`: the programs, their expiry rules and "earned by" rules.
 - Migration `0012_point_balances.sql`. It has no index: `GET /points` reads each reading once. D1
   counts an `ORDER BY` as a second read, so the Worker groups and sorts the rows instead.
+
+**How M2 reads statements:**
+- **The four layouts:** pdf.js gives text in the order it was drawn, so the Amex box's number can
+  come after its "as of" date, before it, or even before the box's title (a right-aligned number
+  is often drawn first). The parser accepts all of them. It never takes a dollar amount, a date,
+  a phone number or a percentage, and the box with the date wins over other mentions (promotions,
+  "points earned").
+- **The card's last 4:** taken from "Account Ending 7-12004" (giving `2004`).
+- **Joining a balance:** a statement whose last 4 matches no balance joins the person's only
+  balance in that program that has no last 4. Without this, a typed-in balance and the statement
+  would show as two.
+- **The shared folder:** each view checks it with its own "already added" list and its own
+  skipped list.
+  - BAM sets aside PDFs with no balance in them, such as bills.
+  - Bills sets aside card statements (a PDF with a points box), because it shows those from the
+    bank.
+  - Picked by hand, either kind is shown unticked, saying why.
 
 Your own award wallet: every miles and points balance in the household, in one view, grouped by
 currency (Chase Ultimate Rewards, Amex Membership Rewards, United, Hyatt, …). Each balance
@@ -31,7 +53,8 @@ A header button **BAM**, next to ABC (and EGG later), opens a popup like ABC and
   - **last updated**, as a date with "3 days ago". Balances not updated in 90 days are greyed,
     with "update?".
 - **Grouped by kind** (bank and card points, airlines, hotels, then programs typed in), then by
-  currency. Each currency shows a total across the household when it has more than one balance,
+  currency. A currency a linked card likely earns shows even with no balance yet ("No balance yet.
+  Add it"). Each currency shows a total across the household when it has more than one balance,
   because points in the same program can often be combined. Each balance names its person, as ABC
   does.
 - **Update a balance:**

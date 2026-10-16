@@ -33,3 +33,24 @@
 .bam .bam-err { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--out); }
 .bam .bam-err:empty { display: none; }
 .bam .bam-fine { font-size: 12px; color: var(--muted); margin-top: 16px; }
+.bam .bam-actions-top { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (pointer: coarse) { .bam .bam-folder { display: none; } }        /* phones can't pick a folder */
+.bam .bam-folderline { font-size: 13px; color: var(--muted); margin: 4px 0 10px; }
+.bam .bam-folderline b { color: var(--ink); font-weight: 650; }
+.bam .bam-folderline button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; margin-left: 6px; cursor: pointer; }
+.bam .bam-tip { font-size: 12px; color: var(--muted); }
+@media (pointer: coarse) { .bam .bam-folderline { display: none; } }
+.bam .bam-notes { font-size: 12.5px; color: var(--muted); padding: 2px 14px 0; }
+.bam .bam-exp { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+.bam .bam-exp.soon { color: var(--out); font-weight: 600; }
+.bam .bam-none { font-size: 13px; color: var(--muted); }
+.bam .bam-review { padding: 12px 14px; margin: 8px 0 12px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--bg); overflow-x: auto; }
+.bam .bam-review h3 { margin-top: 0; }
+.bam .bam-review table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.bam .bam-review th, .bam .bam-review td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+.bam .bam-review .file { max-width: 180px; overflow-wrap: anywhere; }
+.bam .bam-review small { display: block; color: var(--muted); }
+.bam .bam-review tr.known, .bam .bam-review tr.err { opacity: .6; }
+.bam .bam-review input, .bam .bam-review select { font: inherit; font-size: 13.5px; padding: 5px 7px; border: 1px solid var(--hairline); border-radius: 7px;
+                                                  background: var(--surface); color: var(--ink); min-width: 0; }
+.bam .bam-review .bam-form-actions { margin-top: 10px; display: flex; gap: 8px; }

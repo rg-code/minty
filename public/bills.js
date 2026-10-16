@@ -2,8 +2,8 @@
 // calendar of card statements, card payments due and the household's own bills. Select a day for
 // its details: amounts, whether each looks paid, and, for your own bills, Mark paid / Edit / Delete
 // and "+ Add a bill due this day". Bills can also be read from PDFs, in the browser (pdf.js); the
-// PDFs never leave the device. On Chrome and Edge, a folder picked once is remembered and checked
-// for new PDFs each time Bills opens. A native <dialog> in ABC's frame. Data: GET /bills.
+// PDFs never leave the device (public/pdf-read.js, shared with BAM). On Chrome and Edge, a folder
+// picked once is remembered (for BAM too) and checked for new PDFs each time Bills opens. A native <dialog> in ABC's frame. Data: GET /bills.
 (function () {
   const dialog = document.getElementById("bills");
   if (!dialog) return;
@@ -33,25 +33,10 @@
   let review = null;                               // PDFs read, waiting to be saved
   let folder = null;                               // the remembered folder: { handle, name, state, note }
 
-  // The remembered folder (the File System Access API: Chrome and Edge, not phones). Its handle,
-  // and the fingerprints of PDFs skipped from it, are kept in this browser's IndexedDB; Minty's
-  // database never sees either. Any IndexedDB failure means no remembered folder, not an error.
+  // Reading PDFs and the remembered folder (shared with BAM): public/pdf-read.js, loaded on demand.
   const canRemember = typeof window.showDirectoryPicker === "function";
-  const MAX_SKIPPED = 500;
-  function kv(mode, fn) {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open("minty-bills", 1);
-      req.onupgradeneeded = () => req.result.createObjectStore("kv");
-      req.onerror = () => reject(req.error);
-      req.onsuccess = () => {
-        const db = req.result, tx = db.transaction("kv", mode), r = fn(tx.objectStore("kv"));
-        tx.oncomplete = () => { db.close(); resolve(r.result); };
-        tx.onerror = tx.onabort = () => { db.close(); reject(tx.error); };
-      };
-    });
-  }
-  const kvGet = k => kv("readonly", s => s.get(k)).catch(() => undefined);
-  const kvSet = (k, v) => kv("readwrite", s => v === undefined ? s.delete(k) : s.put(v, k)).catch(() => {});
+  let pdfRead = null;
+  const lib = () => (pdfRead ??= import(new URL("pdf-read.js", document.baseURI).href));
 
   async function load() {
     try {
@@ -226,11 +211,11 @@
     if (!folder) return "";
     const name = `<b>${esc(folder.name)}</b>`;
     const line = folder.state === "granted"
-      ? `Your bills folder ${name}: ${esc(folder.note || "")} <button type="button" data-act="rescan">Check now</button>`
+      ? `Your statements folder ${name}: ${esc(folder.note || "")} <button type="button" data-act="rescan">Check now</button>`
       : folder.state === "prompt"
-        ? `Your bills folder ${name}. <button type="button" data-act="allow">Check for new bills</button> <span class="bill-tip">(choose “Allow on every visit” and Minty checks it each time you open Bills)</span>`
-        : `Minty can no longer read your bills folder ${name}. <button type="button" data-act="folder">Pick it again</button>`;
-    return `<div class="bill-folderline">${line} <button type="button" data-act="forget">Forget this folder</button></div>`;
+        ? `Your statements folder ${name}. <button type="button" data-act="allow">Check for new bills</button> <span class="bill-tip">(choose “Allow on every visit” and Minty checks it each time you open Bills)</span>`
+        : `Minty can no longer read your statements folder ${name}. <button type="button" data-act="folder">Pick it again</button>`;
+    return `<div class="bill-folderline">${line} <button type="button" data-act="forget">Forget this folder</button> <span class="bill-tip">(BAM uses it too)</span></div>`;
   }
 
   function reviewHtml() {
@@ -259,76 +244,38 @@
     return r.json();
   }
 
-  const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
-
-  /** Reads bills from PDFs into the review. Each file is fingerprinted first, and only the ones
-   * Minty doesn't have yet are read. `fromFolder`: a check of the remembered folder, which shows
-   * only new PDFs (none: no review), and leaves out the ones skipped before. Returns how many are new. */
+  /** Reads bills from PDFs into the review: only the ones Minty doesn't have yet are read.
+   * `fromFolder`: a check of the remembered folder, which shows only new PDFs (none: no review),
+   * leaving out the ones skipped before. Returns how many are new. */
   async function readPdfs(files, fromFolder = false) {
-    const pdfs = [...files].filter(f => /\.pdf$/i.test(f.name) || f.type === "application/pdf")
-      .sort((a, b) => b.lastModified - a.lastModified).slice(0, fromFolder ? 200 : 50);   // /bills/known takes 200
+    const pdfs = [...files].filter(f => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
     if (!pdfs.length) { if (!fromFolder) alert("No PDFs there."); return 0; }
     if (!fromFolder) {
-      review = { rows: pdfs.map(f => ({ file: f.name, on: false, biller: "Reading…", amount_cents: null, due_date: null, statement_date: null })) };
+      review = { rows: pdfs.slice(0, 50).map(f => ({ file: f.name, on: false, biller: "Reading…", amount_cents: null, due_date: null, statement_date: null })) };
       render();
     }
-    let rows = [];
-    for (const f of pdfs) {
-      try {
-        const buf = await f.arrayBuffer();
-        rows.push({ file: f.name, sha: hex(await crypto.subtle.digest("SHA-256", buf)), buf });
-      } catch { rows.push({ file: f.name, error: "Couldn't read this PDF", on: false }); }
+    const base = document.baseURI;
+    const [pr, { parseBill }, { parsePoints }] = await Promise.all([lib(), import(new URL("bill-parse.js", base).href), import(new URL("points-parse.js", base).href)]);
+    // A card statement (one with a points box) isn't one of your own bills: Bills shows card
+    // statements from your bank. From the shared folder it's set aside for Bills; picked by hand,
+    // it's shown unticked, saying why.
+    let { rows } = await pr.readPdfs(pdfs, { view: "bills", fromFolder, parse: text => ({ ...parseBill(text), card: parsePoints(text).program !== null }),
+                                             known: async sha256 => (await api("POST", "/bills/known", { sha256 })).known });
+    const cards = rows.filter(r => r.card && !r.known);
+    if (fromFolder) {
+      await pr.skip("bills", cards.map(r => r.sha));
+      rows = rows.filter(r => !cards.includes(r));
+    } else {
+      for (const r of cards) Object.assign(r, { on: false, error: "A card statement: Bills shows those from your bank" });
     }
-    const seen = new Set();                        // the same PDF twice (a copy in another folder) is one bill
-    rows = rows.filter(r => !r.sha || (!seen.has(r.sha) && seen.add(r.sha)));
-    let known = [];
-    try { known = (await api("POST", "/bills/known", { sha256: rows.filter(r => r.sha).map(r => r.sha) })).known; } catch {}
-    const skipped = fromFolder ? new Set(await kvGet("skipped") ?? []) : new Set();
-    for (const r of rows) if (known.includes(r.sha)) { r.known = true; r.on = false; }
-    if (fromFolder) rows = rows.filter(r => r.sha && !r.known && !skipped.has(r.sha));
     if (fromFolder && !rows.length) return 0;
-    const fresh = rows.filter(r => r.buf && !r.known);
-    if (fresh.length) {
-      const base = document.baseURI;
-      const pdfjs = await import(new URL("vendor/pdfjs/pdf.min.mjs", base).href);
-      pdfjs.GlobalWorkerOptions.workerSrc = new URL("vendor/pdfjs/pdf.worker.min.mjs", base).href;
-      const { parseBill } = await import(new URL("bill-parse.js", base).href);
-      for (const r of fresh) {
-        try {
-          const doc = await pdfjs.getDocument({ data: new Uint8Array(r.buf), isEvalSupported: false }).promise;
-          let text = "";
-          for (let p = 1; p <= Math.min(doc.numPages, 3); p++) {
-            const content = await (await doc.getPage(p)).getTextContent();
-            text += content.items.map(i => i.str + (i.hasEOL ? "\n" : " ")).join("") + "\n";
-          }
-          Object.assign(r, parseBill(text, r.file), { on: true });
-        } catch { Object.assign(r, { error: "Couldn't read this PDF", on: false }); }
-      }
-    }
-    for (const r of rows) delete r.buf;
     review = { rows, fromFolder };
     render();
     return rows.length;
   }
 
-  /** Every PDF in the remembered folder, and in its folders two levels down (a folder a year). */
-  async function folderPdfs(dir, depth = 0, out = []) {
-    for await (const entry of dir.values()) {
-      if (entry.kind === "file" && /\.pdf$/i.test(entry.name)) out.push(await entry.getFile());
-      else if (entry.kind === "directory" && depth < 2 && !entry.name.startsWith(".")) await folderPdfs(entry, depth + 1, out);
-    }
-    return out;
-  }
-
-  /** The remembered folder, if any, and whether Minty may read it now ("granted"), after a click
-   * ("prompt": Chrome asks again each visit unless "Allow on every visit" was chosen), or not at all. */
   async function loadFolder() {
-    if (!canRemember) return;
-    const handle = await kvGet("folder");
-    if (!handle) { folder = null; return; }
-    let state = "denied";
-    try { state = await handle.queryPermission({ mode: "read" }); } catch {}
-    folder = { handle, name: handle.name, state, note: "" };
+    folder = canRemember ? await (await lib()).rememberedFolder() : null;
   }
 
   async function scanFolder() {
@@ -336,7 +283,7 @@
     folder.note = "checking for new bills…";
     render();
     try {
-      const n = await readPdfs(await folderPdfs(folder.handle), true);
+      const n = await readPdfs(await (await lib()).folderPdfs(folder.handle), true);
       folder.note = n ? `${n} new PDF${n === 1 ? "" : "s"} below.` : "no new bills.";
     } catch {
       folder.state = "denied";                     // moved, deleted, or access taken back
@@ -345,20 +292,16 @@
   }
 
   async function pickFolder() {
-    let handle;
-    try { handle = await window.showDirectoryPicker({ id: "minty-bills", mode: "read" }); } catch { return; }   // cancelled
-    await kvSet("folder", handle);
-    folder = { handle, name: handle.name, state: "granted", note: "" };
+    const picked = await (await lib()).pickFolder();
+    if (!picked) return;                           // cancelled
+    folder = picked;
     review = null;
     scanFolder();
   }
 
   /** PDFs from a folder check that weren't saved aren't offered again (on this device). */
   async function skip(rows) {
-    const shas = rows.filter(r => r.sha && !r.known).map(r => r.sha);
-    if (!shas.length) return;
-    const list = [...new Set([...(await kvGet("skipped") ?? []), ...shas])].slice(-MAX_SKIPPED);
-    await kvSet("skipped", list);
+    await (await lib()).skip("bills", rows.filter(r => r.sha && !r.known).map(r => r.sha));
   }
 
   main.addEventListener("click", async e => {
@@ -374,10 +317,13 @@
     if (act === "folder") { if (canRemember) pickFolder(); else main.querySelector("#billFolder").click(); return; }
     if (act === "rescan") { review = null; scanFolder(); return; }
     if (act === "allow") {
-      try { folder.state = await folder.handle.requestPermission({ mode: "read" }); } catch { folder.state = "denied"; }
+      folder.state = await (await lib()).askAgain(folder);
       scanFolder(); return;
     }
-    if (act === "forget") { await kvSet("folder"); await kvSet("skipped"); folder = null; render(); return; }
+    if (act === "forget") {
+      if (!confirm("Forget this folder? BAM uses it too.")) return;
+      await (await lib()).forgetFolder(); folder = null; render(); return;
+    }
     if (act === "cancel-review") { if (review.fromFolder) { await skip(review.rows); folder && (folder.note = "nothing new to add."); } review = null; render(); return; }
     if (act === "save-review") return saveReview();
     const edit = t.closest("[data-edit]"); if (edit) { editing = Number(edit.dataset.edit); render(); return; }

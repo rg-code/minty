@@ -123,9 +123,11 @@ Design history and decisions: `docs/serverless-plan.md`.
   are one row per bill; PDFs are read in the browser (pdf.js in `public/vendor/pdfjs/`, never a CDN;
   `public/bill-parse.js`) and never uploaded, only their fields and SHA-256.
 - BAM, miles and points (`docs/bam.md`): balances typed in or read from statement PDFs in the
-  browser (sharing Bills' folder and pdf.js), never from a loyalty login, scraping or Plaid. Each
-  update is a new reading in `point_balances`. The program list is code (`src/points/programs.ts`,
-  `CHECKED`). `GET /points` reads each reading once, with no `ORDER BY` (D1 counts a sort as a second
+  browser, never from a loyalty login, scraping or Plaid. Each update is a new reading in
+  `point_balances`. The program list, expiry rules and "earned by" rules are code
+  (`src/points/programs.ts`, `CHECKED`); an expiry rule only where the program's terms are simple.
+  `public/pdf-read.js` is the PDF reader and remembered folder shared by Bills and BAM: each view
+  has its own "already added" and skipped lists for the same folder. `GET /points` reads each reading once, with no `ORDER BY` (D1 counts a sort as a second
   read).
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
