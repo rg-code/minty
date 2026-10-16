@@ -40,6 +40,18 @@ describe("parseBill", () => {
     });
   });
 
+  it("PG&E's summary: the total due now, not the previous statement's amount, with a date before the amount", () => {
+    const summary = `Due Date: 10/19/2026\nYour Account Summary\nAmount Due on Previous Statement $267.08\n` +
+      `Payment(s) Received Since Last Statement -267.08\nPrevious Unpaid Balance $0.00\nCurrent PG&E Electric Delivery Charges $95.97\n` +
+      `Electric Adjustments -36.18\nAva Community Energy Electric Generation Charges 22.95\nCurrent Gas Charges 37.59\n` +
+      `Total Amount Due by 10/19/2026 $120.33\nCurrent charges include a discount of $36.18 for CA Climate Credit.\n`;
+    expect(parseBill(summary)).toMatchObject({ biller: "PG&E", amount_cents: 12033, due_date: "2026-10-19" });
+    // the same, when the PDF's text puts each amount on its own line after its label
+    expect(parseBill(summary.replace(/ (\$?-?[0-9]+\.[0-9]{2})\n/g, "\n$1\n")).amount_cents).toBe(12033);
+    // a bill whose only total line is "Amount Due on Previous Statement" has no amount due found, not that one
+    expect(parseBill("Amount Due on Previous Statement $267.08\n").amount_cents).toBeNull();
+  });
+
   it("leaves what it can't find blank, and falls back to the file name for the biller", () => {
     expect(parseBill("1 2 3 4\n", "City_Water_Bill_202610.pdf")).toEqual({
       biller: "City Water Bill", amount_cents: null, due_date: null, statement_date: null, account_hint: null,

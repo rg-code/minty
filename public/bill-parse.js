@@ -51,11 +51,16 @@ const first = (text, patterns) => {
 /** The fields of one bill, from its text (pages joined) and, as a last resort, its file name. */
 export function parseBill(text, fileName = "") {
   const t = text.replace(/ /g, " ").replace(/[ \t]+/g, " ");
+  // The amount due now, never the previous statement's: "Total Amount Due by 10/19/2026 $120.33"
+  // (PG&E puts the date between the words and the amount), and "Amount Due on Previous Statement"
+  // is skipped. Most specific first.
+  const DUE_BY = String.raw`(?:\s+(?:by|on)\s+` + DATE.replace(/^\(/, "(?:") + String.raw`)?\s*:?\s*`;   // the date isn't captured
+  const NOT_PREVIOUS = String.raw`(?!\s+(?:on|from)\s+(?:your\s+)?(?:previous|last|prior)\b)`;
   const amount = cents(first(t, [
-    new RegExp(String.raw`total\s+amount\s+due[^$\d\n]{0,40}` + MONEY, "i"),
-    new RegExp(String.raw`amount\s+due[^$\d\n]{0,40}` + MONEY, "i"),
-    new RegExp(String.raw`(?:total|balance|new\s+charges)\s+due[^$\d\n]{0,40}` + MONEY, "i"),
-    new RegExp(String.raw`please\s+pay[^$\d\n]{0,40}` + MONEY, "i"),
+    new RegExp(String.raw`total\s+amount\s+due` + DUE_BY + MONEY, "i"),
+    new RegExp(String.raw`amount\s+due` + NOT_PREVIOUS + DUE_BY + MONEY, "i"),
+    new RegExp(String.raw`(?:total|balance|new\s+charges)\s+due` + NOT_PREVIOUS + DUE_BY + MONEY, "i"),
+    new RegExp(String.raw`please\s+pay` + DUE_BY + MONEY, "i"),
     new RegExp(String.raw`total\s+(?:current\s+)?charges[^$\d\n]{0,40}` + MONEY, "i"),
   ]));
   const due = isoDate(first(t, [
