@@ -108,25 +108,40 @@ there, gitignored here). If that folder exists, read it too.
 3. **ABC coverage.** Cards ABC doesn't know show as untracked; add the ones the household holds
    to `src/benefits/catalog.ts`, with sources and `CHECKED`. Re-check the existing benefits when
    issuers change them; the last check was 2026-10-12.
-4. **Decide where MCP goes.** The live demo shows an "AI connector (MCP), coming soon" button, but
+4. **CFA (Complete financial audit) and EGG (retirement accounts).** Plan and decisions waiting:
+   [cfa.md](cfa.md).
+   - **CFA:** charts and trends for spending, saving, debt and retirement, plus findings ranked by
+     dollars a year and a planner's checklist.
+   - **EGG:** retirement accounts islanded in their own view: a trend, a forecast, and this year's
+     contributions against the limits.
+   - **Order:** R0 (check Plaid Investments on Trial) → C1 foundations → C2 audit charts → E1/E2
+     EGG → C3 recommendations.
+5. **MAP (Miles And Points).** Plan and decisions waiting: [map.md](map.md).
+   - **What it is:** every miles and points balance in one view, grouped by currency, with the
+     date each was last updated.
+   - **Where the numbers come from:** statement PDFs read on the device, exactly like Bills
+     (folder included), or typed in by hand. No loyalty logins, no scraping, no Plaid.
+   - **Order:** M1 (typing balances in, and the view) → M2 (PDFs, sharing Bills' reader) → M3
+     (optional extras).
+6. **Decide where MCP goes.** The live demo shows an "AI connector (MCP), coming soon" button, but
    [agent-plan.md](agent-plan.md) has the MCP server as optional phase **A7**. The options:
    - move MCP earlier, as a read-only server built on A1's query tools, so Claude Desktop and
      similar apps can use it before the chat panel exists; or
    - relabel the demo's button "Ask Minty (coming soon)".
-5. **The finance agent ("Ask Minty").** Its to-do is §11 of [agent-plan.md](agent-plan.md), and
+7. **The finance agent ("Ask Minty").** Its to-do is §11 of [agent-plan.md](agent-plan.md), and
    its decisions were made 2026-10-06. **Next: A0** (§8.1). It needs the owner's go-ahead plus an
    OpenRouter key (training off) and a Workers AI token in `.dev.vars`.
-6. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
+8. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
    page so the demo follows. A dashboard change the demo can't follow stops the build, by
    design. Other landing-page to-dos: `docs/private/STATUS.md`.
-7. **Owner housekeeping:**
+9. **Owner housekeeping:**
    - Delete unused `PLAID_*` secrets that Setup checks flag, and set `MINTY_USERS` to show your
      name. Keep the existing person keys: banks are stored under them.
    - **Wrangler logins:** `npx wrangler logout` on machines that don't need Cloudflare access.
    - **Plaid Sandbox end-to-end:** the owner runs `node scripts/sandbox-e2e.ts` against
      `npm run dev`, because it reads `.dev.vars`.
    - Other housekeeping: `docs/private/STATUS.md`.
-8. **Ongoing:**
+10. **Ongoing:**
    - **Keep Cloudflare's "Update your Wrangler configuration" prompt unapplied:** `keep_vars`
      already preserves dashboard variables, and copying them into `wrangler.jsonc` would publish
      the household's emails and Access IDs.
@@ -141,7 +156,7 @@ there, gitignored here). If that folder exists, read it too.
      commits with its cursor. If overruns become frequent, lower `SYNC_MAX_BYTES_PER_RUN`, or move
      to Workers Paid and raise it.
    - **Household notes go in `docs/private/`**, never in this file.
-9. **Later:**
+11. **Later:**
    - Onboard friends with GET-STARTED.md, and fix anything they trip on.
    - Email or push alerts for bank problems (they'd need an outbound mail setup).
    - Several Plaid Trial accounts per person is a Plaid ToS gray area. One paid Plaid account per
