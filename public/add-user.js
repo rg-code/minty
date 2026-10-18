@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const color = i => `var(--u${i % 6})`;
 let keyEdited = false;
+let forUser = null;                                // an existing person whose keys aren't set yet (their "Add keys")
 
 async function loadStatus() {
   let st = null;
@@ -45,6 +46,7 @@ async function loadUsers() {
       <span class="dot" style="background:${color(i)}"></span>${esc(u.label)} <span class="key">${esc(u.key)}</span>
       <span class="slots">${u.slots.map(s =>
         `<span class="slot ${s.configured ? "yes" : "no"}">${esc(s.slot)} ${s.configured ? "✓" : "not set"}</span>`).join("")}</span>
+      ${u.slots.some(s => s.configured) ? "" : `<button type="button" class="addkeys" data-addkeys="${esc(u.key)}">Add keys</button>`}
     </li>`).join("");
   } catch (e) {
     $("users").innerHTML = `<li>Couldn't load users from the Minty API: ${esc(e.message)}</li>`;
@@ -65,31 +67,83 @@ function validate(label, key) {
 
 function update() {
   const label = $("label").value.trim();
+  if (label) forUser = null;                       // typing a new person replaces "Add keys" for someone
   if (!keyEdited) $("key").value = suggestKey(label);
   const key = $("key").value.trim();
-  const problem = validate(label, key);
-  $("err").textContent = problem || "";
+  const problem = forUser ? null : validate(label, key);
+  $("err").textContent = forUser ? "" : problem || "";
   const ok = problem === null && USERS;
   $("steps").classList.toggle("show", !!ok);
   if (!ok) return;
-  const K = key.toUpperCase();
-  const users = [...USERS.map(u => `${u.key}:${u.label}`), `${key}:${label}`].join(",");
+  render(forUser ?? { key, label, isNew: true });
+}
+
+/** The steps for one person: a new one (MINTY_USERS, keys, Access) or an existing one without keys.
+ * Each secret's name has its own Copy button; the values come from the Plaid dashboard. */
+function render(p) {
+  const K = p.key.toUpperCase();
+  const users = [...USERS.filter(u => u.key !== p.key).map(u => `${u.key}:${u.label}`), `${p.key}:${p.label}`].join(",");
   // Every person gets the same slots (PLAID_SLOTS), so take the names from any existing user.
   const slots = (USERS[0]?.slots ?? [{ slot: "primary" }, { slot: "backup" }]).map(s => s.slot);
+  const copyBtn = text => `<button type="button" class="mini" data-copy="${esc(text)}">Copy</button>`;
+  const rows = slots.flatMap((slot, i) => {
+    const S = slot.toUpperCase(), opt = i > 0 ? ` <span class="opt">(optional: a second Plaid account, for more than 10 banks)</span>` : "";
+    return [`<li><code>PLAID_CLIENT_ID_${K}_${S}</code>${copyBtn(`PLAID_CLIENT_ID_${K}_${S}`)}<small>Value: the <b>client_id</b>${opt}</small></li>`,
+            `<li><code>PLAID_SECRET_${K}_${S}</code>${copyBtn(`PLAID_SECRET_${K}_${S}`)}<small>Value: the <b>Production secret</b> (or Sandbox, for test banks)${opt}</small></li>`];
+  });
+  const whose = p.isNew ? "their" : p.key === USERS[0]?.key ? "your" : `${esc(p.label)}'s`;
+  const steps = [];
+  if (p.isNew) {
+    steps.push(`<b>Add the person.</b> In Cloudflare, open <b>Workers &amp; Pages → minty → Settings → Variables and secrets</b>.
+      Edit the <b>Text</b> variable <code>MINTY_USERS</code> (or <b>+ Add</b> it, type Text) and paste this as its value:
+      <ul class="paste"><li><code>${esc(users)}</code>${copyBtn(users)}<small>Every person, in display order</small></li></ul>`);
+  }
+  steps.push(`<b>Copy ${whose} Plaid keys.</b> Signed in to ${whose} Plaid account, open
+    <a href="https://dashboard.plaid.com/developers/keys" target="_blank" rel="noopener noreferrer">Plaid → Developers → Keys</a>.
+    It shows the <b>client_id</b> and the <b>secrets</b>: use the <b>Production</b> secret for real banks (Sandbox works for Plaid's test banks).`);
+  steps.push(`<b>Paste each one into Cloudflare as a secret.</b> In <b>Variables and secrets</b>, click <b>+ Add</b>, choose type
+    <b>Secret</b>, paste the name below as the <b>Variable name</b> (Copy), and paste the key from Plaid as the <b>Value</b>.
+    Do it for each row, then click <b>Deploy</b>. Only the first two rows are needed.
+    <ul class="paste">${rows.join("")}</ul>`);
+  if (p.isNew) {
+    steps.push(`<b>Let them sign in.</b> Add their email to the Access policy (<b>Zero Trust → Access → Applications → minty</b>),
+      and to <code>ALLOWED_LOGINS</code> if you set one.`);
+  }
+  steps.push(`<b>That's it.</b> Saving deploys a new version of the Worker right away, no restart. Reload this page:
+    the Setup checks above turn ✓ once the keys are in.`);
+  $("stepList").innerHTML = steps.map(x => `<li>${x}</li>`).join("");
+  $("forWho").textContent = p.isNew ? "" : `These are the steps for ${p.label}'s keys.`;
   $("out").textContent = [
-    `MINTY_USERS = ${users}`,
-    ``,
+    ...(p.isNew ? [`# in the dashboard: MINTY_USERS = ${users}`, ``] : []),
     ...slots.flatMap((slot, i) => {
       const S = slot.toUpperCase(), note = i === 0 ? "" : "  # optional";
       return [`npx wrangler secret put PLAID_CLIENT_ID_${K}_${S}${note}`, `npx wrangler secret put PLAID_SECRET_${K}_${S}${note}`];
     }),
   ].join("\n");
-  $("newname").innerHTML = `<span class="dot" style="background:${color(USERS.length)}"></span> ${esc(label)}`;
+  $("newname").innerHTML = `<span class="dot" style="background:${color(USERS.some(u => u.key === p.key) ? USERS.findIndex(u => u.key === p.key) : USERS.length)}"></span> ${esc(p.label)}`;
 }
 
 $("label").addEventListener("input", update);
 $("key").addEventListener("input", () => { keyEdited = $("key").value.trim() !== ""; update(); });
 $("form").addEventListener("submit", e => e.preventDefault());
+$("users").addEventListener("click", e => {
+  const b = e.target.closest("[data-addkeys]");
+  if (!b) return;
+  const u = USERS.find(x => x.key === b.dataset.addkeys);
+  forUser = { key: u.key, label: u.label, isNew: false };
+  $("label").value = ""; $("key").value = ""; keyEdited = false;
+  $("err").textContent = "";
+  $("steps").classList.add("show");
+  render(forUser);
+  $("steps").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+$("steps").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-copy]");
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copied"; }
+  catch { b.textContent = "Select and copy"; }
+  setTimeout(() => { b.textContent = "Copy"; }, 1500);
+});
 $("copy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText($("out").textContent); $("copy").textContent = "Copied"; }
   catch { getSelection().selectAllChildren($("out")); $("copy").textContent = "Press Ctrl+C to copy"; }

@@ -109,8 +109,10 @@ export async function status(env: Env, config: Config, email: string): Promise<R
     if (!set.length) {
       const n = secretNames(accounts[0]);
       add({ id: `plaid_keys_${key}`, ok: false, level: "warn", message: `${label}: no Plaid keys yet, so they can't link banks.`,
-            fix: `Add secrets ${n.clientId} and ${n.secret}` +
-                 (accounts.length > 1 ? ` (more Plaid accounts go in the next slots: ${accounts.slice(1).map(slotOf).join(", ")}).` : ".") });
+            fix: `No terminal needed: copy the client_id and the Production secret from the Plaid dashboard (Developers → Keys), ` +
+                 `then in Cloudflare (Workers & Pages → minty → Settings → Variables and secrets → + Add, type Secret) paste them as ` +
+                 `${n.clientId} and ${n.secret}, and click Deploy. "Add keys" next to ${label} under Current users lists the names to copy` +
+                 (accounts.length > 1 ? `; more Plaid accounts go in the next slots (${accounts.slice(1).map(slotOf).join(", ")}).` : ".") });
     } else {
       const unused = accounts.filter((a) => keyState(env, config, a) === "missing").map(slotOf);
       add({ id: `plaid_keys_${key}`, ok: true, level: "warn",
@@ -122,7 +124,7 @@ export async function status(env: Env, config: Config, email: string): Promise<R
       const n = secretNames(a);
       add({ id: `plaid_keys_partial_${a}`, ok: false, level: "error",
             message: `${label}: slot ${slotOf(a)} has only one of its two Plaid keys, so it's skipped.`,
-            fix: `Set both ${n.clientId} and ${n.secret}, or remove the one that's there.` });
+            fix: `Set both ${n.clientId} and ${n.secret} in Cloudflare (Variables and secrets, type Secret, pasted from Plaid's Developers → Keys), or remove the one that's there.` });
     }
   }
 

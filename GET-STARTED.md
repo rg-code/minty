@@ -60,8 +60,10 @@ More detail on any step: [SETUP.md](SETUP.md).
    - Windows: open PowerShell and run
      `$b=New-Object byte[] 32;[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b);[Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')`
 2. **Plaid keys:** open https://dashboard.plaid.com/developers/keys and copy the **client_id**
-   and the **Production** secret.
-3. Add them in **Variables and secrets**, then click **Deploy**:
+   and the **Production** secret. No terminal needed for these: you copy them from Plaid and paste
+   them into Cloudflare.
+3. Add them in **Variables and secrets** (**+ Add**, choose the type, paste the name and the
+   value), then click **Deploy**:
 
    | Name | Value | Type |
    |---|---|---|
