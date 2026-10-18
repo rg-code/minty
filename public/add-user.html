@@ -75,6 +75,27 @@
   :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .note { color:var(--muted); font-size:12.5px; margin-top:14px; }
   a.back { display:block; text-align:center; margin-top:20px; font-size:13px; color:var(--muted); }
+  .noterm { font-size:13.5px; margin:0 0 10px; padding:10px 12px; border:1px solid var(--hairline); border-radius:var(--radius); background:var(--code-bg); }
+  .steps li b { font-weight:650; }
+  .paste { list-style:none; margin:8px 0 4px; padding:0; border:1px solid var(--hairline); border-radius:var(--radius); }
+  .paste li { display:grid; grid-template-columns:1fr auto; gap:2px 10px; align-items:center; padding:8px 10px; margin:0 !important; }
+  .paste li + li { border-top:1px solid var(--hairline); }
+  .paste code { font-size:12.5px; overflow-wrap:anywhere; }
+  .paste small { grid-column:1; color:var(--muted); font-size:12px; }
+  .paste .opt { color:var(--muted); }
+  button.mini { padding:5px 10px; border:1px solid var(--hairline); border-radius:8px; background:var(--surface); color:var(--ink);
+                font:inherit; font-size:12.5px; cursor:pointer; grid-row:1 / span 2; grid-column:2; }
+  details.term { margin-top:10px; font-size:13px; }
+  details.keygen { margin:0 0 20px; padding:10px 12px; border:1px solid var(--hairline); border-radius:var(--radius); font-size:13.5px; }
+  details.keygen summary { cursor:pointer; font-weight:600; }
+  details.keygen .mini { margin-top:8px; }
+  .genout { display:flex; gap:8px; align-items:center; margin-top:10px; padding:8px 10px; background:var(--code-bg); border:1px solid var(--hairline); border-radius:var(--radius); }
+  .genout code { flex:1; overflow-wrap:anywhere; user-select:all; }
+  .genout .mini { margin-top:0; }
+  .genhow { margin:10px 0 0; padding-left:20px; font-size:13px; line-height:1.5; }
+  details.term summary { cursor:pointer; color:var(--muted); }
+  ul.users .addkeys { margin-left:8px; padding:3px 9px; border:1px solid var(--hairline); border-radius:8px; background:var(--surface);
+                      color:var(--accent); font:inherit; font-size:12px; cursor:pointer; }
   .brandmark { display: inline-block; margin-bottom: 12px; line-height: 0; }
 </style>
 <link rel="stylesheet" href="/lock.css" />
@@ -89,11 +110,28 @@
   <a href="/" class="brandmark" aria-label="Minty"><img src="/favicon.svg" alt="" width="36" height="36" /></a>
   <h1>Add a user</h1>
   <p class="sub">People are set up in the Cloudflare dashboard (Worker settings), so their Plaid keys never
-    pass through the browser. Fill in a name and Minty writes the exact values to add.</p>
+    pass through Minty. Fill in a name and Minty writes the exact names to paste. <b>No terminal needed:</b>
+    it's copy and paste between the Plaid and Cloudflare dashboards.</p>
   <div class="who" id="checksTitle" hidden>Setup checks</div>
   <ul class="checks" id="checks" hidden></ul>
   <div class="who">This device</div>
   <p class="device" id="lockState">Checking…</p>
+
+  <details class="keygen" id="keygen">
+    <summary>Make an encryption key (<code>TOKEN_ENC_KEY</code>)</summary>
+    <p class="note">For a new setup, or when <a href="https://github.com/rg-code/minty/blob/main/SETUP.md#changing-the-encryption-key" target="_blank" rel="noopener noreferrer">changing the key</a>.
+      It's made on this device by the browser's secure random generator and never sent anywhere: not to Minty, not to Cloudflare.</p>
+    <button type="button" class="mini" id="genKey">Generate a key</button>
+    <div class="genout" id="genOut" hidden>
+      <code id="genVal"></code>
+      <button type="button" class="mini" id="genCopy">Copy</button>
+    </div>
+    <ol class="genhow" id="genHow" hidden>
+      <li><b>Save it in your password manager first.</b> There's no recovery: Cloudflare won't show it again, and without it every bank has to be linked again.</li>
+      <li>In Cloudflare, <b>Variables and secrets → + Add</b>, type <b>Secret</b>, name <code>TOKEN_ENC_KEY</code>, paste the key as the value, then <b>Deploy</b>.</li>
+      <li>Already have a key and banks linked? Don't replace it with this one directly: follow <b>Changing the encryption key</b> in SETUP, or every bank stops.</li>
+    </ol>
+  </details>
 
   <div class="who">Current users</div>
   <ul class="users" id="users"><li>Loading…</li></ul>
@@ -106,20 +144,15 @@
   <div class="err" id="err"></div>
 
   <div class="steps" id="steps">
-    <ol>
-      <li>In the Cloudflare dashboard open <b>Workers &amp; Pages → minty → Settings → Variables and secrets</b>
-          and set the variable <code>MINTY_USERS</code> to the value below (first line).</li>
-      <li>Add their Plaid keys there as <b>secrets</b>. Each person needs their own Plaid Trial keys;
-          only the first slot is required. Each further slot is another Plaid Trial account, used once the
-          ones before it reach the 10-login cap (slots come from <code>PLAID_SLOTS</code>). Or from a terminal
-          in your fork, use the <code>wrangler secret put</code> commands below.</li>
-      <li>So they can sign in, add their email to the Access policy (<b>Zero Trust → Access → Applications → minty</b>),
-          and to <code>ALLOWED_LOGINS</code> if you set one.</li>
-      <li>No restart needed: saving creates a new version of the Worker right away.</li>
-    </ol>
-    <pre id="out"></pre>
-    <button class="copy" id="copy" type="button">Copy</button>
-    <p class="note">Once saved, <span id="newname">they</span> appear on the dashboard and on
+    <p class="noterm"><b>No terminal needed.</b> Everything here is copy and paste between two browser tabs:
+      the Plaid dashboard and the Cloudflare dashboard. <span id="forWho"></span></p>
+    <ol id="stepList"></ol>
+    <details class="term"><summary>Prefer a terminal?</summary>
+      <p class="note">From a clone of your fork, after <code>npx wrangler login</code>. Each command asks for the value to paste.</p>
+      <pre id="out"></pre>
+      <button class="copy" id="copy" type="button">Copy</button>
+    </details>
+    <p class="note">Once saved, <span id="newname">they</span> can link banks from
       <a href="/connect">Add account</a>.</p>
   </div>
 

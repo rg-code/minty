@@ -48,7 +48,10 @@ More detail on any step: [SETUP.md](SETUP.md).
 
 ## 5. Add your keys
 
-1. **Encryption key.** Make one on your computer.
+1. **Encryption key.** No terminal needed: open your Minty address with `/add-user` on the end
+   (for example `https://minty.<you>.workers.dev/add-user`), sign in, and click **Make an
+   encryption key → Generate a key**. It's made on your device and never sent anywhere. Or make
+   one on your computer as below.
 
    > **Store this key carefully, in a password manager. There is no recovery, by design.**
    > Nobody (not Minty, Cloudflare or Plaid) has a copy, and Cloudflare won't show it again
@@ -60,8 +63,10 @@ More detail on any step: [SETUP.md](SETUP.md).
    - Windows: open PowerShell and run
      `$b=New-Object byte[] 32;[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b);[Convert]::ToBase64String($b).Replace('+','-').Replace('/','_')`
 2. **Plaid keys:** open https://dashboard.plaid.com/developers/keys and copy the **client_id**
-   and the **Production** secret.
-3. Add them in **Variables and secrets**, then click **Deploy**:
+   and the **Production** secret. No terminal needed for these: you copy them from Plaid and paste
+   them into Cloudflare.
+3. Add them in **Variables and secrets** (**+ Add**, choose the type, paste the name and the
+   value), then click **Deploy**:
 
    | Name | Value | Type |
    |---|---|---|

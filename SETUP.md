@@ -90,7 +90,9 @@ code, and then the dashboard loads.
 Minty encrypts each bank connection's Plaid access token before storing it. In the same
 **Variables and secrets** screen, add a variable named `TOKEN_ENC_KEY` with **Secret checked**.
 
-Make a new key with one of these, and paste the result as the value:
+No terminal needed: open your Minty address with `/add-user` on the end, sign in, and click
+**Make an encryption key → Generate a key**. It's made in your browser and never sent anywhere.
+Copy it into your password manager, then paste it as the value. Or make one with one of these:
 
 - macOS / Linux / Git Bash: `openssl rand -base64 32 | tr '+/' '-_'`
 - Windows PowerShell:
@@ -107,9 +109,16 @@ Make a new key with one of these, and paste the result as the value:
 
 ## 5. Get Plaid keys
 
-1. In the Plaid dashboard: **Developers → Keys**. Copy the **client_id** and the **Production**
-   secret. (The Sandbox secret works for testing with Plaid's fake banks.)
-2. In **Variables and secrets**, add these, each with **Secret checked**:
+No terminal needed: this is copy and paste between two browser tabs, the Plaid dashboard and the
+Cloudflare dashboard. The same goes for each person you add later (**+ Add user** lists the exact
+names, each with a Copy button).
+
+1. In the Plaid dashboard: **Developers → Keys** (https://dashboard.plaid.com/developers/keys).
+   Copy the **client_id** and the **Production** secret. (The Sandbox secret works for testing
+   with Plaid's fake banks.)
+2. In Cloudflare, **Workers & Pages → minty → Settings → Variables and secrets**, click **+ Add**
+   for each of these: type **Secret**, paste the name as the **Variable name** and the key from
+   Plaid as the **Value**. Then click **Deploy**.
    - `PLAID_CLIENT_ID_ME_PRIMARY` = client_id
    - `PLAID_SECRET_ME_PRIMARY` = secret
 3. When you're using the Production secret, add a **Text** variable `PLAID_ENV` = `production`.
