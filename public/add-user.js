@@ -11,6 +11,7 @@ async function loadStatus() {
   if (!st) return;
   $("checksTitle").hidden = false;
   $("checks").hidden = false;
+  if (st.checks.some(c => c.id === "token_key" && !c.ok)) $("keygen").open = true;   // no key yet: show the generator
   $("checks").innerHTML = st.checks.map(c => `<li class="${c.ok ? "ok" : c.level}">
       <span class="mark">${c.ok ? "✓" : c.level === "error" ? "✕" : "!"}</span><span>${esc(c.message)}</span>
       ${!c.ok && c.fix ? `<span class="fix">${esc(c.fix)}</span>` : ""}</li>`).join("");
@@ -126,6 +127,21 @@ function render(p) {
 $("label").addEventListener("input", update);
 $("key").addEventListener("input", () => { keyEdited = $("key").value.trim() !== ""; update(); });
 $("form").addEventListener("submit", e => e.preventDefault());
+// TOKEN_ENC_KEY: 32 random bytes, url-safe base64 (Fernet's key format, the same as
+// `openssl rand -base64 32 | tr '+/' '-_'`). Made here and only shown: never sent, never stored.
+$("genKey").addEventListener("click", () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const key = btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_");
+  $("genVal").textContent = key;
+  $("genOut").hidden = false; $("genHow").hidden = false;
+  $("genKey").textContent = "Generate another";
+});
+$("genCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("genVal").textContent); $("genCopy").textContent = "Copied"; }
+  catch { getSelection().selectAllChildren($("genVal")); $("genCopy").textContent = "Press Ctrl+C"; }
+  setTimeout(() => { $("genCopy").textContent = "Copy"; }, 1500);
+});
+
 $("users").addEventListener("click", e => {
   const b = e.target.closest("[data-addkeys]");
   if (!b) return;

@@ -194,6 +194,18 @@ describe("static pages", () => {
     for (const gone of ["docker", ".env", "Tailscale", "BACKEND"]) expect(html).not.toContain(gone);
   });
 
+  it("add-user page makes an encryption key on the device: 32 secure random bytes, never sent or stored", async () => {
+    const { html } = await page("/add-user");
+    const gen = html.slice(html.indexOf('$("genKey").addEventListener'), html.indexOf('$("genCopy").addEventListener'));
+    expect(gen).toContain("crypto.getRandomValues(new Uint8Array(32))");
+    for (const leak of ["fetch(", "localStorage", "sessionStorage", "indexedDB"]) expect(gen).not.toContain(leak);
+    // a key made that way is one Minty's encryption takes (src/fernet.ts)
+    const { fernetDecrypt, fernetEncrypt } = await import("../src/fernet");
+    const bytes = crypto.getRandomValues(new Uint8Array(32));
+    const key = btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_");
+    expect(await fernetDecrypt(await fernetEncrypt("check", key), key)).toBe("check");
+  });
+
   it("connect page capacity bars actually render (the fill span is a block)", async () => {
     const { html } = await page("/connect");
     expect(html).toMatch(/\.cap \.fill \{ display:block;/);   // an inline span ignores width/height

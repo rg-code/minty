@@ -66,7 +66,9 @@ export async function status(env: Env, config: Config, email: string): Promise<R
   add((await tokenKeyWorks(env.TOKEN_ENC_KEY))
     ? { id: "token_key", ok: true, level: "error", message: "TOKEN_ENC_KEY is set." }
     : { id: "token_key", ok: false, level: "error", message: "TOKEN_ENC_KEY is missing or not a valid key, so banks can't be linked.",
-        fix: "Add a secret TOKEN_ENC_KEY. Generate one with: openssl rand -base64 32 | tr '+/' '-_'" });
+        fix: "Add a secret TOKEN_ENC_KEY. No terminal needed: \"Make an encryption key\" on + Add user generates one on this device; " +
+             "save it in your password manager, then in Cloudflare (Variables and secrets → + Add, type Secret) paste it as TOKEN_ENC_KEY and Deploy. " +
+             "(Or in a terminal: openssl rand -base64 32 | tr '+/' '-_')" });
 
   // Changing the key (SETUP.md, "Changing the encryption key"): only shown while
   // TOKEN_ENC_KEY_PREVIOUS is set, until every stored token is on the new key.

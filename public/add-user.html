@@ -86,6 +86,13 @@
   button.mini { padding:5px 10px; border:1px solid var(--hairline); border-radius:8px; background:var(--surface); color:var(--ink);
                 font:inherit; font-size:12.5px; cursor:pointer; grid-row:1 / span 2; grid-column:2; }
   details.term { margin-top:10px; font-size:13px; }
+  details.keygen { margin:0 0 20px; padding:10px 12px; border:1px solid var(--hairline); border-radius:var(--radius); font-size:13.5px; }
+  details.keygen summary { cursor:pointer; font-weight:600; }
+  details.keygen .mini { margin-top:8px; }
+  .genout { display:flex; gap:8px; align-items:center; margin-top:10px; padding:8px 10px; background:var(--code-bg); border:1px solid var(--hairline); border-radius:var(--radius); }
+  .genout code { flex:1; overflow-wrap:anywhere; user-select:all; }
+  .genout .mini { margin-top:0; }
+  .genhow { margin:10px 0 0; padding-left:20px; font-size:13px; line-height:1.5; }
   details.term summary { cursor:pointer; color:var(--muted); }
   ul.users .addkeys { margin-left:8px; padding:3px 9px; border:1px solid var(--hairline); border-radius:8px; background:var(--surface);
                       color:var(--accent); font:inherit; font-size:12px; cursor:pointer; }
@@ -109,6 +116,22 @@
   <ul class="checks" id="checks" hidden></ul>
   <div class="who">This device</div>
   <p class="device" id="lockState">Checking…</p>
+
+  <details class="keygen" id="keygen">
+    <summary>Make an encryption key (<code>TOKEN_ENC_KEY</code>)</summary>
+    <p class="note">For a new setup, or when <a href="https://github.com/rg-code/minty/blob/main/SETUP.md#changing-the-encryption-key" target="_blank" rel="noopener noreferrer">changing the key</a>.
+      It's made on this device by the browser's secure random generator and never sent anywhere: not to Minty, not to Cloudflare.</p>
+    <button type="button" class="mini" id="genKey">Generate a key</button>
+    <div class="genout" id="genOut" hidden>
+      <code id="genVal"></code>
+      <button type="button" class="mini" id="genCopy">Copy</button>
+    </div>
+    <ol class="genhow" id="genHow" hidden>
+      <li><b>Save it in your password manager first.</b> There's no recovery: Cloudflare won't show it again, and without it every bank has to be linked again.</li>
+      <li>In Cloudflare, <b>Variables and secrets → + Add</b>, type <b>Secret</b>, name <code>TOKEN_ENC_KEY</code>, paste the key as the value, then <b>Deploy</b>.</li>
+      <li>Already have a key and banks linked? Don't replace it with this one directly: follow <b>Changing the encryption key</b> in SETUP, or every bank stops.</li>
+    </ol>
+  </details>
 
   <div class="who">Current users</div>
   <ul class="users" id="users"><li>Loading…</li></ul>

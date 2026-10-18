@@ -90,7 +90,9 @@ code, and then the dashboard loads.
 Minty encrypts each bank connection's Plaid access token before storing it. In the same
 **Variables and secrets** screen, add a variable named `TOKEN_ENC_KEY` with **Secret checked**.
 
-Make a new key with one of these, and paste the result as the value:
+No terminal needed: open your Minty address with `/add-user` on the end, sign in, and click
+**Make an encryption key → Generate a key**. It's made in your browser and never sent anywhere.
+Copy it into your password manager, then paste it as the value. Or make one with one of these:
 
 - macOS / Linux / Git Bash: `openssl rand -base64 32 | tr '+/' '-_'`
 - Windows PowerShell:
