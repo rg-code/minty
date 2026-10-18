@@ -57,6 +57,45 @@ async function loadUsers() {
   renderOwners();
 }
 
+// With several people, every list below shows only the person picked under "Whose account?".
+const many = () => USERS.length > 1;
+const mine = list => (many() ? list.filter(x => x.owner === owner) : list);
+const ownerLabel = k => USERS.find(u => u.key === k)?.label ?? k;
+let reconnectItems = [], statementList = [], investmentList = [], connectedItems = [], connectedAccounts = [], connectedLoaded = false;
+function renderLists() { renderConnected(); renderReconnect(); renderStatements(); renderInvestments(); }
+
+// The banks and accounts already linked for the person picked.
+const HEALTH_SHORT = { ok: "Up to date", downloading: "Downloading its history", expiring: "Consent ends soon: reconnect",
+  stalled: "Not syncing lately", reconnect: "Needs you to sign in again", broken: "Stopped: link it again", stranded: "Its Plaid keys are missing" };
+async function loadConnected() {
+  try {
+    const [i, a] = await Promise.all([fetch("/items"), fetch("/accounts?view=all")]);
+    if (i.ok) connectedItems = await i.json();
+    if (a.ok) connectedAccounts = await a.json();
+  } catch {}
+  connectedLoaded = true;
+  renderConnected();
+}
+function renderConnected() {
+  const box = document.getElementById("connected");
+  if (!connectedLoaded) return;
+  const items = mine(connectedItems);
+  const who = many() ? ownerLabel(owner) : null;
+  box.hidden = false;
+  if (!items.length) {
+    box.innerHTML = `<div class="title">${who ? `Connected for ${esc(who)}` : "Connected"}</div><div class="line"><span class="why">Nothing linked yet${who ? ` for ${esc(who)}` : ""}.</span></div>`;
+    return;
+  }
+  box.innerHTML = `<div class="title">${who ? `Connected for ${esc(who)}` : "Connected"} · ${items.length} bank${items.length === 1 ? "" : "s"}</div>` + items.map(i => {
+    const accts = connectedAccounts.filter(a => a.item_id === i.id);
+    const state = i.health?.state ?? "ok";
+    return `<div class="line"><span>${esc(i.institution_name || "Bank")}` +
+      `<span class="why${state === "ok" ? " on" : ""}">${esc(HEALTH_SHORT[state] ?? state)}</span>` +
+      (accts.length ? `<span class="accts">${accts.map(a => `${esc(a.name || "Account")}${a.mask ? ` ••${esc(a.mask)}` : ""}${a.in_retirement ? " (EGG)" : ""}`).join(" · ")}</span>` : "") +
+      `</span></div>`;
+  }).join("");
+}
+
 function renderOwners() {
   // One person: no choice to make, so hide the question (links go to that person).
   const single = USERS.length < 2;
@@ -83,22 +122,29 @@ document.getElementById("owners").addEventListener("click", e => {
   const b = e.target.closest(".owner");
   if (!b) return;
   owner = b.dataset.owner;
-  renderOwners(); renderCapacity();
+  renderOwners(); renderCapacity(); renderLists();
 });
 
 // Banks that need you to sign in again, or whose consent through Plaid ends soon (the dashboard's
 // "Reconnect" links here): repair them with Link update mode.
 async function loadReconnect() {
-  const box = document.getElementById("reconnect");
-  let items = [];
   try {
     const r = await fetch("/items");
-    if (r.ok) items = (await r.json()).filter(i => i.health?.action === "reconnect" || i.status === "login_required");
+    if (r.ok) reconnectItems = (await r.json()).filter(i => i.health?.action === "reconnect" || i.status === "login_required");
   } catch {}
+  // Arriving from the dashboard's Reconnect link: show the person whose bank it is.
+  if (location.hash === "#reconnect" && many() && !mine(reconnectItems).length && reconnectItems.length) {
+    owner = reconnectItems[0].owner;
+    renderOwners(); renderCapacity(); renderLists();
+  }
+  renderReconnect();
+}
+function renderReconnect() {
+  const box = document.getElementById("reconnect");
+  const items = mine(reconnectItems);
   box.hidden = !items.length;
-  const label = k => USERS.find(u => u.key === k)?.label ?? k;
   box.innerHTML = items.length ? `<div class="title">Needs you to sign in again</div>` + items.map(i =>
-    `<div class="line"><span>${esc(i.institution_name || "Bank")} · ${esc(label(i.owner))}` +
+    `<div class="line"><span>${esc(i.institution_name || "Bank")}` +
     `${i.health?.detail ? `<span class="why">${esc(i.health.detail)}</span>` : ""}</span>` +
     `<button type="button" data-reconnect="${i.id}">Reconnect</button></div>`).join("") : "";
   if (items.length && location.hash === "#reconnect") box.scrollIntoView({ block: "center" });
@@ -173,17 +219,19 @@ const STATEMENT_STATE = {
   error: "Couldn't fetch the details; Minty retries every hour.",
 };
 async function loadStatements() {
+  try { const r = await fetch("/statements"); if (r.ok) statementList = await r.json(); } catch {}
+  renderStatements();
+}
+function renderStatements() {
   const box = document.getElementById("statements");
-  let banks = [];
-  try { const r = await fetch("/statements"); if (r.ok) banks = await r.json(); } catch {}
+  const banks = mine(statementList);
   box.hidden = !banks.length;
-  const label = k => USERS.find(u => u.key === k)?.label ?? k;
   box.innerHTML = banks.length ? `<div class="title">Statement details (for Bills)</div>` + banks.map(b => {
     const on = b.statements !== "off";
     const action = !on || b.statements === "consent_required"
       ? `<button type="button" data-statements-on="${b.item_id}">Turn on</button>`
       : `<button type="button" data-statements-off="${b.item_id}">Turn off</button>`;
-    return `<div class="line"><span>${esc(b.bank || "Bank")} · ${esc(label(b.owner))}` +
+    return `<div class="line"><span>${esc(b.bank || "Bank")}` +
       `<span class="why${b.statements === "ready" || b.statements === "pending" ? " on" : ""}">${esc(STATEMENT_STATE[b.statements] ?? b.statements)}</span></span>${action}</div>`;
   }).join("") : "";
   if (banks.length && location.hash === "#statements") box.scrollIntoView({ block: "center" });
@@ -228,19 +276,20 @@ const INVESTMENT_STATE = {
   error: "Couldn't fetch them; Minty retries every hour.",
 };
 async function loadInvestments() {
+  try { const r = await fetch("/investments"); if (r.ok) investmentList = (await r.json()).filter(b => b.investments !== "off" || b.investment_accounts > 0); } catch {}
+  renderInvestments();
+}
+function renderInvestments() {
   const box = document.getElementById("investments");
-  let banks = [];
-  try { const r = await fetch("/investments"); if (r.ok) banks = await r.json(); } catch {}
-  banks = banks.filter(b => b.investments !== "off" || b.investment_accounts > 0);
+  const banks = mine(investmentList);
   box.hidden = !banks.length;
-  const label = k => USERS.find(u => u.key === k)?.label ?? k;
   box.innerHTML = banks.length ? `<div class="title">Investment accounts (for EGG)</div>` + banks.map(b => {
     const on = b.investments !== "off";
     const action = b.products === "investments" ? ""
       : !on || b.investments === "consent_required"
       ? `<button type="button" data-investments-on="${b.item_id}">Add</button>`
       : `<button type="button" data-investments-off="${b.item_id}">Turn off</button>`;
-    return `<div class="line"><span>${esc(b.bank || "Bank")} · ${esc(label(b.owner))}` +
+    return `<div class="line"><span>${esc(b.bank || "Bank")}` +
       `<span class="why${b.investments === "ready" || b.investments === "pending" ? " on" : ""}">${esc(INVESTMENT_STATE[b.investments] ?? b.investments)}</span></span>${action}</div>`;
   }).join("") : "";
   if (banks.length && location.hash === "#investments") box.scrollIntoView({ block: "center" });
@@ -397,6 +446,7 @@ function openLink(entry, receivedRedirectUri) {
           ? "Connected. Its investment accounts arrive within about ten minutes, in EGG on the dashboard (not in the feed)."
           : data.status === "good" ? "Connected. Transactions are syncing." : "Connected (status: " + data.status + ").", "ok");
         loadCapacity();
+        loadConnected();
         loadInvestments();
         connectBtn.disabled = false;
         document.getElementById("connectRetirement").disabled = false;
@@ -438,4 +488,4 @@ function openLink(entry, receivedRedirectUri) {
   });
 })();
 
-loadUsers().then(() => { loadCapacity(); loadReconnect(); loadStatements(); loadInvestments(); });
+loadUsers().then(() => { loadCapacity(); loadConnected(); loadReconnect(); loadStatements(); loadInvestments(); });
