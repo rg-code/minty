@@ -120,6 +120,7 @@ the secret names to add in the Cloudflare dashboard.
     GET  /transactions           unified feed   (?owner= &tag= [repeatable] &tag_mode=any|all &q= &start= &end= &item_id= [repeatable: banks] &account_id= [repeatable: cards / accounts] &card= [repeatable: account_id:card member])
     GET  /tags                   distinct tags in use
     PUT  /transactions/{id}/tags {tags:[...]}  replace a transaction's tags
+    POST /transactions/tags      {ids: [...up to 1000], add?: [...], remove?: [...]}   tag many at once (the dashboard's Select); existing tags stay
     GET  /capacity               per-person trial usage (used/cap)
     GET  /users                  people from MINTY_USERS + which key slots are set (no secrets)
     GET  /status                 setup checks (no values)

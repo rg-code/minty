@@ -105,7 +105,7 @@ describe("static pages", () => {
     expect(html).toContain('id="lastSync"');
     expect(html).toContain("latest ${txns.length.toLocaleString()} transactions");
     expect(html).toContain('p.set("before", `${last.date}:${last.id}`)');
-    expect(html).toContain('id="moreBtn">Show more');
+    expect(html).toContain('id="showMore">Show more');
     expect(html).not.toContain('fetch("/sync"');                          // there is no sync endpoint
     expect((await SELF.fetch("https://minty.example.workers.dev/sync-request")).status).toBe(403);   // in run_worker_first
   });

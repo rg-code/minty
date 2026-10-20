@@ -111,6 +111,26 @@
   .moreload { display: block; margin: 18px auto 0; font: inherit; font-size: 13.5px; padding: 8px 16px; border-radius: 999px;
               border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); cursor: pointer; }
   .moreload:hover { border-color: var(--muted); }
+  /* Select: tag many at once */
+  .selectrow { display: flex; justify-content: flex-end; padding: 8px var(--pad) 0; }
+  .selectrow .pill[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+  body.selecting .row { grid-template-columns: 3px 18px 1fr auto; }      /* the stripe, the box, then as usual */
+  .txn .selbox { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+  .txn.selected .row { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+  .selectbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
+               padding: 10px var(--pad) calc(10px + env(safe-area-inset-bottom)); background: var(--surface); border-top: 1px solid var(--hairline);
+               box-shadow: 0 -8px 20px -14px var(--shadow); font-size: 13.5px; }
+  .selectbar[hidden] { display: none; }
+  .selectbar .selcount { font-weight: 650; }
+  .selectbar .sellink { font: inherit; background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; }
+  .selectbar .seltag { display: inline-flex; gap: 6px; align-items: center; }
+  .selectbar input, .selectbar select { font: inherit; font-size: 13.5px; padding: 6px 9px; border: 1px solid var(--hairline); border-radius: 8px;
+                                        background: var(--bg); color: var(--ink); min-width: 0; }
+  .selectbar input { width: 150px; }
+  .selectbar .pill.solid { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .selectbar .selmsg { color: var(--muted); flex: 1 1 140px; }
+  .selectbar #selDone { margin-left: auto; }
+  body.selecting { padding-bottom: 110px; }
   /* "Install Minty as an app" (see setUpInstall below) */
   .installbar { display: flex; align-items: center; gap: 12px; padding: 10px var(--pad); background: var(--surface);
                 border-bottom: 1px solid var(--hairline); font-size: 13.5px; }
@@ -500,7 +520,19 @@
   <div id="bamMain"></div>
 </dialog>
 <div class="totals" id="totals"></div>
+<!-- Select: tag many transactions at once (app.js). The bar sits at the bottom while selecting. -->
+<div class="selectrow"><button type="button" class="pill" id="selectToggle" aria-pressed="false" title="Select transactions to tag several at once">Select</button></div>
 <main id="feed"><div class="empty">Loading…</div></main>
+<div class="selectbar" id="selectBar" hidden role="region" aria-label="Tag the selected transactions">
+  <span class="selcount" id="selCount">0 selected</span>
+  <button type="button" class="sellink" id="selAll">Select all</button>
+  <button type="button" class="sellink" id="selNone">Clear</button>
+  <span class="seltag"><input id="selTag" list="selTags" maxlength="64" placeholder="Tag to add" aria-label="Tag to add" /><datalist id="selTags"></datalist>
+    <button type="button" class="pill solid" id="selAdd">Add tag</button></span>
+  <select id="selRemove" aria-label="Remove a tag from the selected"><option value="">Remove a tag…</option></select>
+  <span class="selmsg" id="selMsg" role="status"></span>
+  <button type="button" class="pill" id="selDone">Done</button>
+</div>
 
 <script src="/app.js"></script>
 <script src="/abc.js" defer></script>
