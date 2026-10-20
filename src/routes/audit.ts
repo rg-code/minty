@@ -2,6 +2,7 @@ import type { Env } from "../env";
 import type { Config } from "../config";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { markAuditDirty } from "../audit/totals";
+import { ACCOUNT_NAME } from "../accounts";
 
 /** CFA, the Complete financial audit (docs/cfa.md), phase C2: what the audit's charts show. Reads
  * only what the cron prepared (monthly_totals, net_worth, recurring_charges), never the
@@ -36,7 +37,7 @@ export async function audit(env: Env, config: Config, url: URL): Promise<Respons
                            r.distinct_amounts, r.first_date, r.last_date, o.bucket AS corrected
                     FROM recurring_charges r LEFT JOIN bucket_overrides o ON o.merchant = r.merchant
                     WHERE 1${by("r.owner")}`).bind(...who),
-    env.DB.prepare(`SELECT name, mask, owner, balance_current_cents AS balance FROM accounts
+    env.DB.prepare(`SELECT ${ACCOUNT_NAME("accounts")} AS name, mask, owner, balance_current_cents AS balance FROM accounts
                     WHERE type = 'credit'${by("owner")}`).bind(...who),
     env.DB.prepare("SELECT merchant, bucket FROM bucket_overrides"),
     env.DB.prepare("SELECT key, value, updated_at FROM app_state WHERE key IN ('audit_watermark', 'audit_rebuilt_at', 'audit_dirty')"),

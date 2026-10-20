@@ -7,6 +7,7 @@ import { plaidPost } from "../plaid";
 import { bankHealth, bankRows } from "../health";
 import type { ItemRow } from "../sync";
 import { billStatus, listBills } from "./household-bills";
+import { ACCOUNT_NAME } from "../accounts";
 
 /** Bills (docs/bills.md), part 1: credit cards. GET /bills lists every credit card with its balance
  * and, where statement details are on for its bank, the latest statement (amount, minimum, due
@@ -27,7 +28,7 @@ const PAYMENT = `t.pending = 0 AND t.amount_cents < 0
 // one card_statements lookup per card, and that card's transactions from its statement date to
 // today (both ends bounded, so idx_txn_account_date reads only that range; test/reads.test.ts).
 const CARDS_SQL = `
-  SELECT a.id AS account_id, a.owner, a.name, a.mask, a.balance_current_cents AS balance_cents, a.currency,
+  SELECT a.id AS account_id, a.owner, ${ACCOUNT_NAME("a")} AS name, a.mask, a.balance_current_cents AS balance_cents, a.currency,
          i.id AS item_id, i.institution_name AS bank,
          ss.status AS statements_status, ss.synced_at AS statements_synced_at, ss.last_error AS statements_error,
          s.issue_date, s.balance_cents AS statement_cents, s.minimum_payment_cents, s.due_date,

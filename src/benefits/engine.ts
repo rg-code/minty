@@ -17,7 +17,8 @@ export interface CardRow {
   id: number;
   owner: string;
   bank: string | null;
-  name: string | null;
+  name: string | null;              // Plaid's: what products are recognised by
+  shown?: string | null;            // the name pages show (src/accounts.ts)
   mask: string | null;
   product_id: string | null;        // card_products: null = automatic, 'none' = no credits
   anniversary_month: number | null;
@@ -300,7 +301,7 @@ export function computeCard(card: CardRow, input: Input, cardRows = input.rows.f
   const rows = cardRows.map(tag);
   const { product, source } = productFor(card, rows);
   const out: CardOut = {
-    account_id: card.id, owner: card.owner, bank: card.bank, name: card.name, mask: card.mask, hidden: !!card.hidden,
+    account_id: card.id, owner: card.owner, bank: card.bank, name: card.shown ?? card.name, mask: card.mask, hidden: !!card.hidden,
     product: product && { id: product.id, name: product.name, issuer: product.issuer, fee_cents: product.feeCents },
     product_source: source, benefits: [], totals: zero(),
   };
