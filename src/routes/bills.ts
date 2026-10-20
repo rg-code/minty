@@ -31,7 +31,7 @@ const CARDS_SQL = `
          i.id AS item_id, i.institution_name AS bank,
          ss.status AS statements_status, ss.synced_at AS statements_synced_at, ss.last_error AS statements_error,
          s.issue_date, s.balance_cents AS statement_cents, s.minimum_payment_cents, s.due_date,
-         s.last_payment_cents, s.last_payment_date, s.is_overdue,
+         s.last_payment_cents, s.last_payment_date, s.is_overdue, s.marked_paid_at,
          CASE WHEN s.issue_date IS NULL THEN NULL ELSE
            (SELECT coalesce(sum(-t.amount_cents), 0) FROM transactions t
             WHERE t.account_id = a.id AND t.date > s.issue_date AND t.date <= date('now', '+2 days') AND ${PAYMENT}) END AS paid_cents
@@ -45,7 +45,7 @@ const CARDS_SQL = `
 
 // Each card's last statements, newest first, with the payments seen between that statement and the next.
 const HISTORY_SQL = `
-  SELECT h.account_id, h.issue_date, h.balance_cents AS statement_cents, h.minimum_payment_cents, h.due_date,
+  SELECT h.account_id, h.issue_date, h.balance_cents AS statement_cents, h.minimum_payment_cents, h.due_date, h.marked_paid_at,
          (SELECT coalesce(sum(-t.amount_cents), 0) FROM transactions t
           WHERE t.account_id = h.account_id AND t.date > h.issue_date
             AND t.date <= coalesce(h.next_issue, date('now', '+2 days')) AND ${PAYMENT}) AS paid_cents
@@ -63,23 +63,28 @@ interface CardRow {
   statements_status: string | null; statements_synced_at: string | null; statements_error: string | null;
   issue_date: string | null; statement_cents: number | null; minimum_payment_cents: number | null; due_date: string | null;
   last_payment_cents: number | null; last_payment_date: string | null; is_overdue: number | null; paid_cents: number | null;
+  marked_paid_at: string | null;
 }
 
 const daysUntil = (date: string, today: string) => Math.round((Date.parse(date) - Date.parse(today)) / 864e5);
 
 /** Whether a statement looks paid, from the payments seen on the card since it closed, cross-checked
  * with the bank's own last payment. Minty's estimate, not the bank's confirmation. A bank whose
- * transactions aren't current can't show an unpaid statement as unpaid: that's "unknown". */
+ * transactions aren't current can't show an unpaid statement as unpaid: that's "unknown". A
+ * statement marked paid by hand (paid from an account Minty doesn't see) is paid, whatever the
+ * transactions say; `paid_how` says which it was. */
 export function statementStatus(
   s: { statement_cents: number | null; due_date: string | null; paid_cents: number | null; issue_date: string;
-       last_payment_cents?: number | null; last_payment_date?: string | null; is_overdue?: number | null },
+       last_payment_cents?: number | null; last_payment_date?: string | null; is_overdue?: number | null; marked_paid_at?: string | null },
   today: string, feedCurrent: boolean,
-): { status: CardStatus; attention: boolean; days_left: number | null } {
+): { status: CardStatus; attention: boolean; days_left: number | null; paid_how?: "marked" | "payments" | "bank" } {
   const owed = s.statement_cents ?? 0;
   const days = s.due_date ? daysUntil(s.due_date, today) : null;
   if (owed <= 0) return { status: "nothing_due", attention: false, days_left: days };
+  if (s.marked_paid_at) return { status: "paid", attention: false, days_left: days, paid_how: "marked" };
   const bankSaysPaid = !!s.last_payment_date && s.last_payment_date > s.issue_date && (s.last_payment_cents ?? 0) >= owed;
-  if ((s.paid_cents ?? 0) >= owed || bankSaysPaid) return { status: "paid", attention: false, days_left: days };
+  if ((s.paid_cents ?? 0) >= owed) return { status: "paid", attention: false, days_left: days, paid_how: "payments" };
+  if (bankSaysPaid) return { status: "paid", attention: false, days_left: days, paid_how: "bank" };
   if (!feedCurrent) return { status: "unknown", attention: false, days_left: days };
   if (s.is_overdue === 1 || (days !== null && days < 0)) return { status: "overdue", attention: true, days_left: days };
   const soon = days !== null && days <= ATTENTION_DAYS;
@@ -101,7 +106,7 @@ export async function bills(env: Env, config: Config): Promise<Response> {
     const st = statementStatus(h as never, today, card ? current(card.item_id) : true);
     (history.get(h.account_id) ?? history.set(h.account_id, []).get(h.account_id)!).push({
       issue_date: h.issue_date, statement_cents: h.statement_cents, minimum_payment_cents: h.minimum_payment_cents,
-      due_date: h.due_date, paid_cents: h.paid_cents, status: st.status,
+      due_date: h.due_date, paid_cents: h.paid_cents, status: st.status, paid_how: st.paid_how ?? null, marked_paid_at: h.marked_paid_at ?? null,
     });
   }
   const cards = rows.map((r) => {
@@ -115,8 +120,10 @@ export async function bills(env: Env, config: Config): Promise<Response> {
         issue_date: r.issue_date, statement_cents: r.statement_cents, minimum_payment_cents: r.minimum_payment_cents,
         due_date: r.due_date, paid_cents: r.paid_cents, last_payment_cents: r.last_payment_cents,
         last_payment_date: r.last_payment_date, is_overdue: r.is_overdue === null ? null : !!r.is_overdue,
+        marked_paid_at: r.marked_paid_at,
       } : null,
       status: latest?.status ?? "no_statement",
+      paid_how: latest?.paid_how ?? null,
       attention: latest?.attention ?? false,
       days_left: latest?.days_left ?? null,
       reason: latest?.status === "unknown" ? (health?.message ?? "This bank's transactions aren't up to date.") : null,
@@ -192,6 +199,19 @@ export async function statementBanks(env: Env): Promise<Response> {
      WHERE EXISTS (SELECT 1 FROM accounts a WHERE a.item_id = i.id AND a.type = 'credit')
      ORDER BY i.owner, i.id`).all();
   return json(results);
+}
+
+/** POST /statements/paid {account_id, issue_date, paid}: mark a card statement paid by hand (or
+ * take the mark off), for one Minty can't reconcile from transactions alone. */
+export async function markStatementPaid(env: Env, request: Request): Promise<Response> {
+  const b = await objectBody(request);
+  if (!Number.isInteger(b.account_id)) throw unprocessable("account_id must be an integer");
+  if (typeof b.issue_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(b.issue_date)) throw unprocessable("issue_date must be a date (YYYY-MM-DD)");
+  if (typeof b.paid !== "boolean") throw unprocessable("paid must be true or false");
+  const r = await env.DB.prepare(`UPDATE card_statements SET marked_paid_at = ${b.paid ? NOW : "NULL"} WHERE account_id = ? AND issue_date = ? RETURNING marked_paid_at`)
+    .bind(b.account_id, b.issue_date).first<{ marked_paid_at: string | null }>();
+  if (!r) throw new HttpError(404, "statement not found");
+  return json({ account_id: b.account_id, issue_date: b.issue_date, marked_paid_at: r.marked_paid_at });
 }
 
 /** POST /statements/off {item_id}: stop fetching statement details for a bank. The statements

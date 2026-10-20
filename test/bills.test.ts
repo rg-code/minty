@@ -262,3 +262,47 @@ describe("Setup checks", () => {
       .toMatchObject({ ok: false, level: "warn", message: expect.stringContaining("Chase needs your consent again") });
   });
 });
+
+describe("marking a card statement paid by hand", () => {
+  const post = (body: unknown) => getJson<any>("/statements/paid", { method: "POST", body: JSON.stringify(body) });
+
+  it("a marked statement is paid, whatever the transactions say, and says so; unmarking undoes it", () => {
+    const s = { statement_cents: 41250, due_date: day(5), paid_cents: 0, issue_date: day(-20) };
+    expect(statementStatus(s, day(0), true)).toMatchObject({ status: "unpaid" });
+    expect(statementStatus({ ...s, marked_paid_at: "2026-10-19T10:00:00.000Z" }, day(0), true)).toMatchObject({ status: "paid", paid_how: "marked", attention: false });
+    expect(statementStatus({ ...s, marked_paid_at: "2026-10-19T10:00:00.000Z" }, day(0), false)).toMatchObject({ status: "paid", paid_how: "marked" });   // even with the feed behind
+    expect(statementStatus({ ...s, paid_cents: 41250 }, day(0), true)).toMatchObject({ status: "paid", paid_how: "payments" });
+  });
+
+  it("POST /statements/paid marks one statement; GET /bills shows it paid, marked; a refresh keeps the mark", async () => {
+    const { item, card } = await bank();
+    await saveStatements(E, item, liabilities([credit({ last_payment_amount: 0, last_payment_date: null })]));
+    expect((await getJson<any>("/bills")).body.cards[0]).toMatchObject({ status: "unpaid", paid_how: null });
+    const { status, body } = await post({ account_id: card, issue_date: day(-20), paid: true });
+    expect(status).toBe(200);
+    expect(body.marked_paid_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect((await getJson<any>("/bills")).body.cards[0]).toMatchObject({ status: "paid", paid_how: "marked", attention: false });
+    await saveStatements(E, item, liabilities([credit({ last_payment_amount: 0, last_payment_date: null, last_statement_balance: 412.5 })]));   // the daily refresh
+    expect((await getJson<any>("/bills")).body.cards[0]).toMatchObject({ status: "paid", paid_how: "marked" });
+    await post({ account_id: card, issue_date: day(-20), paid: false });
+    expect((await getJson<any>("/bills")).body.cards[0]).toMatchObject({ status: "unpaid", paid_how: null });
+  });
+
+  it("past statements can be marked too", async () => {
+    const { item, card } = await bank();
+    await saveStatements(E, item, liabilities([credit({ last_statement_issue_date: day(-50), next_payment_due_date: day(-25), last_payment_amount: 0, last_payment_date: null })]));
+    await saveStatements(E, item, liabilities([credit()]));
+    await post({ account_id: card, issue_date: day(-50), paid: true });
+    const past = (await getJson<any>("/bills")).body.cards[0].history[0];
+    expect(past).toMatchObject({ issue_date: day(-50), status: "paid", paid_how: "marked" });
+  });
+
+  it.each([[{ account_id: "x", issue_date: "2026-01-01", paid: true }], [{ account_id: 1, issue_date: "Jan 1", paid: true }], [{ account_id: 1, issue_date: "2026-01-01", paid: "yes" }]])(
+    "refuses %j", async (b) => {
+      expect((await post(b)).status).toBe(422);
+    });
+
+  it("a statement that doesn't exist is a 404", async () => {
+    expect((await post({ account_id: 999999, issue_date: "2026-01-01", paid: true })).status).toBe(404);
+  });
+});
