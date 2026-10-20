@@ -139,7 +139,19 @@ describe("static pages", () => {
     expect(html).toMatch(/strip\.append\(controls\)/);                                // the same controls, so their state comes along
     expect(html).toMatch(/header\.append\(controls\)/);
     expect(html).toMatch(/header\.style\.minHeight = header\.offsetHeight/);           // the list doesn't jump
-    for (const id of ["tagBtn", "bankBtn", "acctBtn", "dateBtn"]) expect(html).toContain(`.ministrip #${id}::before { -webkit-mask-image:`);
+    // On phones the filters are icon buttons in the header and the strip alike.
+    for (const id of ["tagBtn", "bankBtn", "acctBtn", "dateBtn"]) expect(html).toContain(`  #${id}::before { -webkit-mask-image:`);
+  });
+
+  it("on phones the header is compact: logo, count and theme on one line, the links on the next, Add in the ⋯ menu", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('grid-template-areas: "brand count theme" "links links links";');
+    expect(html).toContain('<a class="phoneonly" href="/connect">+ Add account');
+    expect(html).toContain('<a class="phoneonly" href="/add-user">+ Add user');
+    expect(html).toContain(".links .addlink { display: none; }");
+    // A bank's warning is one line; a tap on it shows what it means.
+    expect(html).toContain(".health .hl:not(.open) .what, .health .hl:not(.open) .code { display: none; }");
+    expect(html).toMatch(/closest\(".hl"\)\.classList\.toggle\("open"\)/);
   });
 
   it("dashboard has a Dates menu with quick ranges, like the other filters", async () => {

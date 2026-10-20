@@ -174,6 +174,11 @@ async function loadHealth() {
   box.hidden = !html;
   document.getElementById("healthMore")?.addEventListener("click", () => { healthOpen = true; loadHealth(); });
 }
+// On phones a bank's line shows only its message; a tap on it shows what it means and what to do.
+document.getElementById("health").addEventListener("click", e => {
+  const msg = e.target.closest(".hl .msg");
+  if (msg) msg.closest(".hl").classList.toggle("open");
+});
 
 function visibleBanks() {
   return (ITEMS || []).filter(it => state.owner === "all" || it.owner === state.owner);

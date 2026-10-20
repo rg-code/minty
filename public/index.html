@@ -112,7 +112,8 @@
               border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); cursor: pointer; }
   .moreload:hover { border-color: var(--muted); }
   /* Select: tag many at once */
-  .selectrow { display: flex; justify-content: flex-end; padding: 8px var(--pad) 0; }
+  .selectrow { position: relative; height: 0; padding: 0 var(--pad); z-index: 2; }   /* on the first date line, not a row of its own */
+  .selectrow .pill { position: absolute; right: var(--pad); top: calc(var(--pad) - 6px); padding: 4px 11px; font-size: 12.5px; }
   .selectrow .pill[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
   body.selecting .row { grid-template-columns: 3px 18px 1fr auto; }      /* the stripe, the box, then as usual */
   .txn .selbox { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
@@ -287,9 +288,11 @@
   .health .act:hover { background: var(--surface); }
   .health .more { display: block; width: 100%; text-align: left; font: inherit; font-size: 12.5px; padding: 8px var(--pad);
                   background: var(--surface); color: var(--muted); border: 0; border-top: 1px solid var(--hairline); cursor: pointer; }
-  @media (max-width: 560px) {
-    .health .hl { grid-template-columns: 16px 1fr; }
-    .health .act { grid-column: 2; grid-row: auto; justify-self: start; margin-top: 6px; }
+  @media (max-width: 640px) {   /* phones: one line per bank (the message, and its button beside it); a tap shows why */
+    .health .hl { padding: 8px 12px; font-size: 13px; gap: 2px 8px; }
+    .health .act { grid-row: 1; padding: 4px 9px; }
+    .health .hl:not(.open) .what, .health .hl:not(.open) .code { display: none; }
+    .health .hl:has(.what) .msg { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
   /* A raised pill, as on Inkling (~/RInkU site/style.css .pill): hairline border, surface fill,
@@ -303,7 +306,41 @@
   .pill .icon { width: 16px; height: 16px; }
   .links { align-items: center; }
   .addlink { white-space: nowrap; }
-  @media (max-width: 640px) { .links { gap: 8px; flex-wrap: wrap; justify-content: flex-end; } }   /* ABC, BAM, ⋯ and + Add account on a phone */
+  /* Phones: as little as possible above the transactions.
+     Row 1: the logo, the count and last sync, the theme toggle. Row 2: ABC, BAM, EGG and ⋯ side by
+     side (+ Add account and + Add user move into ⋯). Then the person switch, then search with the
+     filters as icon buttons. Totals are small cards side by side. */
+  .phoneonly { display: none !important; }
+  @media (max-width: 640px) {
+    .phoneonly { display: flex !important; }
+    body > header { padding: 10px 12px 8px; }
+    .title-row { display: grid; grid-template-columns: auto 1fr auto; grid-template-areas: "brand count theme" "links links links"; gap: 8px 10px; align-items: center; }
+    .title-row .brand { grid-area: brand; }
+    .title-row .brand .wordmark { height: 26px; width: auto; }
+    .title-row .coinbtn img { width: 26px; height: 26px; }
+    .title-row .countstack { grid-area: count; min-width: 0; }
+    .title-row .countstack .sub { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .title-row .themetoggle { grid-area: theme; }
+    .links { grid-area: links; margin: 0; gap: 6px; flex-wrap: nowrap; justify-content: stretch; }
+    .links > .pill, .links > .more { flex: 1 1 0; min-width: 0; }
+    .links .pill { justify-content: center; padding: 6px 6px; gap: 5px; }
+    .links .more .pill { width: 100%; }
+    .links .addlink { display: none; }
+    .moremenu { right: 0; }
+    header .controls { margin-top: 10px; gap: 6px; position: relative; }
+    header .controls .seg { flex: 1 1 100%; }
+    header .controls .seg button { padding: 6px 12px; }
+    header .controls #q { flex: 1 1 0; min-width: 0; height: 40px; }
+    header .controls .tagpick { flex: 0 0 42px; position: static; }
+    header .controls .tagbtn { height: 40px; }
+    header .controls .tagmenu { left: 0; right: 0; min-width: 0; max-width: none; }
+    .totals { flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 10px 12px 0; scrollbar-width: none; }
+    .totals::-webkit-scrollbar { display: none; }
+    .stat { flex: 1 0 auto; min-width: calc(50% - 4px); padding: 8px 12px; }
+    .stat .v { font-size: 18px; margin-top: 1px; }
+    main { padding: 12px; }
+    .selectrow { padding: 0 12px; }
+  }
 
   /* Phones: the header scrolls away with the page, and once it's gone a small strip pinned to the
      top takes over (setCompact below). The filters move into it as they are, shown as icon buttons
@@ -332,15 +369,18 @@
                         padding: 0 11px 0 34px; background-position: 10px center; color: var(--ink); caret-color: auto; cursor: text; }
   .ministrip #q:focus::placeholder { color: var(--muted); }
   .ministrip .tagpick { flex: 0 1 38px; min-width: 32px; position: static; }
-  .ministrip .tagbtn { width: 100%; height: 38px; padding: 0; font-size: 0; max-width: none; }
-  .ministrip .tagbtn::after { display: none; }
-  .ministrip .tagbtn::before { content: ""; position: absolute; inset: 0; margin: auto; width: 18px; height: 18px; background: var(--muted);
+  @media (max-width: 640px) { .tagbtn { width: 100%; padding: 0; font-size: 0; max-width: none; } }
+  .ministrip .tagbtn { height: 38px; }
+  @media (max-width: 640px) {   /* phones: the filters are icon buttons, in the header and in the strip alike */
+  .tagbtn::after { display: none; }
+  .tagbtn::before { content: ""; position: absolute; inset: 0; margin: auto; width: 18px; height: 18px; background: var(--muted);
                                -webkit-mask: center / contain no-repeat; mask: center / contain no-repeat; }
-  .ministrip #tagBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z'/%3E%3Ccircle cx='7.5' cy='7.5' r='1.5'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z'/%3E%3Ccircle cx='7.5' cy='7.5' r='1.5'/%3E%3C/svg%3E"); }
-  .ministrip #bankBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10h18L12 4 3 10zM5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10h18L12 4 3 10zM5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18'/%3E%3C/svg%3E"); }
-  .ministrip #acctBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='5' width='19' height='14' rx='2'/%3E%3Cpath d='M2.5 10h19M6 15h4'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='5' width='19' height='14' rx='2'/%3E%3Cpath d='M2.5 10h19M6 15h4'/%3E%3C/svg%3E"); }
-  .ministrip #dateBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15' rx='2'/%3E%3Cpath d='M3.5 10h17M8 3v4M16 3v4'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15' rx='2'/%3E%3Cpath d='M3.5 10h17M8 3v4M16 3v4'/%3E%3C/svg%3E"); }
-  .ministrip .tagbtn.active::before { background: var(--accent); }
+  #tagBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z'/%3E%3Ccircle cx='7.5' cy='7.5' r='1.5'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z'/%3E%3Ccircle cx='7.5' cy='7.5' r='1.5'/%3E%3C/svg%3E"); }
+  #bankBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10h18L12 4 3 10zM5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10h18L12 4 3 10zM5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18'/%3E%3C/svg%3E"); }
+  #acctBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='5' width='19' height='14' rx='2'/%3E%3Cpath d='M2.5 10h19M6 15h4'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='5' width='19' height='14' rx='2'/%3E%3Cpath d='M2.5 10h19M6 15h4'/%3E%3C/svg%3E"); }
+  #dateBtn::before { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15' rx='2'/%3E%3Cpath d='M3.5 10h17M8 3v4M16 3v4'/%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15' rx='2'/%3E%3Cpath d='M3.5 10h17M8 3v4M16 3v4'/%3E%3C/svg%3E"); }
+  .tagbtn.active::before { background: var(--accent); }
+  }
   .ministrip .tagmenu { position: fixed; top: var(--strip-bottom, 56px); left: 8px; right: 8px; min-width: 0; max-width: none; }
   .ministrip .tagopts { max-height: calc(100dvh - var(--strip-bottom, 56px) - 120px); }
 </style>
@@ -370,6 +410,8 @@
         <div class="moremenu" id="moreMenu" hidden>
           <button type="button" data-open-bills>Bills<small>Card statements and your bills, by due date</small></button>
           <button type="button" data-open-cfa>CFA<small>Complete financial audit: cash flow, spending, recurring charges, net worth</small></button>
+          <a class="phoneonly" href="/connect">+ Add account<small>Link a bank, card or retirement account</small></a>
+          <a class="phoneonly" href="/add-user">+ Add user<small>People, Plaid keys and Setup checks</small></a>
         </div>
       </div>
       <a class="addlink" href="/connect">+ Add account</a>
