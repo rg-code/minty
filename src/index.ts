@@ -47,6 +47,7 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["GET", /^\/benefits$/, ({ env, url }) => abc.benefits(env, url)],
   ["PUT", /^\/benefits\/cards\/(\d+)$/, ({ env, request, params }) => abc.setCard(env, request, Number(params[0]))],
   ["PUT", /^\/benefits\/marks$/, ({ env, request, email }) => abc.setMark(env, request, email)],
+  ["POST", /^\/transactions\/tags$/, ({ env, request }) => data.bulkTags(env, request)],
   ["PUT", /^\/transactions\/([^/]+)\/tags$/, ({ env, request, params }) => {
     if (!/^\d+$/.test(params[0])) throw unprocessable("transaction id must be an integer");
     return data.setTags(env, request, Number(params[0]));

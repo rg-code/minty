@@ -258,6 +258,53 @@ export async function listTags(env: Env): Promise<Response> {
   return json(results.map((r) => r.tag));
 }
 
+const MAX_BULK_TXNS = 1000;
+
+/** POST /transactions/tags {ids, add?, remove?}: tags added to (or removed from) many transactions at
+ * once (the dashboard's Select). Tags already there stay, an existing tag isn't added twice (tags
+ * are case-insensitive), and a transaction at the 50-tag limit is left as it is. Each id is one
+ * primary-key lookup: nothing scans the transactions. */
+export async function bulkTags(env: Env, request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await jsonBody(request);
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    throw unprocessable("body must be JSON: {\"ids\": [...], \"add\": [...], \"remove\": [...]}");
+  }
+  const b = (body ?? {}) as { ids?: unknown; add?: unknown; remove?: unknown };
+  if (!Array.isArray(b.ids) || !b.ids.length || b.ids.length > MAX_BULK_TXNS || !b.ids.every((x) => Number.isInteger(x) && x > 0)) {
+    throw unprocessable(`ids must be a list of 1 to ${MAX_BULK_TXNS} transaction ids`);
+  }
+  const list = (v: unknown, k: string) => {
+    if (v === undefined) return [];
+    if (!Array.isArray(v) || !v.every((t) => typeof t === "string")) throw unprocessable(`${k} must be a list of tags`);
+    const clean = normaliseTags(v as string[]);
+    if (clean.some((t) => t.length > MAX_TAG_LENGTH)) throw unprocessable(`tags must be at most ${MAX_TAG_LENGTH} characters`);
+    return clean;
+  };
+  const add = list(b.add, "add"), remove = list(b.remove, "remove");
+  if (!add.length && !remove.length) throw unprocessable("add or remove at least one tag");
+  if (add.length > MAX_TAGS_PER_TXN) throw unprocessable(`at most ${MAX_TAGS_PER_TXN} tags per transaction`);
+  const ids = JSON.stringify([...new Set(b.ids as number[])]);
+  const results = await env.DB.batch([
+    ...remove.map((tag) => env.DB.prepare(
+      "DELETE FROM transaction_tags WHERE transaction_id IN (SELECT value FROM json_each(?1)) AND tag = ?2").bind(ids, tag)),
+    // After the existing tags, in order; only for transactions that exist and have room.
+    ...add.map((tag) => env.DB.prepare(
+      `INSERT INTO transaction_tags (transaction_id, tag, position)
+       SELECT t.id, ?2, coalesce((SELECT max(position) + 1 FROM transaction_tags x WHERE x.transaction_id = t.id), 0)
+       FROM json_each(?1) j JOIN transactions t ON t.id = j.value
+       WHERE (SELECT count(*) FROM transaction_tags x WHERE x.transaction_id = t.id) < ${MAX_TAGS_PER_TXN}
+       ON CONFLICT (transaction_id, tag) DO NOTHING`).bind(ids, tag)),
+  ]);
+  const changed = results.reduce((n, r) => n + (r.meta.changes ?? 0), 0);
+  const { results: rows } = await env.DB.prepare(
+    `SELECT t.id, (SELECT json_group_array(tag) FROM (SELECT tag FROM transaction_tags tt WHERE tt.transaction_id = t.id ORDER BY tt.position)) AS tags
+     FROM json_each(?1) j JOIN transactions t ON t.id = j.value`).bind(ids).all<{ id: number; tags: string }>();
+  return json({ changed, transactions: rows.map((r) => ({ id: r.id, tags: JSON.parse(r.tags) as string[] })) });
+}
+
 export async function setTags(env: Env, request: Request, txnId: number): Promise<Response> {
   let body: unknown;
   try {

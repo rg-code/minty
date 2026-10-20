@@ -9,6 +9,8 @@ let ITEMS = null;                  // linked bank logins from /items (null until
 let ACCOUNTS = null;               // their accounts and cards from /accounts (null until loaded)
 let openRows = new Set();          // plaid_txn_id of expanded rows (survives re-render)
 let current = new Map();           // plaid_txn_id -> txn object (for tag edits)
+let selecting = false;             // Select mode: rows have checkboxes, and the bar tags them all
+let selected = new Set();          // transaction ids (numbers) selected
 let allTags = [];
 let offline = false;
 
@@ -67,6 +69,7 @@ async function load(more = false) {
     txns = await res.json();
     if (seq !== loadSeq) return;                     // filters changed meanwhile: a newer load wins
     hasMore = txns.length > PAGE;
+    if (!more) selected.clear();                     // new filters: a selection never hides off-screen
     txns = (more ? loaded : []).concat(txns.slice(0, PAGE));
     loaded = txns;
     offline = false; banner(false);
@@ -330,7 +333,8 @@ function render(txns) {
       <div class="daylabel">${prettyDate(date)}</div>
       <div class="rows">${items.map(txnHTML).join("")}</div>
     </section>`).join("")
-    + (hasMore && !offline ? `<button type="button" class="moreload" id="moreBtn">Show more</button>` : "");
+    + (hasMore && !offline ? `<button type="button" class="moreload" id="showMore">Show more</button>` : "");
+  renderSelectBar();
 }
 
 function txnHTML(t) {
@@ -347,9 +351,10 @@ function txnHTML(t) {
   if (t.category) meta.push(`<span>${escapeHtml(titleCase(t.category))}</span>`);
   if (t.pending) meta.push(`<span class="chip pending">Pending</span>`);
   return `
-    <div class="txn ${isOpen ? "open" : ""}" data-txnid="${escapeAttr(t.plaid_txn_id)}">
+    <div class="txn ${isOpen ? "open" : ""}${selecting && selected.has(t.id) ? " selected" : ""}" data-txnid="${escapeAttr(t.plaid_txn_id)}">
       <div class="row" role="button" tabindex="0" aria-expanded="${isOpen}">
         <div class="stripe" style="background:${colorOf(t.owner)}"></div>
+        ${selecting ? (t.id != null ? `<input type="checkbox" class="selbox" data-sel="${t.id}"${selected.has(t.id) ? " checked" : ""} aria-label="Select ${escapeAttr(merchant)}">` : "<span></span>") : ""}
         <div class="desc">
           <div class="name">${escapeHtml(merchant)}</div>
           <div class="meta">${meta.join("")} ${tagChips}</div>
@@ -402,6 +407,18 @@ function renderTotals(txns) {
 const feed = document.getElementById("feed");
 
 feed.addEventListener("click", (e) => {
+  if (selecting) {                                          // Select mode: a row (or its box) toggles it
+    const row = e.target.closest(".row");
+    if (!row || e.target.closest(".detail")) return;
+    const t = txnFromEl(row);
+    if (t?.id == null) return;
+    if (selected.has(t.id)) selected.delete(t.id); else selected.add(t.id);
+    row.closest(".txn").classList.toggle("selected", selected.has(t.id));
+    const box = row.querySelector(".selbox");
+    if (box && e.target !== box) box.checked = selected.has(t.id);
+    renderSelectBar();
+    return;
+  }
   const filterTag = e.target.closest(".tag[data-tag]");
   if (filterTag && !e.target.closest(".detail")) {         // row tag chip → filter by it
     e.stopPropagation();                                    // add it to the tag filter
@@ -440,7 +457,8 @@ feed.addEventListener("keydown", (e) => {
   }
   if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("row")) {
     e.preventDefault();
-    toggle(e.target.closest(".txn"));
+    if (selecting) e.target.click();                       // select it, as a click would
+    else toggle(e.target.closest(".txn"));
   }
 });
 
@@ -748,7 +766,75 @@ syncBtn.addEventListener("click", async () => {
     if (r.ok) { const st = await r.json(); showSync(st); clearTimeout(syncPoll); if (st.pending) syncPoll = setTimeout(() => checkSync(true), 60000); }
   } catch {}
 });
-document.getElementById("feed").addEventListener("click", e => { if (e.target.id === "moreBtn") { e.target.disabled = true; load(true); } });
+document.getElementById("feed").addEventListener("click", e => { if (e.target.id === "showMore") { e.target.disabled = true; load(true); } });
+
+// --- Select: tag many transactions at once ------------------------------------
+const SELECT_ALL_MAX = 2000;                        // "Select all" loads older pages up to this many
+const selBar = document.getElementById("selectBar"), selMsg = document.getElementById("selMsg");
+function renderSelectBar() {
+  document.getElementById("selectToggle").setAttribute("aria-pressed", selecting);
+  document.getElementById("selectToggle").textContent = selecting ? "Selecting…" : "Select";
+  selBar.hidden = !selecting;
+  document.body.classList.toggle("selecting", selecting);
+  if (!selecting) return;
+  const n = selected.size, shown = loaded.filter(t => t.id != null).length;
+  document.getElementById("selCount").textContent = `${n.toLocaleString()} selected`;
+  document.getElementById("selAll").textContent = hasMore ? `Select all (loads older ones, up to ${SELECT_ALL_MAX.toLocaleString()})` : `Select all ${shown.toLocaleString()}`;
+  document.getElementById("selAdd").disabled = !n;
+  // tags on the selected transactions, to remove; every tag in use, to suggest
+  const onSelected = [...new Set(loaded.filter(t => selected.has(t.id)).flatMap(t => t.tags || []))].sort();
+  document.getElementById("selRemove").innerHTML = `<option value="">Remove a tag…</option>` + onSelected.map(tg => `<option value="${escapeAttr(tg)}">${escapeHtml(tg)}</option>`).join("");
+  document.getElementById("selRemove").disabled = !onSelected.length;
+  document.getElementById("selTags").innerHTML = allTags.map(tg => `<option value="${escapeAttr(tg)}">`).join("");
+}
+function setSelecting(on) {
+  selecting = on;
+  if (!on) { selected.clear(); selMsg.textContent = ""; }
+  render(loaded);
+}
+document.getElementById("selectToggle").addEventListener("click", () => setSelecting(!selecting));
+document.getElementById("selDone").addEventListener("click", () => setSelecting(false));
+document.getElementById("selNone").addEventListener("click", () => { selected.clear(); render(loaded); });
+document.getElementById("selAll").addEventListener("click", async () => {
+  if (hasMore) {
+    selMsg.textContent = "Loading older transactions…";
+    while (hasMore && loaded.length < SELECT_ALL_MAX) { const before = loaded.length; await load(true); if (loaded.length === before) break; }
+    selMsg.textContent = hasMore ? `Selected the newest ${loaded.length.toLocaleString()}; narrow the filters to reach older ones.` : "";
+  }
+  for (const t of loaded) if (t.id != null) selected.add(t.id);
+  render(loaded);
+});
+async function bulkTag(body, done) {
+  if (!selected.size) return;
+  selMsg.textContent = "Saving…";
+  try {
+    const ids = [...selected];
+    let changed = 0;
+    for (let i = 0; i < ids.length; i += 1000) {     // the API takes 1,000 at a time
+      const res = await fetch("/transactions/tags", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: ids.slice(i, i + 1000), ...body }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `HTTP ${res.status}`);
+      const out = await res.json();
+      changed += out.changed;
+      const byId = new Map(out.transactions.map(t => [t.id, t.tags]));
+      for (const t of loaded) if (byId.has(t.id)) t.tags = byId.get(t.id);
+    }
+    selMsg.textContent = done(changed);
+    refreshTags();
+    render(loaded);
+  } catch (e) { selMsg.textContent = `Couldn't save: ${e.message}`; }
+}
+document.getElementById("selAdd").addEventListener("click", () => {
+  const tag = document.getElementById("selTag").value.trim();
+  if (!tag) { selMsg.textContent = "Type a tag first."; return; }
+  bulkTag({ add: [tag] }, n => `Tagged ${n.toLocaleString()} with “${tag}”${n < selected.size ? ` (${(selected.size - n).toLocaleString()} had it already)` : ""}.`);
+  document.getElementById("selTag").value = "";
+});
+document.getElementById("selTag").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("selAdd").click(); });
+document.getElementById("selRemove").addEventListener("change", e => {
+  const tag = e.target.value;
+  if (tag) bulkTag({ remove: [tag] }, n => `Removed “${tag}” from ${n.toLocaleString()}.`);
+});
 
 loadUsers().then(() => { loadItems(); loadAccounts(); load(); loadHealth(); checkSync(false); });
 setInterval(() => { if (!document.hidden && !syncBtn.classList.contains("syncing")) checkSync(false); }, 10 * 60 * 1000);   // keep "Last synced" current
