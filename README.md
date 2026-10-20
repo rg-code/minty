@@ -93,6 +93,7 @@ the secret names to add in the Cloudflare dashboard.
     POST /link/statements/complete {session_id}   (turns statement details on once Plaid confirms the consent)
     GET  /statements             banks with credit cards + whether statement details are on
     POST /statements/off         {item_id}   (stop fetching; saved statements stay)
+    POST /statements/paid        {account_id, issue_date, paid}   mark a card statement paid by hand (or not), for one paid from an account Minty doesn't see
     GET  /bills                  credit card statements and the household's bills: due dates, paid estimate, balances, past statements (docs/bills.md)
     POST /bills                  {biller, amount_cents, due_date, statement_date?, owner?, match_name?, account_hint?, source?, file_sha256?}   add a bill
     PUT  /bills/{id}             change a bill (only the fields sent)

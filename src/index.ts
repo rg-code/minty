@@ -73,6 +73,7 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["POST", /^\/link\/statements\/complete$/, ({ env, config, request, email }) => bills.completeStatements(env, config, request, email)],
   ["GET", /^\/statements$/, ({ env }) => bills.statementBanks(env)],
   ["POST", /^\/statements\/off$/, ({ env, request }) => bills.statementsOff(env, request)],
+  ["POST", /^\/statements\/paid$/, ({ env, request }) => bills.markStatementPaid(env, request)],
   ["POST", /^\/link\/token\/investments$/, ({ env, config, request, email }) => link.updateMode(env, config, request, email, "investments")],
   ["POST", /^\/link\/investments\/complete$/, ({ env, config, request, email }) => inv.completeInvestments(env, config, request, email)],
   ["GET", /^\/retirement$/, ({ env, config, url }) => egg.retirement(env, config, url)],

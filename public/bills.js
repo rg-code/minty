@@ -147,7 +147,7 @@
     if (notes.length) html += `<div class="bill-notes">` + notes.map(b => `<p>${esc(b.bank || "A bank")}: ${esc(BANK_NOTE[b.statements])} <a href="/connect#statements">Statement details</a></p>`).join("") + `</div>`;
     const off = data.cards.filter(c => !c.latest);
     if (off.length) html += `<p class="bill-hint">${off.length} card${off.length === 1 ? " has" : "s have"} no statement details (${off.map(short).join(", ")}). <a href="/connect#statements">Turn them on</a> to see statements, due dates and whether they're paid.</p>`;
-    html += `<p class="bill-fine">Statement dates ahead are estimates from each card's past statements. "Paid" is Minty's estimate from the payments posted after a statement or bill; the bank's or biller's own records are what count.</p>`;
+    html += `<p class="bill-fine">Statement dates ahead are estimates from each card's past statements. "Paid" is Minty's estimate from the payments posted after a statement or bill; the bank's or biller's own records are what count. Paid from an account Minty doesn't see? Use Mark paid.</p>`;
     html += `<input type="file" id="billPdfs" accept="application/pdf,.pdf" multiple hidden><input type="file" id="billFolder" webkitdirectory multiple hidden>`;
     main.innerHTML = html;
   }
@@ -162,13 +162,18 @@
           <div class="bill-meta">Estimated statement date (last one closed ${day(e.card.latest.issue_date)} for ${money(e.card.latest.statement_cents)}). Balance now ${money(e.card.balance_cents)}.</div></div></div>`;
       } else if (e.card) {
         const c = e.card, s = c.latest;
-        const chip = c.status === "partial" ? `Partly paid: ${money(s.paid_cents)} of ${money(s.statement_cents)}` : STATUS[c.status] ?? c.status;
+        const chip = c.paid_how === "marked" ? "Marked paid" : c.status === "partial" ? `Partly paid: ${money(s.paid_cents)} of ${money(s.statement_cents)}` : STATUS[c.status] ?? c.status;
+        // Paid from an account Minty doesn't see? It can be marked paid by hand (and unmarked).
+        const markBtn = (card, st, how, status) => how === "marked"
+          ? `<button type="button" data-stmt="${card.account_id}|${esc(st.issue_date)}" data-to="false">Mark not paid</button>`
+          : ["unpaid", "partial", "overdue", "unknown"].includes(status) ? `<button type="button" data-stmt="${card.account_id}|${esc(st.issue_date)}" data-to="true">Mark paid</button>` : "";
         html += `<div class="bill due${c.attention ? " attention" : ""}"><div class="bill-main"><div class="bill-name">${e.name}<span class="bill-where">${esc(c.bank || "")}${person(c.owner) ? " · " + person(c.owner) : ""}</span></div>
           <div class="bill-meta">Payment due: statement ${money(s.statement_cents)}${s.minimum_payment_cents ? `, minimum ${money(s.minimum_payment_cents)}` : ""}. Closed ${day(s.issue_date)}.</div>
           <div class="bill-meta">Balance now ${money(c.balance_cents)}${s.paid_cents ? `. Paid since the statement: ${money(s.paid_cents)}` : ""}.</div>
           ${c.reason ? `<div class="bill-meta bill-why">${esc(c.reason)}</div>` : ""}
-          ${c.history.length ? `<details class="bill-past"><summary>Past statements (${c.history.length})</summary><table class="bill-history"><thead><tr><th>Closed</th><th>Amount</th><th>Due</th><th>Paid?</th></tr></thead><tbody>` +
-            c.history.map(h => `<tr><td>${dayYear(h.issue_date)}</td><td>${money(h.statement_cents)}</td><td>${h.due_date ? day(h.due_date) : "—"}</td><td><span class="bill-chip ${esc(h.status)}">${esc(STATUS[h.status] ?? h.status)}</span></td></tr>`).join("") +
+          ${markBtn(c, s, c.paid_how, c.status) ? `<div class="bill-row-actions">${markBtn(c, s, c.paid_how, c.status)}</div>` : ""}
+          ${c.history.length ? `<details class="bill-past"><summary>Past statements (${c.history.length})</summary><table class="bill-history"><thead><tr><th>Closed</th><th>Amount</th><th>Due</th><th>Paid?</th><th></th></tr></thead><tbody>` +
+            c.history.map(h => `<tr><td>${dayYear(h.issue_date)}</td><td>${money(h.statement_cents)}</td><td>${h.due_date ? day(h.due_date) : "—"}</td><td><span class="bill-chip ${esc(h.status)}">${esc(h.paid_how === "marked" ? "Marked paid" : STATUS[h.status] ?? h.status)}</span></td><td class="bill-row-actions">${markBtn(c, h, h.paid_how, h.status)}</td></tr>`).join("") +
             `</tbody></table></details>` : ""}</div>
           <span class="bill-chip ${esc(c.status)}">${esc(chip)}</span></div>`;
       } else {
@@ -329,6 +334,12 @@
     const edit = t.closest("[data-edit]"); if (edit) { editing = Number(edit.dataset.edit); render(); return; }
     const paid = t.closest("[data-paid]");
     if (paid) { try { await api("POST", `/bills/${paid.dataset.paid}/paid`, { paid: paid.dataset.to === "true" }); } catch (err) { alert(err.message); } return load(); }
+    const st = t.closest("[data-stmt]");
+    if (st) {
+      const [account, issue] = st.dataset.stmt.split("|");
+      try { await api("POST", "/statements/paid", { account_id: Number(account), issue_date: issue, paid: st.dataset.to === "true" }); } catch (err) { alert(err.message); }
+      return load();
+    }
     const del = t.closest("[data-del]");
     if (del && confirm("Delete this bill?")) { try { await api("DELETE", `/bills/${del.dataset.del}`); } catch (err) { alert(err.message); } return load(); }
   });

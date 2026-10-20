@@ -29,6 +29,8 @@ PG&E, water, trash and the like, one entry per bill (a quarterly bill is one ent
 
 A statement is **Paid** when the payments posted to that card after it closed (up to the next statement) add up to its amount, or when the bank's own last payment, made after the statement, covers it. A payment is a posted negative amount categorised as a loan payment or transfer in, or named "payment"; refunds and rewards don't count. Otherwise it's **Partly paid** (with how much), **Not paid yet**, or **Overdue** (past its due date, or the bank's flag). A statement of zero or less is **Nothing due**.
 
+**Mark paid** (on a card's payment due, and on each past statement) covers what transactions can't show: a card paid from an account Minty doesn't see, or a payment that doesn't post as one. A marked statement is **Marked paid**, whatever the transactions say, and **Mark not paid** takes the mark off (`POST /statements/paid`; `card_statements.marked_paid_at`, migration 0016, which the statement fetch never writes, so the mark survives every refresh).
+
 If the bank's transactions aren't current (downloading, stalled, needing a reconnect), an unpaid-looking statement says **Can't tell yet**, with the reason, rather than "Not paid". The fork this feature came from goes further, establishing whether the whole statement period's history has been downloaded. Bills only needs the weeks since the latest statement closed, which the hourly sync has covered, and the bank's own last-payment figure cross-checks it.
 
 ## Reads
