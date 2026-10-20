@@ -4,6 +4,7 @@ import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { IN_RETIREMENT } from "../investments";
 import { CHECKED, kindOf } from "../retirement/limits";
 import { limitsFor } from "../retirement/irs";
+import { ACCOUNT_NAME } from "../accounts";
 
 /** EGG, phase E2 (docs/cfa.md §3): what the retirement view shows. Reads only what's stored (the
  * accounts, their daily balance snapshots, the holdings and investment transactions the cron
@@ -68,7 +69,7 @@ export async function retirementData(env: Env, owner: string | null) {
   const who = owner === null ? [] : [owner];
   const since = `${year - 1}-01-01`;
   const [accounts, snapshots, contributions, fees, mix, profiles, banks] = await env.DB.batch([
-    env.DB.prepare(`SELECT a.id, a.owner, a.name, a.mask, a.type, a.subtype, a.view, a.balance_current_cents AS balance, i.institution_name AS bank,
+    env.DB.prepare(`SELECT a.id, a.owner, ${ACCOUNT_NAME("a")} AS name, a.mask, a.type, a.subtype, a.view, a.balance_current_cents AS balance, i.institution_name AS bank,
                            ${IN_RETIREMENT("a")} AS in_retirement
                     FROM accounts a JOIN items i ON i.id = a.item_id
                     WHERE (a.type = 'investment' OR ${IN_RETIREMENT("a")})${by("a.owner")}`).bind(...who),

@@ -77,7 +77,10 @@ Design history and decisions: `docs/serverless-plan.md`.
 - Plaid amount sign: POSITIVE = money out. Stored as integer cents (`amount_cents`); the
   dashboard flips the sign for display.
 - Tags live in `transaction_tags` rows. Sync never writes them, so user labels survive
-  re-syncs. Keep it that way.
+  re-syncs. Keep it that way. The same goes for an account's own name (`accounts.display_name`,
+  `PUT /accounts/{id}/name`): pages show `ACCOUNT_NAME()` (`src/accounts.ts`: the household's
+  name, else Plaid's, tidied), while card recognition (ABC, BAM) keeps matching on Plaid's
+  `accounts.name`.
 
 ## Commands
 - Install: `npm ci` (Node 22+)

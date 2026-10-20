@@ -62,6 +62,7 @@ const many = () => USERS.length > 1;
 const mine = list => (many() ? list.filter(x => x.owner === owner) : list);
 const ownerLabel = k => USERS.find(u => u.key === k)?.label ?? k;
 let reconnectItems = [], statementList = [], investmentList = [], connectedItems = [], connectedAccounts = [], connectedLoaded = false;
+let renaming = null;                                     // the account being renamed in the Connected list
 function renderLists() { renderConnected(); renderReconnect(); renderStatements(); renderInvestments(); }
 
 // The banks and accounts already linked for the person picked.
@@ -91,9 +92,40 @@ function renderConnected() {
     const state = i.health?.state ?? "ok";
     return `<div class="line"><span>${esc(i.institution_name || "Bank")}` +
       `<span class="why${state === "ok" ? " on" : ""}">${esc(HEALTH_SHORT[state] ?? state)}</span>` +
-      (accts.length ? `<span class="accts">${accts.map(a => `${esc(a.name || "Account")}${a.mask ? ` ••${esc(a.mask)}` : ""}${a.in_retirement ? " (EGG)" : ""}`).join(" · ")}</span>` : "") +
-      `</span></div>`;
+      `</span></div>` +
+      accts.map(a => renaming === a.id
+        ? `<form class="acct rename" data-rename-form="${a.id}"><input name="name" maxlength="60" value="${esc(a.name || "")}" aria-label="New name for ${esc(a.name || "this account")}">` +
+          `<button type="submit">Save</button><button type="button" data-rename-cancel>Cancel</button>` +
+          `<span class="why">Plaid calls it ${esc(a.plaid_name || "—")}${a.display_name ? `. <button type="button" class="linkish" data-rename-reset="${a.id}">Use Plaid's name</button>` : ""}</span></form>`
+        : `<div class="acct"><span>${esc(a.name || "Account")}${a.mask ? ` ••${esc(a.mask)}` : ""}${a.in_retirement ? " (EGG)" : ""}</span>` +
+          `<button type="button" class="linkish" data-rename="${a.id}">Rename</button></div>`).join("");
   }).join("");
+}
+
+// Renaming an account (any account, any person): the name shows everywhere in Minty; Plaid's own
+// name is kept for recognising cards, and a sync never overwrites the new one.
+const connectedBox = document.getElementById("connected");
+connectedBox.addEventListener("click", async e => {
+  const r = e.target.closest("[data-rename]");
+  if (r) { renaming = Number(r.dataset.rename); renderConnected(); connectedBox.querySelector("[data-rename-form] input")?.select(); return; }
+  if (e.target.closest("[data-rename-cancel]")) { renaming = null; return renderConnected(); }
+  const reset = e.target.closest("[data-rename-reset]");
+  if (reset) { await saveName(Number(reset.dataset.renameReset), null); }
+});
+connectedBox.addEventListener("submit", async e => {
+  const f = e.target.closest("[data-rename-form]");
+  if (!f) return;
+  e.preventDefault();
+  await saveName(Number(f.dataset.renameForm), f.elements.name.value);
+});
+async function saveName(id, name) {
+  try {
+    const res = await fetch(`/accounts/${id}/name`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) });
+    if (!res.ok) throw new Error(await why(res));
+    renaming = null;
+    setStatus(name ? "Renamed. The new name shows everywhere in Minty." : "Back to Plaid's name.", "ok");
+    loadConnected();
+  } catch (err) { setStatus("Couldn't rename: " + err.message, "err"); }
 }
 
 function renderOwners() {

@@ -3,6 +3,7 @@ import type { Config } from "../config";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { CHECKED, PROGRAMS, PROGRAM_BY_ID, type Program } from "../points/programs";
 import { likeMatcher } from "../benefits/engine";
+import { ACCOUNT_NAME } from "../accounts";
 
 /** BAM (docs/bam.md): miles and points balances, typed in or read from a statement PDF in the
  * browser (source "pdf", with the file's SHA-256; the PDF never leaves the device). Each POST is a
@@ -28,10 +29,10 @@ interface Reading {
 }
 
 // The linked credit cards, for "earned by" (a few rows: one per card).
-const CARDS_SQL = `SELECT a.id, a.owner, a.name, a.mask, i.institution_name AS bank
+const CARDS_SQL = `SELECT a.id, a.owner, a.name, ${ACCOUNT_NAME("a")} AS shown, a.mask, i.institution_name AS bank
                    FROM accounts a JOIN items i ON i.id = a.item_id WHERE a.type = 'credit'`;
 
-interface Card { id: number; owner: string; name: string | null; mask: string | null; bank: string | null }
+interface Card { id: number; owner: string; name: string | null; shown: string | null; mask: string | null; bank: string | null }
 
 /** The program a card likely earns (its bank, then its name), or null. */
 export function programForCard(card: Pick<Card, "name" | "bank">): Program | null {
@@ -67,7 +68,7 @@ export async function listPoints(env: Env): Promise<Response> {
   balances.sort((a, b) => a.owner.localeCompare(b.owner) || a.name.localeCompare(b.name) || (a.account_hint ?? "").localeCompare(b.account_hint ?? ""));
   const cards = cardRows.flatMap((c) => {
     const p = programForCard(c);
-    return p ? [{ account_id: c.id, owner: c.owner, name: c.name, mask: c.mask, program: p.id }] : [];
+    return p ? [{ account_id: c.id, owner: c.owner, name: c.shown, mask: c.mask, program: p.id }] : [];   // matched on Plaid's name, shown as the household's
   });
   return json({ today: today(), checked: CHECKED, balances, cards,
                 programs: PROGRAMS.map(({ id, name, kind, unit, expiry }) => ({ id, name, kind, unit, expiry: expiry ?? null })) });

@@ -2,6 +2,7 @@ import type { Env } from "../env";
 import { HttpError, intParam, json, jsonBody, unprocessable } from "../http";
 import { CHECKED, NOT_TRACKED, PRODUCTS, productById } from "../benefits/catalog";
 import { type CardRow, MERCHANT_HIT, type TxnRow, allPatterns, compute, periodStart, productFor, scope, tag } from "../benefits/engine";
+import { ACCOUNT_NAME } from "../accounts";
 
 /** ABC ("All but coupon clipping"): GET /benefits, the household's card credits for a year;
  * PUT /benefits/cards/:id, a card's product / card-year month / hidden; PUT /benefits/marks,
@@ -35,7 +36,7 @@ export function taggedRowsSql(accountCount: number, patterns: number[]): string 
 }
 
 const CARDS = `
-  SELECT a.id, a.owner, i.institution_name AS bank, a.name, a.mask, cp.product_id, cp.anniversary_month,
+  SELECT a.id, a.owner, i.institution_name AS bank, a.name, ${ACCOUNT_NAME("a")} AS shown, a.mask, cp.product_id, cp.anniversary_month,
          coalesce(cp.hidden, 0) AS hidden
   FROM accounts a JOIN items i ON i.id = a.item_id LEFT JOIN card_products cp ON cp.account_id = a.id
   WHERE a.type = 'credit'`;
