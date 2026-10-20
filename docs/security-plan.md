@@ -120,7 +120,8 @@ the pinned key.
          SSL, Workers Routes on every zone, and more). Narrowed in place to Workers Scripts Edit
          and D1 Edit, this account only; the next production build migrated and deployed.
    - [x] Access: an Emails policy listing each address replaces the email-domain policy, and
-         the application's session is shorter (SETUP suggests 24 hours).
+         the application's session is shorter (SETUP suggests 24 hours, or 1 to 2 weeks where
+         every device has the device lock on).
    - [x] Access: MFA on the owner's deployment. There's no simple version for forks: it's
          several Zero Trust settings and a per-person enrollment that Minty can't automate
          without a token that edits Access. SETUP keeps it optional.

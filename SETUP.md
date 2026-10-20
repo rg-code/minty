@@ -65,9 +65,21 @@ refuses everything until the login is set up.
    - **Never** choose "Everyone" or a public domain like gmail.com.
 
    Everyone you admit is fully trusted: they see every person's data and can link and
-   reconnect banks (README, Security model). While you're in the Access app, a shorter
-   **session duration** (e.g. 24 hours) limits what a stolen session is worth, and if your
-   sign-in method supports it, require MFA.
+   reconnect banks (README, Security model). If your sign-in method supports it, require MFA.
+
+   **Session duration** is how long a sign-in lasts before Access emails a new code (the default
+   is 24 hours). Shorter limits what a stolen, signed-in browser is worth; longer means fewer
+   codes.
+   - **24 hours** is the careful choice, and the right one on a computer others use.
+   - **1 to 2 weeks** is reasonable when every device you use has Minty's device lock on (Face ID,
+     a fingerprint or the screen lock before anything shows, offered on first sign-in): a stolen
+     browser still can't show your data without it.
+   - To change it: **Zero Trust → Access controls → Applications → minty → Configure → Session
+     Duration**, then **Save**.
+   - Check that your policy's own duration says **Same as application session timeout duration**,
+     and that the global session (**Access controls → Access settings**) isn't shorter, or the
+     shorter one wins.
+   - Your current sign-in keeps its old expiry; the next one gets the new length.
 3. Copy the **AUD tag** (a long hex string) that the Access tab shows. Then find your **team
    domain**: open your Minty address in a private window. The sign-in page's address starts
    with `https://<team>.cloudflareaccess.com`, and that host is the team domain.
