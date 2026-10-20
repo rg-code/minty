@@ -124,6 +124,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/retirement", 3000],
     ["/audit/advice", 5000],             // /audit's totals (13 months), recurring charges, balances, holdings, and /retirement's reads               // 3 retirement accounts: a year of daily snapshots (~1,100) and their contributions, by index               // one row per bank, each counting its own accounts (a few dozen)
     ["/audit", 3000],                    // monthly_totals for 12 months (the grouping's sort counts twice), net worth by day, recurring
+    ["/audit/buckets?merchant=Whole%20Foods", 10],   // one correction, by the table's key
     ["/points", 400],                    // every reading once (288 here; no ORDER BY, which D1 counts as a second read)
   ])("%s reads at most %i rows", async (path, budget) => {
     const rows = await readsOf(path);

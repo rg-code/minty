@@ -143,6 +143,19 @@ describe("static pages", () => {
     for (const id of ["tagBtn", "bankBtn", "acctBtn", "dateBtn"]) expect(html).toContain(`  #${id}::before { -webkit-mask-image:`);
   });
 
+  it("transactions have swipe actions (swipe.js), and the same actions in an opened row", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<script src="/swipe.js" defer></script>');
+    expect(html).toContain("touch-action: pan-y;");                                   // a sideways drag is a swipe; scrolling still works
+    expect(html).toMatch(/feed\.addEventListener\("txnaction"/);                       // swipe.js asks app.js to act
+    for (const act of ["tag", "similar", "bucket", "select"]) expect(html).toContain(`data-act="${act}"`);
+    expect(html).toContain('class="daytotal num"');                                    // each day's net
+    const js = await fetchText("/swipe.js");
+    expect(js).toContain('const TRAIL = [["bucket", "Counts as"], ["similar", "Similar"], ["tag", "Tag"]];');
+    expect(js).toContain('if (e.pointerType === "mouse"');                            // touch and pen only
+    expect(js).not.toMatch(/fetch\(/);                                                 // it never calls the Worker itself
+  });
+
   it("on phones the header is compact: logo, count and theme on one line, the links on the next, Add in the ⋯ menu", async () => {
     const { html } = await page("/");
     expect(html).toContain('grid-template-areas: "brand count theme" "links links links";');
@@ -337,7 +350,7 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
   it("the headers file isn't served, and every moved script is in the service worker's shell", async () => {
     expect((await raw("/_headers")).status).toBe(404);
     const sw = await (await raw("/sw.js")).text();
-    expect(sw).toContain('const CACHE = "minty-v6";');                          // installed apps refresh their copy once (v3: Bills)
+    expect(sw).toContain('const CACHE = "minty-v7";');                          // installed apps refresh their copy once (v3: Bills)
     for (const src of MOVED_SCRIPTS) expect(sw, src).toContain(`"${src}"`);
   });
 });

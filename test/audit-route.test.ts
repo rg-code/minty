@@ -68,3 +68,12 @@ describe("PUT /audit/buckets", () => {
     expect((await send("PUT", "/audit/buckets", b)).status).toBe(422);
   });
 });
+
+describe("GET /audit/buckets?merchant=", () => {
+  it("one merchant's correction, however it's written, or null when Minty decides", async () => {
+    expect((await getJson<any>("/audit/buckets?merchant=Whole%20Foods")).body).toEqual({ merchant: "WHOLE FOODS", bucket: null });
+    await send("PUT", "/audit/buckets", { merchant: "WHOLE FOODS", bucket: "transfer" });
+    expect((await getJson<any>("/audit/buckets?merchant=%20whole%20%20foods")).body).toEqual({ merchant: "WHOLE FOODS", bucket: "transfer" });
+    expect((await getJson<any>("/audit/buckets")).status).toBe(422);
+  });
+});

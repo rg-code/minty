@@ -57,6 +57,20 @@ export async function audit(env: Env, config: Config, url: URL): Promise<Respons
   });
 }
 
+const merchantKey = (merchant: unknown) => {
+  const m = typeof merchant === "string" ? merchant.replace(/\s+/g, " ").trim().toUpperCase() : "";
+  if (!m || m.length > MAX_MERCHANT) throw unprocessable(`merchant must be 1–${MAX_MERCHANT} characters`);
+  return m;
+};
+
+/** GET /audit/buckets?merchant=…: one merchant's correction, or null when Minty decides itself
+ * (the dashboard's "Counts as", on a transaction). One row, by the table's key. */
+export async function getBucket(env: Env, url: URL): Promise<Response> {
+  const m = merchantKey(url.searchParams.get("merchant"));
+  const row = await env.DB.prepare("SELECT bucket FROM bucket_overrides WHERE merchant = ?").bind(m).first<{ bucket: string }>();
+  return json({ merchant: m, bucket: row?.bucket ?? null });
+}
+
 /** PUT /audit/buckets {merchant, bucket | null}: a merchant's bucket, corrected (or the correction
  * removed). The totals follow at the next cron run (the 10-minute one, when nothing's syncing). */
 export async function setBucket(env: Env, request: Request): Promise<Response> {
@@ -66,8 +80,7 @@ export async function setBucket(env: Env, request: Request): Promise<Response> {
   }
   if (!b || typeof b !== "object" || Array.isArray(b)) throw unprocessable("body must be a JSON object");
   const { merchant, bucket } = b as Record<string, unknown>;
-  const m = typeof merchant === "string" ? merchant.replace(/\s+/g, " ").trim().toUpperCase() : "";
-  if (!m || m.length > MAX_MERCHANT) throw unprocessable(`merchant must be 1–${MAX_MERCHANT} characters`);
+  const m = merchantKey(merchant);
   if (bucket !== null && !(typeof bucket === "string" && (BUCKETS as readonly string[]).includes(bucket))) {
     throw unprocessable(`bucket must be one of ${BUCKETS.join(", ")}, or null to remove the correction`);
   }
