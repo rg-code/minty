@@ -112,9 +112,9 @@
               border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); cursor: pointer; }
   .moreload:hover { border-color: var(--muted); }
   /* Select: tag many at once */
-  .selectrow { position: relative; height: 0; padding: 0 var(--pad); z-index: 2; }   /* on the first date line, not a row of its own */
-  .selectrow .pill { position: absolute; right: var(--pad); top: calc(var(--pad) - 6px); padding: 4px 11px; font-size: 12.5px; }
-  .selectrow .pill[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+  .selectrow { display: none; }                         /* render() moves its button onto the first date line */
+  #selectToggle { padding: 3px 11px; margin: -4px 0; font-size: 12.5px; text-transform: none; letter-spacing: normal; }
+  #selectToggle[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
   body.selecting .row { grid-template-columns: 3px 18px 1fr auto; }      /* the stripe, the box, then as usual */
   .txn .selbox { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; }
   .txn.selected .row { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
@@ -185,24 +185,46 @@
   main { padding: var(--pad); }
   .daygroup + .daygroup { margin-top: 22px; }
   .daylabel { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase;
-              letter-spacing: .04em; margin: 0 2px 8px; }
+              letter-spacing: .04em; margin: 0 2px 8px; display: flex; align-items: center; gap: 10px; }
+  .daytotal { margin-left: auto; letter-spacing: 0; font-weight: 600; }
 
   .rows { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); overflow: hidden; }
   .txn { border-top: 1px solid var(--hairline); }
   .txn:first-child { border-top: 0; }
+  .txn { position: relative; }
   .row {
-    display: grid; grid-template-columns: 3px 1fr auto; align-items: center; gap: 12px;
-    padding: 12px 16px 12px 0; cursor: pointer; transition: background .1s;
+    display: grid; grid-template-columns: 3px 1fr auto; align-items: start; gap: 2px 12px;
+    padding: 11px 16px 11px 0; cursor: pointer; position: relative; z-index: 1; background: var(--surface);
+    touch-action: pan-y;                                  /* a sideways drag is a swipe (swipe.js); up and down still scroll */
+    transition: background .1s, transform .3s cubic-bezier(.2, .8, .2, 1);
   }
+  .row.dragging { transition: background .1s; }
+  @media (prefers-reduced-motion: reduce) { .row, .swipeacts > div { transition: none !important; } }
+  /* swipe actions, behind the row (swipe.js): Select on the left; Counts as, Similar and Tag on the right */
+  .swipeacts { position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; overflow: hidden; }
+  .swipeacts > div { display: flex; height: 100%; width: 0; overflow: hidden; transition: width .3s cubic-bezier(.2, .8, .2, 1); }
+  .swipeacts.dragging > div { transition: none; }
+  .swipeacts[data-side="lead"] .lead, .swipeacts[data-side="trail"] .trail { width: var(--gap); }
+  .swipeacts button { flex: 1 1 0; min-width: 0; border: 0; margin: 0; padding: 0 4px; font: inherit; font-size: 13px; font-weight: 600;
+                      color: #fff; white-space: nowrap; overflow: hidden; cursor: pointer; transition: flex-grow .2s; font-size: 12.5px; }
+  .swipeacts.full button:last-child { flex-grow: 60; }
+  .swipeacts.full .trail button:last-child { text-align: left; padding-left: 22px; }
+  .swipeacts.full .lead button:last-child { text-align: right; padding-right: 22px; }
+  [data-swipe="select"] { background: #2f9e44; }
+  [data-swipe="tag"] { background: #4c6ef5; }
+  [data-swipe="similar"] { background: #868e96; }
+  [data-swipe="bucket"] { background: #e8590c; }
   .row:hover { background: var(--row-hover); }
   .txn.open .row { background: var(--row-open); }
   .stripe { align-self: stretch; }
   .desc { min-width: 0; }
-  .desc .name { font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .desc .meta { font-size: 12.5px; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .desc .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.005em; }
+  .desc .meta { font-size: 12px; color: var(--muted); display: flex; gap: 4px 6px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
+  .desc .meta > span:not(.chip) + span:not(.chip)::before { content: "·"; margin-right: 6px; }   /* Alex · Food And Drink */
+  @media (hover: none) { .tag.addtag { display: none; } }   /* touch: a swipe, or the opened row, tags it */
   .chip { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--hairline); }
   .chip.pending { color: var(--pending-ink); border-color: var(--warn-line); background: var(--pending-bg); }
-  .amt { font-weight: 600; text-align: right; white-space: nowrap; padding-right: 4px; }
+  .amt { font-weight: 600; text-align: right; white-space: nowrap; padding-right: 4px; font-variant-numeric: tabular-nums; }
   .amt.out { color: var(--out); }
   .amt.in  { color: var(--in); }
 
@@ -255,6 +277,16 @@
   /* expandable detail */
   .detail { display: none; padding: 4px 16px 16px 15px; background: var(--detail-bg); }
   .txn.open .detail { display: block; }
+  .txnacts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+  .txnacts .pill, .cachoices .pill { padding: 5px 12px; font-size: 13px; }
+  .txnacts [aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+  .countsas { margin-top: 10px; font-size: 13px; }
+  .countsas[hidden] { display: none; }
+  .cahead { color: var(--muted); margin-bottom: 6px; }
+  .cachoices { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cachoices [aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .camsg { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .camsg:empty { display: none; }
   .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 16px; margin: 6px 0 14px; font-size: 13px; }
   .kv dt { color: var(--muted); }
   .kv dd { margin: 0; }
@@ -339,7 +371,6 @@
     .stat { flex: 1 0 auto; min-width: calc(50% - 4px); padding: 8px 12px; }
     .stat .v { font-size: 18px; margin-top: 1px; }
     main { padding: 12px; }
-    .selectrow { padding: 0 12px; }
   }
 
   /* Phones: the header scrolls away with the page, and once it's gone a small strip pinned to the
@@ -577,6 +608,7 @@
 </div>
 
 <script src="/app.js"></script>
+<script src="/swipe.js" defer></script>
 <script src="/abc.js" defer></script>
 <script src="/bills.js" defer></script>
 <script src="/bam.js" defer></script>

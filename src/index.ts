@@ -63,6 +63,7 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["POST", /^\/bills\/(\d+)\/paid$/, ({ env, request, params }) => ownBills.markBillPaid(env, request, Number(params[0]))],
   ["DELETE", /^\/bills\/(\d+)$/, ({ env, params }) => ownBills.deleteBill(env, Number(params[0]))],
   ["GET", /^\/audit$/, ({ env, config, url }) => cfa.audit(env, config, url)],
+  ["GET", /^\/audit\/buckets$/, ({ env, url }) => cfa.getBucket(env, url)],
   ["PUT", /^\/audit\/buckets$/, ({ env, request }) => cfa.setBucket(env, request)],
   ["GET", /^\/audit\/advice$/, ({ env, config, url }) => advice.advice(env, config, url)],
   ["PUT", /^\/audit\/checklist$/, ({ env, request }) => advice.setChecklist(env, request)],

@@ -333,12 +333,16 @@ function render(txns) {
 
   const groups = {};
   for (const t of txns) (groups[t.date] ??= []).push(t);
-  feed.innerHTML = Object.entries(groups).map(([date, items]) => `
+  feed.innerHTML = Object.entries(groups).map(([date, items]) => {
+    const net = Math.round(items.reduce((s, t) => s + displayAmount(t.amount), 0) * 100) / 100;
+    return `
     <section class="daygroup">
-      <div class="daylabel">${prettyDate(date)}</div>
+      <div class="daylabel"><span>${prettyDate(date)}</span><span class="daytotal num" title="The day's net">${net < 0 ? "−" : "+"}${fmt.format(Math.abs(net))}</span></div>
       <div class="rows">${items.map(txnHTML).join("")}</div>
-    </section>`).join("")
+    </section>`;
+  }).join("")
     + (hasMore && !offline ? `<button type="button" class="moreload" id="showMore">Show more</button>` : "");
+  feed.querySelector(".daylabel").append(selToggle);         // Select sits on the first date line
   renderSelectBar();
 }
 
@@ -366,8 +370,80 @@ function txnHTML(t) {
         </div>
         <div class="amt ${cls} num">${amt < 0 ? "−" : "+"}${fmt.format(Math.abs(amt))}</div>
       </div>
-      <div class="detail">${detailHTML(t)}</div>
+      <div class="detail">${detailHTML(t)}${isOpen ? actionsHTML(t) : ""}</div>
     </div>`;
+}
+
+// The row's actions, the same ones a swipe shows (swipe.js), added when a row opens.
+const BUCKET_CHOICES = [["", "Minty decides"], ["spend", "Spending"], ["saving", "Saving"], ["transfer", "A transfer"], ["debt", "A debt payment"], ["income", "Income"]];
+function actionsHTML(t) {
+  const merchant = t.merchant_name || t.name || "";
+  return `
+    <div class="txnacts">
+      <button type="button" class="pill" data-act="tag">Tag</button>
+      <button type="button" class="pill" data-act="similar" title="Show every transaction like this one">Similar</button>
+      ${merchant ? `<button type="button" class="pill" data-act="bucket" aria-expanded="false">Counts as…</button>` : ""}
+      ${t.id != null ? `<button type="button" class="pill" data-act="select">Select</button>` : ""}
+    </div>
+    <div class="countsas" hidden>
+      <div class="cahead">In CFA, every transaction from <b>${escapeHtml(merchant)}</b> counts as</div>
+      <div class="cachoices">${BUCKET_CHOICES.map(([b, l]) => `<button type="button" class="pill" data-bucket="${b}" aria-pressed="false">${l}</button>`).join("")}</div>
+      <div class="camsg" role="status"></div>
+    </div>`;
+}
+
+const qInput = document.getElementById("q");
+function rowAction(txnEl, act) {
+  const t = txnFromEl(txnEl);
+  if (!t) return;
+  if (act === "select") {
+    if (t.id == null) return;
+    selected.add(t.id);
+    setSelecting(true);
+    return;
+  }
+  if (act === "similar") {                                   // the search box takes 48 characters (D1's LIKE limit)
+    state.q = qInput.value = [...(t.merchant_name || t.name || "")].slice(0, 48).join("").trim();
+    load();
+    window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    return;
+  }
+  if (!openRows.has(t.plaid_txn_id)) toggle(txnEl);
+  if (act === "tag") {
+    const input = txnEl.querySelector(".taginput");
+    input.focus({ preventScroll: true });
+    txnEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+  if (act === "bucket") showCountsAs(txnEl, t);
+}
+
+async function showCountsAs(txnEl, t) {
+  const box = txnEl.querySelector(".countsas"), btn = txnEl.querySelector('[data-act="bucket"]');
+  box.hidden = !box.hidden;
+  btn?.setAttribute("aria-expanded", !box.hidden);
+  if (box.hidden) return;
+  txnEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  if (offline) return;
+  try {
+    const res = await fetch(`/audit/buckets?merchant=${encodeURIComponent(t.merchant_name || t.name)}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    markBucket(box, (await res.json()).bucket ?? "");
+  } catch { box.querySelector(".camsg").textContent = "Couldn't check what it counts as now."; }
+}
+const markBucket = (box, bucket) => box.querySelectorAll("[data-bucket]").forEach(b => b.setAttribute("aria-pressed", b.dataset.bucket === bucket));
+
+async function setCountsAs(txnEl, bucket) {
+  const t = txnFromEl(txnEl), box = txnEl.querySelector(".countsas"), msg = box.querySelector(".camsg");
+  msg.textContent = "Saving…";
+  try {
+    if (!offline) {
+      const res = await fetch("/audit/buckets", { method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ merchant: t.merchant_name || t.name, bucket: bucket || null }) });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || `HTTP ${res.status}`);
+    }
+    markBucket(box, bucket);
+    msg.textContent = "Saved. CFA's totals follow within about 10 minutes.";
+  } catch (e) { msg.textContent = `Couldn't save: ${e.message}`; }
 }
 
 function detailHTML(t) {
@@ -444,9 +520,14 @@ feed.addEventListener("click", (e) => {
     saveTags(txn, (txn.tags || []).filter(x => x !== removeBtn.dataset.removetag));
     return;
   }
+  const actBtn = e.target.closest("[data-act]");
+  if (actBtn) { rowAction(actBtn.closest(".txn"), actBtn.dataset.act); return; }
+  const bucketBtn = e.target.closest("[data-bucket]");
+  if (bucketBtn) { setCountsAs(bucketBtn.closest(".txn"), bucketBtn.dataset.bucket); return; }
   const row = e.target.closest(".row");
   if (row) toggle(row.closest(".txn"));
 });
+feed.addEventListener("txnaction", e => rowAction(e.detail.txn, e.detail.act));   // a swipe (swipe.js)
 
 feed.addEventListener("keydown", (e) => {
   if (e.target.classList.contains("taginput") && e.key === "Enter") {
@@ -472,6 +553,8 @@ function txnFromEl(el) { return current.get(el.closest(".txn").dataset.txnid); }
 function toggle(txnEl) {
   const id = txnEl.dataset.txnid;
   if (openRows.has(id)) openRows.delete(id); else openRows.add(id);
+  const detail = txnEl.querySelector(".detail");
+  if (openRows.has(id) && !detail.querySelector(".txnacts")) detail.insertAdjacentHTML("beforeend", actionsHTML(txnFromEl(txnEl)));
   txnEl.classList.toggle("open");
   txnEl.querySelector(".row").setAttribute("aria-expanded", openRows.has(id));
 }
@@ -776,9 +859,10 @@ document.getElementById("feed").addEventListener("click", e => { if (e.target.id
 // --- Select: tag many transactions at once ------------------------------------
 const SELECT_ALL_MAX = 2000;                        // "Select all" loads older pages up to this many
 const selBar = document.getElementById("selectBar"), selMsg = document.getElementById("selMsg");
+const selToggle = document.getElementById("selectToggle");     // render() moves it onto the first date line
 function renderSelectBar() {
-  document.getElementById("selectToggle").setAttribute("aria-pressed", selecting);
-  document.getElementById("selectToggle").textContent = selecting ? "Selecting…" : "Select";
+  selToggle.setAttribute("aria-pressed", selecting);
+  selToggle.textContent = selecting ? "Selecting…" : "Select";
   selBar.hidden = !selecting;
   document.body.classList.toggle("selecting", selecting);
   if (!selecting) return;
@@ -797,7 +881,7 @@ function setSelecting(on) {
   if (!on) { selected.clear(); selMsg.textContent = ""; }
   render(loaded);
 }
-document.getElementById("selectToggle").addEventListener("click", () => setSelecting(!selecting));
+selToggle.addEventListener("click", () => setSelecting(!selecting));
 document.getElementById("selDone").addEventListener("click", () => setSelecting(false));
 document.getElementById("selNone").addEventListener("click", () => { selected.clear(); render(loaded); });
 document.getElementById("selAll").addEventListener("click", async () => {
