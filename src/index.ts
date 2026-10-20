@@ -15,6 +15,7 @@ import * as cfa from "./routes/audit";
 import * as inv from "./routes/investments";
 import * as egg from "./routes/retirement";
 import * as advice from "./routes/advice";
+import * as accountNames from "./accounts";
 import { runInvestmentSync } from "./investments";
 import { refreshIrsLimits } from "./retirement/irs";
 import { PlaidError } from "./plaid";
@@ -80,6 +81,7 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["PUT", /^\/retirement\/profile$/, ({ env, config, request }) => egg.setProfile(env, config, request)],
   ["GET", /^\/investments$/, ({ env }) => inv.investmentBanks(env)],
   ["POST", /^\/investments\/off$/, ({ env, request }) => inv.investmentsOff(env, request)],
+  ["PUT", /^\/accounts\/(\d+)\/name$/, ({ env, request, params }) => accountNames.renameAccount(env, request, Number(params[0]))],
   ["PUT", /^\/accounts\/(\d+)\/view$/, ({ env, request, params }) => inv.setAccountView(env, request, Number(params[0]))],
   ["POST", /^\/link\/reconnected$/, ({ env, config, request }) => link.reconnected(env, config, request)],
 ];

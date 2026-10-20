@@ -106,6 +106,7 @@ the secret names to add in the Cloudflare dashboard.
     POST /investments/off        {item_id}   (stop fetching; what was saved stays)
     GET  /retirement             EGG: retirement accounts, balance history, contributions per year, fees, mix, profiles, this year's IRS limits   (?owner=)
     PUT  /retirement/profile     {owner, birth_year?, retire_age?, target_cents?, target_age?, match_pct?, hsa_coverage?, beneficiaries_checked_on?}
+    PUT  /accounts/{id}/name     {name | null}   your own name for an account (shown everywhere; null = Plaid's, tidied); sync never overwrites it
     PUT  /accounts/{id}/view     {view: dashboard | retirement | null}   where an account shows (retirement accounts default to EGG)
     GET  /audit                  CFA: monthly totals by bucket and category, net worth by day, recurring charges, card balances, corrections   (?months=12|24 &owner=)
     GET  /audit/advice           CFA: what to do (the rules in src/audit/rules.ts, most urgent first) + the planner's checklist   (?owner=)

@@ -4,6 +4,7 @@ import { type Config, isConfigured } from "../config";
 import { HttpError, dateParam, intParam, json, jsonBody, unprocessable } from "../http";
 import { bankHealth, bankRows, syncHealth } from "../health";
 import { RESERVED } from "./link";
+import { ACCOUNT_NAME } from "../accounts";
 
 /** Read API for the pages in public/, plus tag editing. */
 
@@ -55,7 +56,7 @@ export async function accounts(env: Env, url: URL): Promise<Response> {
   const owner = url.searchParams.get("owner");
   // Retirement accounts (EGG) are islanded: left out unless ?view=all, or switched to the dashboard.
   const island = url.searchParams.get("view") === "all" ? "1" : `NOT ${IN_RETIREMENT("accounts")}`;
-  const select = `SELECT id, owner, item_id, plaid_account_id, name, mask, type, subtype,
+  const select = `SELECT id, owner, item_id, plaid_account_id, ${ACCOUNT_NAME("accounts")} AS name, name AS plaid_name, display_name, mask, type, subtype,
                          balance_current_cents / 100.0 AS balance_current,
                          balance_available_cents / 100.0 AS balance_available,
                          currency, updated_at, ${IN_RETIREMENT("accounts")} AS in_retirement
@@ -234,7 +235,7 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
            t.pending, t.pending_txn_id, t.account_owner,
            (SELECT json_group_array(tag) FROM
               (SELECT tag FROM transaction_tags tt WHERE tt.transaction_id = t.id ORDER BY tt.position)) AS tags,
-           a.name    AS account_name,
+           ${ACCOUNT_NAME("a")} AS account_name,
            a.mask    AS account_mask,
            a.type    AS account_type,
            a.subtype AS account_subtype,
