@@ -526,9 +526,29 @@ function monthsOf(key) {
   return s;
 }
 
+/** Whether a row is left out of the numbers (CFA's "Left out of the numbers"): its account, its
+ * bank or one of its tags. The summary's totals already leave these out; this does the same for
+ * the cards' "shown" totals, which add up the rows on the page. */
+function leftOut(t) {
+  const L = summary?.left_out;
+  if (!L?.length) return false;
+  return L.some(x => (x.kind === "account" && Number(x.value) === t.account_id) || (x.kind === "bank" && Number(x.value) === t.item_id)
+    || (x.kind === "tag" && (t.tags || []).includes(x.value)));
+}
+document.addEventListener("minty:leftout", () => { loadSummary(); });   // CFA changed what's left out
+function renderLeftOutNote() {
+  const el = document.getElementById("leftOutNote"), L = summary?.left_out ?? [];
+  el.hidden = !L.length;
+  if (!L.length) return;
+  const name = x => x.kind === "tag" ? `“${x.name}”` : x.kind === "bank" ? `${x.name || "a bank"} (bank)` : `${x.name || "an account"}${x.mask ? ` ••${x.mask}` : ""}`;
+  el.innerHTML = `Left out of these numbers: ${L.slice(0, 4).map(x => escapeHtml(name(x))).join(", ")}${L.length > 4 ? ` and ${L.length - 4} more` : ""}. <button type="button" data-open-leftout>Change</button>`;
+}
+
 function renderTotals(txns) {
   const el = document.getElementById("totals"), C = window.MintyCharts;
   if (!C) { document.addEventListener("DOMContentLoaded", () => renderTotals(loaded), { once: true }); return; }
+  renderLeftOutNote();
+  txns = txns.filter(t => !leftOut(t));
   const present = [...new Set(txns.map(t => t.owner))];
   // everyone configured, plus anyone with rows who has since been removed from MINTY_USERS
   const people = state.owner === "all" ? [...USERS.map(u => u.key), ...present.filter(k => !USERS.some(u => u.key === k))] : [state.owner];

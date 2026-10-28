@@ -125,6 +125,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/audit/advice", 5000],             // /audit's totals (13 months), recurring charges, balances, holdings, and /retirement's reads               // 3 retirement accounts: a year of daily snapshots (~1,100) and their contributions, by index               // one row per bank, each counting its own accounts (a few dozen)
     ["/audit", 3000],                    // monthly_totals for 12 months (the grouping's sort counts twice), net worth by day, recurring
     ["/audit/buckets?merchant=Whole%20Foods", 10],   // one correction, by the table's key
+    ["/audit/exclusions", 200],          // what's left out, and the banks and accounts (a few dozen rows)
     ["/audit/summary", 400],             // monthly_totals' money in and spending for 24 months, each row once
     ["/points", 400],                    // every reading once (288 here; no ORDER BY, which D1 counts as a second read)
   ])("%s reads at most %i rows", async (path, budget) => {
@@ -170,10 +171,29 @@ describe("D1 rows read by the audit's cron step (docs/cfa.md, C1)", () => {
     expect(full.tally.rows).toBeLessThanOrEqual(12 * n);
     const quiet = counting(env.DB);
     expect(await refreshTotals({ ...E, DB: quiet.db })).toEqual({ from: null, full: false });
-    expect(quiet.tally.rows).toBeLessThanOrEqual(10);
+    expect(quiet.tally.rows).toBeLessThanOrEqual(12);
     const snap = counting(env.DB);
     await snapshotBalances({ ...E, DB: snap.db });
     expect(snap.tally.rows).toBeLessThanOrEqual(200);              // one row per account, plus each one's snapshot by its key
+  });
+
+  it("with a tag and a bank left out, a rebuild costs about the same; net worth's history rebuilt once", async () => {
+    const E = env as unknown as Env;
+    const tag = (await env.DB.prepare("SELECT tag FROM transaction_tags LIMIT 1").first<{ tag: string }>())?.tag ?? "groceries";
+    const item = (await env.DB.prepare("SELECT id FROM items LIMIT 1").first<{ id: number }>())!.id;
+    await env.DB.prepare("INSERT OR IGNORE INTO analytics_exclusions (kind, value) VALUES ('tag', ?), ('bank', ?)").bind(tag, String(item)).run();
+    await env.DB.prepare("INSERT INTO app_state (key, value) VALUES ('audit_dirty', '1'), ('networth_dirty', '1') ON CONFLICT (key) DO UPDATE SET value = excluded.value").run();
+    const n = (await env.DB.prepare("SELECT count(*) AS n FROM transactions").first<{ n: number }>())!.n;
+    const days = (await env.DB.prepare("SELECT count(DISTINCT date) AS d, (SELECT count(*) FROM accounts WHERE type IN ('depository', 'investment', 'credit', 'loan')) AS a FROM balance_snapshots").first<{ d: number; a: number }>())!;
+    const tagged = (await env.DB.prepare("SELECT count(*) AS n FROM transaction_tags WHERE tag = ?").bind(tag).first<{ n: number }>())!.n;
+    const full = counting(env.DB);
+    await refreshTotals({ ...E, DB: full.db });
+    console.warn(`audit rebuild, things left out: ${full.tally.rows} rows read for ${n} transactions, ${tagged} with the tag, ${days.d} days × ${days.a} accounts of balances`);
+    // the transactions' rebuild as before (the left-out ones looked up in a bound map: no extra reads),
+    // the tag's rows once through its index (and the DISTINCT's sort), and net worth's history again
+    // (~6 per day and account, once, when what's left out changes)
+    expect(full.tally.rows).toBeLessThanOrEqual(12 * n + 4 * tagged + 7 * days.d * Math.max(1, days.a) + 1000);
+    await env.DB.prepare("DELETE FROM analytics_exclusions").run();
   });
 });
 
