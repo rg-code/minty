@@ -34,15 +34,18 @@
 
 /* The calendar */
 .bills .cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
-.bills .cal-dow { font-size: 12px; font-weight: 650; color: var(--muted); padding: 0 4px 2px; }
-.bills .cal-day { font: inherit; text-align: left; min-height: 92px; padding: 6px; border-radius: 10px; cursor: pointer; display: flex; flex-direction: column;
-                  gap: 4px; border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); min-width: 0; }
-.bills .cal-day:hover { border-color: var(--muted); }
+.bills .cal-dow { font-size: 11.5px; font-weight: 500; color: var(--muted); padding: 0 4px 2px; text-transform: uppercase; letter-spacing: .04em; }
+.bills .cal-day { font: inherit; text-align: left; min-height: 92px; padding: 6px; border-radius: 12px; cursor: pointer; display: flex; flex-direction: column;
+                  gap: 4px; border: 1px solid transparent; background: var(--surface); color: var(--ink); min-width: 0;
+                  box-shadow: 0 1px 2px rgba(0, 0, 0, .04); transition: border-color .12s, transform .15s; }
+.bills .cal-day:hover { border-color: color-mix(in srgb, var(--muted) 45%, transparent); }
+.bills .cal-day:active { transform: scale(.98); }
 .bills .cal-day.past, .bills .cal-day.out { opacity: .5; }
-.bills .cal-day.today { border: 2px solid var(--due); padding: 5px; }
-.bills .cal-day.sel { box-shadow: 0 0 0 2px var(--accent); }
-.bills .cal-n { font-size: 13px; font-weight: 650; }
-.bills .cal-day.today .cal-n { color: var(--due); }
+.bills .cal-day.sel { border-color: var(--ink); }
+.bills .cal-n { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 5px; }
+/* today: the day's number in a filled circle (as the Dates calendar marks its ends) */
+.bills .cal-day.today .cal-n { color: var(--surface); background: var(--ink); border-radius: 999px; padding: 1px 8px; align-self: flex-start; }
+.bills .cal-day.today .cal-mon { color: color-mix(in srgb, var(--surface) 75%, transparent); }
 .bills .cal-mon { font-weight: 500; font-size: 11.5px; color: var(--muted); }
 .bills .cal-ev { display: flex; flex-direction: column; min-width: 0; padding: 3px 6px; border-radius: 6px; border-left: 3px solid; font-size: 11.5px; line-height: 1.25; }
 .bills .cal-ev b { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

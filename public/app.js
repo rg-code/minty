@@ -31,9 +31,19 @@ function renderOwnerSeg() {
   const stops = USERS.map((u, i) => `${colorOf(u.key)} ${i * 100 / n}% ${(i + 1) * 100 / n}%`).join(", ");
   const btn = (key, label, bg) => `<button data-owner="${escapeAttr(key)}" aria-pressed="${state.owner === key}">` +
     `<span class="dot" style="background:${bg}"></span>${escapeHtml(label)}</button>`;
-  document.getElementById("ownerSeg").innerHTML = btn("all", "Combined", `linear-gradient(90deg, ${stops})`) +
+  document.getElementById("ownerSeg").innerHTML = `<i class="seg-thumb" aria-hidden="true"></i>` + btn("all", "Combined", `linear-gradient(90deg, ${stops})`) +
     USERS.map(u => btn(u.key, u.label, colorOf(u.key))).join("");
+  placeOwnerThumb();
 }
+/** The person picker's thumb, under the person picked (it slides there; in the header only). */
+function placeOwnerThumb() {
+  const seg = document.getElementById("ownerSeg"), th = seg.querySelector(".seg-thumb"), b = seg.querySelector('[aria-pressed="true"]');
+  if (!th || !b || !seg.closest("header")) return;
+  th.style.width = `${b.offsetWidth}px`;
+  th.style.transform = `translateX(${b.offsetLeft}px)`;
+  if (!th.dataset.ready) requestAnimationFrame(() => { th.dataset.ready = "1"; });
+}
+new ResizeObserver(() => placeOwnerThumb()).observe(document.getElementById("ownerSeg"));
 
 // Pages of transactions, newest first. More come from "Show more" (before=<date>:<id>), so a page
 // load reads only what it shows from D1.
@@ -404,6 +414,7 @@ function rowAction(txnEl, act) {
   }
   if (act === "similar") {                                   // the search box takes 48 characters (D1's LIKE limit)
     state.q = qInput.value = [...(t.merchant_name || t.name || "")].slice(0, 48).join("").trim();
+    syncQ();
     load();
     window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
     return;
@@ -554,10 +565,11 @@ function renderTotals(txns) {
     const from = Math.max(s.first < 0 ? L : s.first, L - 11);
     return C.stat({
       label: `${k ? labelOf(k) : "Everyone"} · ${monName(cur, { month: "short" })}`, dot: k ? colorOf(k) : null, value: spent / 100, fmt: v => fmt0.format(v), cls: "spend",
-      delta: pace !== null && prev > 0 ? pace / prev - 1 : null, goodWhen: "down",
-      caption: `Spent so far · in ${money0(s.income[L])}${pace !== null ? ` · on pace for ${money0(pace)}` : ` · ${lastMonth} ${money0(prev)}`}`,
+      // against last month only when it's a whole one (not the month the history starts in, usually partial)
+      delta: pace !== null && prev > 0 && L - 1 > s.first ? pace / prev - 1 : null, goodWhen: "down",
+      caption: `${pace !== null ? `On pace for ${money0(pace)}` : `${lastMonth}: ${money0(prev)}`} · in ${money0(s.income[L])}`,
       trend: s.spend.slice(from).map(c => c / 100), labels: summary.months.slice(from).map((m, i, a) => `Spent in ${monName(m)}${i === a.length - 1 ? " so far" : ""}`),
-      tag: "button", attrs: `type="button" data-trend="${escapeAttr(k)}" aria-expanded="${trendKey === k}" title="${pace !== null && prev > 0 ? `On pace for ${money0(pace)} this month, against ${money0(prev)} in ${lastMonth}. ` : ""}Tap for the months and the categories"`,
+      tag: "button", attrs: `type="button" data-trend="${escapeAttr(k)}" aria-expanded="${trendKey === k}" title="${pace !== null && prev > 0 && L - 1 > s.first ? `On pace for ${money0(pace)} this month, against ${money0(prev)} in ${lastMonth}. ` : ""}Tap for the months and the categories"`,
       countUp: fresh,
     });
   }).join("");
@@ -809,7 +821,9 @@ function escapeAttr(s) { return String(s).replace(/[&"']/g, c => ({ "&": "&amp;"
 document.getElementById("ownerSeg").addEventListener("click", e => {
   const b = e.target.closest("button[data-owner]");
   if (!b) return;
-  state.owner = b.dataset.owner; renderOwnerSeg();
+  state.owner = b.dataset.owner;
+  e.currentTarget.querySelectorAll("button[data-owner]").forEach(x => x.setAttribute("aria-pressed", x === b));
+  placeOwnerThumb();
   if (state.owner !== "all" && ITEMS) {
     state.banks = state.banks.filter(id => ITEMS.some(it => it.id === id && it.owner === state.owner));
   }
@@ -818,7 +832,27 @@ document.getElementById("ownerSeg").addEventListener("click", e => {
   load();
 });
 let deb;
-document.getElementById("q").addEventListener("input", e => { clearTimeout(deb); deb = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250); });
+document.getElementById("q").addEventListener("input", e => { syncQ(); clearTimeout(deb); deb = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250); });
+// The search box's clear button (shown once there's text), Escape to leave it, and ⌘K / Ctrl+K or "/"
+// to jump to it from anywhere on the page.
+const qClear = document.getElementById("qClear");
+function syncQ() { qClear.hidden = !qInput.value; }
+qClear.addEventListener("click", () => {
+  qInput.value = ""; syncQ(); clearTimeout(deb);
+  if (state.q) { state.q = ""; load(); }
+  qInput.focus();
+});
+qInput.addEventListener("keydown", e => { if (e.key === "Escape") qInput.blur(); });
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+document.getElementById("qKbd").textContent = MAC ? "⌘K" : "Ctrl K";
+document.addEventListener("keydown", e => {
+  const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
+  if (((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") || (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey)) {
+    if (document.querySelector("dialog[open]")) return;
+    e.preventDefault();
+    qInput.focus(); qInput.select();
+  }
+});
 // Filter dropdowns (tags, banks, cards & accounts): opening one closes the others; a click
 // outside or Escape closes them.
 const DROPDOWNS = [["tagPick", "tagBtn", "tagMenu"], ["bankPick", "bankBtn", "bankMenu"], ["acctPick", "acctBtn", "acctMenu"], ["datePick", "dateBtn", "dateMenu"]]
@@ -881,6 +915,7 @@ function setCompact(on) {
     strip.style.setProperty("--strip-bottom", strip.offsetHeight + 6 + "px");   // its height: it sits at the top (and may be sliding in)
   } else {
     header.append(controls);
+    placeOwnerThumb();
     header.style.minHeight = "";
     strip.hidden = true;
   }
@@ -956,8 +991,7 @@ function renderDateControls() {
     : state.start ? `From ${shortDay(state.start)}` : state.end ? `Until ${shortDay(state.end)}` : "All dates";
   btn.classList.toggle("active", !!(state.start || state.end));
   for (const b of document.querySelectorAll("#datePresets button")) b.setAttribute("aria-pressed", b.dataset.range === preset);
-  document.getElementById("start").value = state.start;
-  document.getElementById("end").value = state.end;
+  dateCal?.set(state.start, state.end);
   document.getElementById("dateClear").disabled = !(state.start || state.end);
 }
 function setDates(start, end) { state.start = start; state.end = end; renderDateControls(); load(); }
@@ -968,8 +1002,15 @@ document.getElementById("datePresets").addEventListener("click", e => {
   setDropdown(DROPDOWNS[3], false);
 });
 document.getElementById("dateClear").addEventListener("click", () => setDates("", ""));
-document.getElementById("start").addEventListener("change", e => setDates(e.target.value, state.end));
-document.getElementById("end").addEventListener("change", e => setDates(state.start, e.target.value));
+// A range of days on the calendar (charts.js): the second tap applies it, and the menu closes.
+let dateCal = null;
+document.addEventListener("DOMContentLoaded", () => {
+  const n = new Date(), today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  dateCal = window.MintyCharts?.calendar(document.getElementById("dateCal"), {
+    from: state.start, to: state.end, max: today,
+    onChange: (a, b) => { setDates(a, b); setTimeout(() => setDropdown(DROPDOWNS[3], false), 350); },
+  }) ?? null;
+});
 renderDateControls();
 
 // sample data for offline preview only (includes account fields + tags)
@@ -1104,6 +1145,7 @@ function renderSelectBar() {
   if (!selecting) return;
   const n = selected.size, shown = loaded.filter(t => t.id != null).length;
   document.getElementById("selCount").textContent = `${n.toLocaleString()} selected`;
+  renderSelSummary();
   document.getElementById("selAll").textContent = hasMore ? `Select all (loads older ones, up to ${SELECT_ALL_MAX.toLocaleString()})` : `Select all ${shown.toLocaleString()}`;
   document.getElementById("selAdd").disabled = !n;
   // tags on the selected transactions, to remove; every tag in use, to suggest
@@ -1114,11 +1156,86 @@ function renderSelectBar() {
 }
 function setSelecting(on) {
   selecting = on;
-  if (!on) { selected.clear(); selMsg.textContent = ""; }
+  if (!on) { selected.clear(); selMsg.textContent = ""; setSumOpen(false); }
   render(loaded);
 }
 selToggle.addEventListener("click", () => setSelecting(!selecting));
 document.getElementById("selDone").addEventListener("click", () => setSelecting(false));
+
+// The Summary: Out, In and Net on the bar for what's selected; a panel with the totals and the
+// rows matched up (reconcile.js): exact refunds, moves between your own accounts, refunds in part,
+// and what's not balanced, each with "Select only these" to tag them with the bar. All from the
+// rows on the page: no request.
+const selPanel = document.getElementById("selPanel"), selSumBtn = document.getElementById("selSumBtn");
+let sumGroups = {};
+const cents = c => fmt.format(Math.abs(c) / 100);
+const outIn = c => `${c < 0 ? "−" : "+"}${cents(c)}`;
+function setSumOpen(open) { selPanel.hidden = !open; selSumBtn.setAttribute("aria-expanded", open); if (open) renderSelSummary(); }
+selSumBtn.addEventListener("click", () => setSumOpen(selPanel.hidden));
+function renderSelSummary() {
+  const rows = loaded.filter(t => selected.has(t.id)), R = window.MintyReconcile;
+  const sumEl = document.getElementById("selSum");
+  if (!R || !rows.length) { sumEl.textContent = ""; selPanel.innerHTML = rows.length ? "" : `<p class="sp-more">Select some transactions to see their totals.</p>`; return; }
+  const s = R.summarize(rows), T = s.totals;
+  sumEl.innerHTML = `Out <b>${cents(T.out)}</b> (${T.outN}) · In <b>${cents(T.in)}</b> (${T.inN}) · Net <b>${outIn(T.net)}</b>`;
+  if (selPanel.hidden) return;
+  const name = t => escapeHtml(t.merchant_name || t.name || "—");
+  const day = d => escapeHtml(shortDate(d));
+  const amt = t => { const v = -Math.round(t.amount * 100); return `<span class="amt num ${v < 0 ? "out" : "in"}">${outIn(v)}</span>`; };
+  const where = t => escapeHtml([t.institution_name, t.account_name].filter(Boolean).join(" · "));
+  const MAX = 40, more = n => (n > MAX ? `<div class="sp-more">and ${(n - MAX).toLocaleString()} more</div>` : "");
+  sumGroups = {
+    refunds: s.refunds.flatMap(p => [p.charge.id, p.refund.id]), transfers: s.transfers.flatMap(p => [p.from.id, p.to.id]),
+    partial: s.partial.flatMap(g => g.rows.map(t => t.id)), openCharges: s.openCharges.map(t => t.id), openCredits: s.openCredits.map(t => t.id),
+    open: [...s.openCharges, ...s.openCredits, ...s.partial.flatMap(g => g.rows)].map(t => t.id),
+  };
+  const only = (k, n) => n && sumGroups[k].length < rows.length ? `<button type="button" class="sellink" data-only="${k}">Select only these</button>` : "";
+  const sec = (title, note, k, n, body, sub = "") => `<section class="sp-sec"><h4>${title}${note ? ` <em>${note}</em>` : ""}${only(k, n)}</h4>${sub ? `<p>${sub}</p>` : ""}${n ? body : `<p>None.</p>`}</section>`;
+  const split = list => list.length > 1 ? `<div class="sp-split">${list.map(g => `<div><span>${escapeHtml(g.name)}</span><span class="num">out ${cents(g.out)}</span><span class="num">in ${cents(g.in)}</span></div>`).join("")}</div>` : "";
+  const people = s.people.map(g => ({ ...g, name: labelOf(g.key) }));
+  let html = `<div class="sp-head"><h3>${T.n.toLocaleString()} selected</h3><span class="d">${T.from === T.to ? day(T.from) : `${day(T.from)} – ${day(T.to)}`}</span>
+      <button type="button" class="sellink" data-csv>Copy as CSV</button></div>
+    <div class="sp-tiles">
+      <div class="sp-tile"><span>Out (debits)</span><b>${cents(T.out)}</b><small>${T.outN.toLocaleString()} charge${T.outN === 1 ? "" : "s"}</small></div>
+      <div class="sp-tile"><span>In (credits)</span><b>${cents(T.in)}</b><small>${T.inN.toLocaleString()} credit${T.inN === 1 ? "" : "s"}</small></div>
+      <div class="sp-tile"><span>Net</span><b class="${T.net < 0 ? "out" : "in"}" style="color:var(--${T.net < 0 ? "out" : "in"})">${outIn(T.net)}</b><small>In less out</small></div>
+      ${T.largest ? `<div class="sp-tile"><span>Largest charge</span><b>${cents(Math.round(T.largest.amount * 100))}</b><small>${name(T.largest)}, ${day(T.largest.date)}</small></div>` : ""}
+      ${T.outN > 1 ? `<div class="sp-tile"><span>Average charge</span><b>${cents(T.average)}</b><small>over ${T.outN.toLocaleString()}</small></div>` : ""}
+      <div class="sp-tile"><span>Not balanced</span><b>${outIn(s.openIn - s.openOut)}</b><small>${(s.openCharges.length + s.openCredits.length).toLocaleString()} open, ${s.partial.length} part-refunded</small></div>
+    </div>`;
+  if (people.length > 1 || s.accounts.length > 1) html += `<section class="sp-sec"><h4>By person and account</h4>${split(people)}${split(s.accounts)}</section>`;
+  html += sec("Refunded, exactly", s.refunds.length ? `${s.refunds.length} pair${s.refunds.length === 1 ? "" : "s"} · ${cents(s.refunds.reduce((t, p) => t + p.cents, 0))}` : "", "refunds", s.refunds.length,
+    `<ul class="sp-list">${s.refunds.slice(0, MAX).map(p => `<li><span class="m">${name(p.charge)}</span>${amt(p.charge)}<span class="d">${day(p.charge.date)}</span>→${amt(p.refund)}<span class="d">${day(p.refund.date)}</span><span class="r">${p.days} day${p.days === 1 ? "" : "s"} later</span></li>`).join("")}</ul>${more(s.refunds.length)}`,
+    "A charge and a refund of the same amount from the same merchant, up to 120 days later.");
+  html += sec("Moved between your accounts", s.transfers.length ? `${s.transfers.length} · ${cents(s.transfers.reduce((t, p) => t + p.cents, 0))}` : "", "transfers", s.transfers.length,
+    `<ul class="sp-list">${s.transfers.slice(0, MAX).map(p => `<li><span class="m">${where(p.from)}</span>${amt(p.from)}<span class="d">${day(p.from.date)}</span>→<span class="m">${where(p.to)}</span>${amt(p.to)}<span class="r">${day(p.to.date)}</span></li>`).join("")}</ul>${more(s.transfers.length)}`,
+    "The same amount out of one account and into another within 5 days, like a card payment. Both sides balance.");
+  html += sec("Refunded in part", s.partial.length ? `${s.partial.length} merchant${s.partial.length === 1 ? "" : "s"} · ${cents(s.partial.reduce((t, g) => t + g.open, 0))} still open` : "", "partial", s.partial.length,
+    `<ul class="sp-list">${s.partial.slice(0, MAX).map(g => `<li><span class="m">${escapeHtml(g.name || "—")}</span><span class="d">charged ${cents(g.charged)}, refunded ${cents(g.refunded)}</span><span class="r">${g.open >= 0 ? `${cents(g.open)} still open` : `${cents(-g.open)} more refunded than charged`}</span></li>`).join("")}</ul>${more(s.partial.length)}`);
+  html += sec("Not balanced: charges", s.openCharges.length ? `${s.openCharges.length} · ${cents(s.openOut)}` : "", "openCharges", s.openCharges.length,
+    `<ul class="sp-list">${s.openCharges.slice(0, MAX).map(t => `<li><span class="m">${name(t)}</span>${amt(t)}<span class="r">${day(t.date)} · ${where(t)}</span></li>`).join("")}</ul>${more(s.openCharges.length)}`,
+    "Nothing selected refunds these.");
+  html += sec("Not balanced: money in", s.openCredits.length ? `${s.openCredits.length} · ${cents(s.openIn)}` : "", "openCredits", s.openCredits.length,
+    `<ul class="sp-list">${s.openCredits.slice(0, MAX).map(t => `<li><span class="m">${name(t)}</span>${amt(t)}<span class="r">${day(t.date)} · ${where(t)}</span></li>`).join("")}</ul>${more(s.openCredits.length)}`,
+    "Pay, interest, or a refund whose charge isn't selected (it may be older, or on another page).");
+  if (sumGroups.open.length && sumGroups.open.length < rows.length) html += `<p class="sp-more"><button type="button" class="sellink" data-only="open">Select only what's not balanced</button> (${sumGroups.open.length.toLocaleString()}), then tag it with the bar.</p>`;
+  const top = selPanel.scrollTop;
+  selPanel.innerHTML = html;
+  selPanel.scrollTop = top;
+}
+selPanel.addEventListener("click", async e => {
+  const only = e.target.closest("[data-only]");
+  if (only) { selected = new Set(sumGroups[only.dataset.only] ?? []); selPanel.scrollTop = 0; render(loaded); return; }
+  if (e.target.closest("[data-csv]")) {
+    const text = window.MintyReconcile.csv(loaded.filter(t => selected.has(t.id)));
+    try { await navigator.clipboard.writeText(text); selMsg.textContent = "Copied as CSV: paste it into a spreadsheet."; }
+    catch {                                                 // no clipboard: a download instead
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([text], { type: "text/csv" })), download: "minty-selected.csv" });
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      selMsg.textContent = "Saved as minty-selected.csv.";
+    }
+  }
+});
 document.getElementById("selNone").addEventListener("click", () => { selected.clear(); render(loaded); });
 document.getElementById("selAll").addEventListener("click", async () => {
   if (hasMore) {
