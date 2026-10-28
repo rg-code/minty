@@ -40,7 +40,7 @@ export async function audit(env: Env, config: Config, url: URL): Promise<Respons
     env.DB.prepare(`SELECT ${ACCOUNT_NAME("accounts")} AS name, mask, owner, balance_current_cents AS balance FROM accounts
                     WHERE type = 'credit'${by("owner")}`).bind(...who),
     env.DB.prepare("SELECT merchant, bucket FROM bucket_overrides"),
-    env.DB.prepare("SELECT key, value, updated_at FROM app_state WHERE key IN ('audit_watermark', 'audit_rebuilt_at', 'audit_dirty')"),
+    env.DB.prepare("SELECT key, value, updated_at FROM app_state WHERE key IN ('audit_watermark', 'audit_rebuilt_at', 'audit_dirty', 'audit_error')"),
   ]);
   const st = Object.fromEntries((state.results as { key: string; value: string | null; updated_at: string }[]).map((r) => [r.key, r]));
   return json({
@@ -54,6 +54,7 @@ export async function audit(env: Env, config: Config, url: URL): Promise<Respons
     refreshed_at: st.audit_watermark?.updated_at ?? null,       // the last cron run that looked
     rebuilt_at: st.audit_rebuilt_at?.value ?? null,
     pending_rebuild: Boolean(st.audit_dirty?.value),           // a correction waiting for the next run
+    rebuild_error: st.audit_error?.value ?? null,              // the last run's failure, kept until one succeeds
   });
 }
 
@@ -65,15 +66,18 @@ export async function summary(env: Env): Promise<Response> {
   const [rows, state, left] = await env.DB.batch([
     env.DB.prepare(`SELECT month, owner, bucket, category, amount_cents AS cents, n FROM monthly_totals
                     WHERE month >= ? AND bucket IN ('income', 'spend')`).bind(months[0]),
-    env.DB.prepare("SELECT updated_at FROM app_state WHERE key = 'audit_watermark'"),
+    env.DB.prepare("SELECT key, value, updated_at FROM app_state WHERE key IN ('audit_watermark', 'audit_dirty', 'audit_error')"),
     env.DB.prepare(LEFT_OUT_LIST),
   ]);
+  const st = Object.fromEntries((state.results as { key: string; value: string | null; updated_at: string }[]).map((r) => [r.key, r]));
   return json({
     today: new Date().toISOString().slice(0, 10),
     months,
     totals: rows.results,
     left_out: left.results,                                 // the cards' "shown" totals leave these out too
-    refreshed_at: (state.results[0] as { updated_at?: string } | undefined)?.updated_at ?? null,
+    refreshed_at: st.audit_watermark?.updated_at ?? null,
+    pending_rebuild: Boolean(st.audit_dirty?.value),         // a change waiting for the next run
+    rebuild_error: st.audit_error?.value ?? null,
   });
 }
 

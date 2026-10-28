@@ -80,7 +80,8 @@
       ${users.length > 1 ? `<select id="cfaOwner" aria-label="Person"><option value="">Everyone</option>${users.map(u => `<option value="${esc(u.key)}"${u.key === owner ? " selected" : ""}>${esc(u.label)}</option>`).join("")}</select>` : ""}
       <div class="bill-ranges cfa-ranges" role="group" aria-label="How far back">${[12, 24].map(n => `<button type="button" data-months="${n}" aria-pressed="${n === months}">${n} months</button>`).join("")}</div>
       <button type="button" class="pill cfa-print" data-act="print" title="Print, or save as a PDF, a dated copy of this audit">Print the audit</button>
-      <span class="cfa-when">${data.refreshed_at ? `Totals as of ${esc(new Date(data.refreshed_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}` : ""}${data.pending_rebuild ? " · a correction is being applied (within about 10 minutes)" : ""}</span>
+      <span class="cfa-when">${data.refreshed_at ? `Totals as of ${esc(new Date(data.refreshed_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}` : ""}${data.pending_rebuild ? " · a change is being applied (within about 10 minutes)" : ""}</span>
+      ${data.rebuild_error ? `<p class="abc-msg abc-err">The totals couldn't be rebuilt at the last run, so they may be out of date (${esc(data.rebuild_error)}). Minty tries again every 10 minutes.</p>` : ""}
     </div>`;
     if (!firstData) {
       main.innerHTML = html + `<p class="abc-msg">The audit fills in after the next hourly sync: it adds up your transactions by month, then shows them here.</p>`;
@@ -240,17 +241,21 @@
   /** Left out of the numbers: tags, banks and accounts, each with a switch (checked: counted). */
   function leftOutHtml() {
     if (!lo) return "";
-    const off = new Set(lo.left_out.map(x => `${x.kind}:${x.value}`));
+    const off = new Set(lo.left_out.map(x => `${x.kind}:${x.kind === "tag" ? x.value.toLowerCase() : x.value}`));
+    const isOff = (kind, value) => off.has(`${kind}:${kind === "tag" ? String(value).toLowerCase() : value}`);
     const who = o => (users.length > 1 ? ` · ${esc(users.find(u => u.key === o)?.label ?? o)}` : "");
     const sw = (kind, value, label, sub = "", disabled = false) =>
-      `<label class="lo-row${off.has(`${kind}:${value}`) ? " off" : ""}"><input type="checkbox" data-lo="${kind}" data-v="${esc(value)}"${off.has(`${kind}:${value}`) || disabled ? "" : " checked"}${disabled ? " disabled" : ""}>
+      `<label class="lo-row${isOff(kind, value) ? " off" : ""}"><input type="checkbox" data-lo="${kind}" data-v="${esc(value)}"${isOff(kind, value) || disabled ? "" : " checked"}${disabled ? " disabled" : ""}>
         <span>${label}${sub ? `<small>${sub}</small>` : ""}</span></label>`;
     const banks = lo.banks.map(b => {
-      const bankOff = off.has(`bank:${b.id}`), accts = lo.accounts.filter(a => a.item_id === b.id);
+      const bankOff = isOff("bank", b.id), accts = lo.accounts.filter(a => a.item_id === b.id);
       return `<div class="lo-bank">${sw("bank", b.id, `<b>${esc(b.name || "A bank")}</b>`, `${accts.length} account${accts.length === 1 ? "" : "s"}${who(b.owner)}`)}
         <div class="lo-accts">${accts.map(a => sw("account", a.id, `${esc(a.name || "Account")}${a.mask ? ` ••${esc(a.mask)}` : ""}`, bankOff ? "left out with the bank" : esc(a.subtype || a.type || ""), bankOff)).join("")}</div></div>`;
     }).join("");
-    const tagSet = [...new Set([...tags, ...lo.left_out.filter(x => x.kind === "tag").map(x => x.value)])].sort((a, b) => a.localeCompare(b));
+    // one chip per tag whatever its case ("sync" and "Sync" are the same tag here)
+    const byLower = new Map();
+    for (const t of [...tags, ...lo.left_out.filter(x => x.kind === "tag").map(x => x.value)]) if (!byLower.has(t.toLowerCase())) byLower.set(t.toLowerCase(), t);
+    const tagSet = [...byLower.values()].sort((a, b) => a.localeCompare(b));
     return `<section class="cfa-sec" id="cfaLeftOut"><h3>Left out of the numbers</h3>
       <p class="cfa-muted">Untick a tag, a bank or an account to keep it out of this audit, the dashboard's cards and charts, and EGG. Its transactions still show on the dashboard. ${lo.left_out.length ? `${lo.left_out.length} left out now.` : "Everything counts now."}</p>
       ${loMsg ? `<p class="lo-msg" role="status">${esc(loMsg)}</p>` : ""}

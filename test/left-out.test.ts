@@ -48,6 +48,23 @@ describe("leaving things out of the numbers", () => {
     expect(await spend()).toEqual({ FOOD_AND_DRINK: 5000, GENERAL_MERCHANDISE: 70000, TRAVEL: 12000 });
   });
 
+  it("a tag is left out whatever the case it was typed in", async () => {
+    await txn("card", "2026-09-06", 3000, "ENTERTAINMENT", "Cinema", ["SYNC"]);
+    await send({ kind: "tag", value: "sync", left_out: true });
+    await refreshTotals(E);
+    expect(await spend()).toEqual({ FOOD_AND_DRINK: 5000, TRAVEL: 12000 });                      // "sync" and "SYNC" both out
+  });
+
+  it("a failed rebuild is kept where CFA and the dashboard show it, and cleared by the next good one", async () => {
+    await db.prepare("INSERT INTO app_state (key, value) VALUES ('audit_error', 'monthly totals: D1_ERROR') ON CONFLICT (key) DO UPDATE SET value = excluded.value").run();
+    expect((await getJson<any>("/audit/summary")).body.rebuild_error).toBe("monthly totals: D1_ERROR");
+    expect((await getJson<any>("/audit")).body.rebuild_error).toBe("monthly totals: D1_ERROR");
+    await send({ kind: "tag", value: "sync", left_out: true });
+    expect((await getJson<any>("/audit/summary")).body.pending_rebuild).toBe(true);
+    await refreshTotals(E);
+    expect((await getJson<any>("/audit/summary")).body).toMatchObject({ rebuild_error: null, pending_rebuild: false });
+  });
+
   it("a bank takes all its accounts out; an account only itself", async () => {
     await send({ kind: "bank", value: bank, left_out: true });
     await refreshTotals(E);
