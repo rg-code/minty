@@ -145,8 +145,14 @@
     html += detailsHtml(byDay.get(selected) ?? [], selected);
     const notes = data.banks.filter(b => BANK_NOTE[b.statements]);
     if (notes.length) html += `<div class="bill-notes">` + notes.map(b => `<p>${esc(b.bank || "A bank")}: ${esc(BANK_NOTE[b.statements])} <a href="/connect#statements">Statement details</a></p>`).join("") + `</div>`;
-    const off = data.cards.filter(c => !c.latest);
-    if (off.length) html += `<p class="bill-hint">${off.length} card${off.length === 1 ? " has" : "s have"} no statement details (${off.map(short).join(", ")}). <a href="/connect#statements">Turn them on</a> to see statements, due dates and whether they're paid.</p>`;
+    // Cards with no statement, by why: their bank's statement details are off; on, but not fetched yet;
+    // or fetched, and the bank sent Plaid nothing for them (no statement and no due date).
+    const none = data.cards.filter(c => !c.latest), why = c => c.statements.status === "ready" && c.statements.synced_at ? "nothing" : c.statements.status;
+    const group = k => none.filter(c => why(c) === k), list = cs => cs.map(short).join(", "), n = cs => `${cs.length} card${cs.length === 1 ? "" : "s"}`;
+    const hint = (cs, text) => { if (cs.length) html += `<p class="bill-hint">${text}</p>`; };
+    hint(group("off"), `${n(group("off"))} with statement details off for their bank (${list(group("off"))}). <a href="/connect#statements">Turn them on</a> to see statements, due dates and whether they're paid.`);
+    hint(group("pending"), `${n(group("pending"))} waiting for their bank's first statement details (${list(group("pending"))}): within about ten minutes.`);
+    hint(group("nothing"), `${n(group("nothing"))} with statement details on, but the bank sends Plaid no statement or due date for ${group("nothing").length === 1 ? "it" : "them"} (${list(group("nothing"))}). That happens with some cards: a new one, one with no balance, or one the bank doesn't share. Add its due date as your own bill (+ Add a bill, or from a statement PDF) and Bills tracks it.`);
     html += `<p class="bill-fine">Statement dates ahead are estimates from each card's past statements. "Paid" is Minty's estimate from the payments posted after a statement or bill; the bank's or biller's own records are what count. Paid from an account Minty doesn't see? Use Mark paid.</p>`;
     html += `<input type="file" id="billPdfs" accept="application/pdf,.pdf" multiple hidden><input type="file" id="billFolder" webkitdirectory multiple hidden>`;
     main.innerHTML = html;
@@ -168,7 +174,7 @@
           ? `<button type="button" data-stmt="${card.account_id}|${esc(st.issue_date)}" data-to="false">Mark not paid</button>`
           : ["unpaid", "partial", "overdue", "unknown"].includes(status) ? `<button type="button" data-stmt="${card.account_id}|${esc(st.issue_date)}" data-to="true">Mark paid</button>` : "";
         html += `<div class="bill due${c.attention ? " attention" : ""}"><div class="bill-main"><div class="bill-name">${e.name}<span class="bill-where">${esc(c.bank || "")}${person(c.owner) ? " · " + person(c.owner) : ""}</span></div>
-          <div class="bill-meta">Payment due: statement ${money(s.statement_cents)}${s.minimum_payment_cents ? `, minimum ${money(s.minimum_payment_cents)}` : ""}. Closed ${day(s.issue_date)}.</div>
+          <div class="bill-meta">Payment due: statement ${money(s.statement_cents)}${s.minimum_payment_cents ? `, minimum ${money(s.minimum_payment_cents)}` : ""}. ${s.issue_estimated ? `Closed about ${day(s.issue_date)} (the bank sends the due date but not the statement date).` : `Closed ${day(s.issue_date)}.`}</div>
           <div class="bill-meta">Balance now ${money(c.balance_cents)}${s.paid_cents ? `. Paid since the statement: ${money(s.paid_cents)}` : ""}.</div>
           ${c.reason ? `<div class="bill-meta bill-why">${esc(c.reason)}</div>` : ""}
           ${markBtn(c, s, c.paid_how, c.status) ? `<div class="bill-row-actions">${markBtn(c, s, c.paid_how, c.status)}</div>` : ""}

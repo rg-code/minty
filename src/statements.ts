@@ -17,23 +17,29 @@ export const STATEMENT_RETRY_HOURS = 1;
 const MAX_RESPONSE_CHARS = 1_000_000;            // a bank's /liabilities/get is a few KB
 
 // Plaid's response text is bound once and SQLite unpacks it (as sync does with its pages), so the
-// Worker never parses it. One row per credit card with a dated statement, matched to Minty's own
-// account row on this bank. A later fetch of the same statement updates it; a missing field never
-// erases a value seen before.
-const SAVE_STATEMENTS = `
+// Worker never parses it. One row per credit card with a statement, matched to Minty's own account
+// row on this bank. A later fetch of the same statement updates it; a missing field never erases a
+// value seen before. Some banks send a card's due date, balance and minimum without the statement
+// date: that card is kept too, its statement date estimated 25 days before the due date (the
+// usual gap), until the bank sends a real one.
+const CREDIT = `FROM json_each(?2, '$.liabilities.credit') c
+  JOIN accounts a ON a.plaid_account_id = c.value ->> 'account_id' AND a.item_id = ?1`;
+const IS_DAY = (f: string) => `coalesce(c.value ->> '${f}', '') GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`;   // no date: false, never NULL
+const DROP_ESTIMATES = `DELETE FROM card_statements WHERE issue_estimated = 1
+  AND account_id IN (SELECT a.id ${CREDIT} WHERE ${IS_DAY("last_statement_issue_date")})`;
+const SAVE = (issue: string, estimated: 0 | 1, where: string) => `
   INSERT INTO card_statements (account_id, issue_date, balance_cents, minimum_payment_cents, due_date,
-                               last_payment_cents, last_payment_date, is_overdue, first_seen_at, last_seen_at)
-  SELECT a.id, c.value ->> 'last_statement_issue_date',
+                               last_payment_cents, last_payment_date, is_overdue, first_seen_at, last_seen_at, issue_estimated)
+  SELECT a.id, ${issue},
          CAST(round((c.value ->> 'last_statement_balance') * 100) AS INTEGER),
          CAST(round((c.value ->> 'minimum_payment_amount') * 100) AS INTEGER),
          c.value ->> 'next_payment_due_date',
          CAST(round((c.value ->> 'last_payment_amount') * 100) AS INTEGER),
          c.value ->> 'last_payment_date',
          CASE json_type(c.value, '$.is_overdue') WHEN 'true' THEN 1 WHEN 'false' THEN 0 END,
-         ${NOW}, ${NOW}
-  FROM json_each(?2, '$.liabilities.credit') c
-  JOIN accounts a ON a.plaid_account_id = c.value ->> 'account_id' AND a.item_id = ?1
-  WHERE (c.value ->> 'last_statement_issue_date') GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+         ${NOW}, ${NOW}, ${estimated}
+  ${CREDIT}
+  WHERE ${where}
   ON CONFLICT (account_id, issue_date) DO UPDATE SET
     balance_cents         = coalesce(excluded.balance_cents, card_statements.balance_cents),
     minimum_payment_cents = coalesce(excluded.minimum_payment_cents, card_statements.minimum_payment_cents),
@@ -42,6 +48,9 @@ const SAVE_STATEMENTS = `
     last_payment_date     = coalesce(excluded.last_payment_date, card_statements.last_payment_date),
     is_overdue            = coalesce(excluded.is_overdue, card_statements.is_overdue),
     last_seen_at          = excluded.last_seen_at`;
+const SAVE_STATEMENTS = SAVE("c.value ->> 'last_statement_issue_date'", 0, IS_DAY("last_statement_issue_date"));
+const SAVE_ESTIMATED = SAVE("date(c.value ->> 'next_payment_due_date', '-25 days')", 1,
+  `NOT ${IS_DAY("last_statement_issue_date")} AND ${IS_DAY("next_payment_due_date")}`);
 
 const SAVED = `UPDATE statement_sync SET status = 'ready', synced_at = ${NOW}, last_error = NULL,
   next_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+${STATEMENT_REFRESH_HOURS} hours') WHERE item_id = ?1`;
@@ -61,7 +70,8 @@ export function statusForStatementError(code: string): "consent_required" | "uns
 /** Saves one /liabilities/get response for a bank (exported for tests). */
 export async function saveStatements(env: Env, itemId: number, text: string): Promise<void> {
   if (text.length > MAX_RESPONSE_CHARS) throw new PlaidError(200, "API_ERROR", "RESPONSE_TOO_LARGE", undefined, "/liabilities/get response too large");
-  await env.DB.batch([env.DB.prepare(SAVE_STATEMENTS).bind(itemId, text), env.DB.prepare(SAVED).bind(itemId)]);
+  await env.DB.batch([env.DB.prepare(DROP_ESTIMATES).bind(itemId, text), env.DB.prepare(SAVE_STATEMENTS).bind(itemId, text),
+                      env.DB.prepare(SAVE_ESTIMATED).bind(itemId, text), env.DB.prepare(SAVED).bind(itemId)]);
 }
 
 /** Fetches and saves one bank's statement details. Returns the statement_sync status. */
