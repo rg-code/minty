@@ -43,8 +43,8 @@ const SAVING = (id: string) => `coalesce(json_extract(?3, '$."' || ${id} || '"')
 
 /** ?2 to ?5 for CLASSIFIED: { account id: type }, { account id: 1 } for savings-like accounts,
  * { account id: 1 } for the accounts left out of the numbers (their own, or their bank's), and
- * { transaction id: 1 } for the transactions with a tag left out (found through the tag index,
- * once: a lookup in the query for each transaction would be a read for each). */
+ * { transaction id: 1 } for the transactions with a tag left out, in any case (found once: a
+ * lookup in the query for each transaction would be a read for each). */
 export async function accountMaps(env: Env): Promise<[string, string, string, string]> {
   const [acc, ex] = await env.DB.batch([
     env.DB.prepare("SELECT id, item_id, type, subtype FROM accounts"),
@@ -60,7 +60,8 @@ export async function accountMaps(env: Env): Promise<[string, string, string, st
   }
   const tagged: Record<string, number> = {};
   if (off.tag.size) {
-    const { results } = await env.DB.prepare("SELECT DISTINCT transaction_id AS id FROM transaction_tags WHERE tag IN (SELECT value FROM json_each(?))")
+    // Whatever the case it was typed in ("sync", "Sync"): one pass over the tags, once a rebuild.
+    const { results } = await env.DB.prepare("SELECT DISTINCT transaction_id AS id FROM transaction_tags WHERE lower(tag) IN (SELECT lower(value) FROM json_each(?))")
       .bind(JSON.stringify([...off.tag])).all<{ id: number }>();
     for (const r of results) tagged[r.id] = 1;
   }
@@ -181,8 +182,23 @@ export async function refreshTotals(env: Env, now = new Date()): Promise<{ from:
     }
   }
   if (full) writes.push(setState(env, "audit_rebuilt_at", now.toISOString()), setState(env, "audit_dirty", null), setState(env, "audit_version", RULES_VERSION));
-  if (s.networth_dirty) writes.push(...NET_WORTH_REBUILD.map((q) => env.DB.prepare(q)), setState(env, "networth_dirty", null));
-  await env.DB.batch(writes);
+  // A failure is never silent: it's kept in app_state (audit_error), which CFA and the dashboard
+  // show, and the next run tries again. Net worth's rebuild is its own batch, so a failure there
+  // never holds back the monthly totals.
+  try {
+    await env.DB.batch([...writes, setState(env, "audit_error", null)]);
+  } catch (e) {
+    await setState(env, "audit_error", `monthly totals: ${String(e instanceof Error ? e.message : e).slice(0, 200)}`).run().catch(() => {});
+    throw e;
+  }
+  if (s.networth_dirty) {
+    try {
+      await env.DB.batch([...NET_WORTH_REBUILD.map((q) => env.DB.prepare(q)), setState(env, "networth_dirty", null)]);
+    } catch (e) {
+      await setState(env, "audit_error", `net worth: ${String(e instanceof Error ? e.message : e).slice(0, 200)}`).run().catch(() => {});
+      throw e;
+    }
+  }
   return { from, full, ...(recurring ? { recurring: true } : {}) };
 }
 

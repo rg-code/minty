@@ -533,15 +533,17 @@ function leftOut(t) {
   const L = summary?.left_out;
   if (!L?.length) return false;
   return L.some(x => (x.kind === "account" && Number(x.value) === t.account_id) || (x.kind === "bank" && Number(x.value) === t.item_id)
-    || (x.kind === "tag" && (t.tags || []).includes(x.value)));
+    || (x.kind === "tag" && (t.tags || []).some(tg => tg.toLowerCase() === x.value.toLowerCase())));
 }
 document.addEventListener("minty:leftout", () => { loadSummary(); });   // CFA changed what's left out
 function renderLeftOutNote() {
   const el = document.getElementById("leftOutNote"), L = summary?.left_out ?? [];
-  el.hidden = !L.length;
-  if (!L.length) return;
+  const status = summary?.rebuild_error ? ` <b>The totals couldn't be rebuilt at the last run</b>, so these may be out of date; Minty tries again every 10 minutes.`
+    : summary?.pending_rebuild ? " Updating for a change (within about 10 minutes)." : "";
+  el.hidden = !L.length && !status;
+  if (!L.length) { el.innerHTML = status.trim(); return; }
   const name = x => x.kind === "tag" ? `“${x.name}”` : x.kind === "bank" ? `${x.name || "a bank"} (bank)` : `${x.name || "an account"}${x.mask ? ` ••${x.mask}` : ""}`;
-  el.innerHTML = `Left out of these numbers: ${L.slice(0, 4).map(x => escapeHtml(name(x))).join(", ")}${L.length > 4 ? ` and ${L.length - 4} more` : ""}. <button type="button" data-open-leftout>Change</button>`;
+  el.innerHTML = `Left out of these numbers: ${L.slice(0, 4).map(x => escapeHtml(name(x))).join(", ")}${L.length > 4 ? ` and ${L.length - 4} more` : ""}. <button type="button" data-open-leftout>Change</button>${status}`;
 }
 
 function renderTotals(txns) {
