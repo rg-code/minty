@@ -156,11 +156,42 @@ describe("static pages", () => {
     expect(js).not.toMatch(/fetch\(/);                                                 // it never calls the Worker itself
   });
 
+  it("the cards add up spending from CFA's totals, and say so when they add up what's shown", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<link rel="stylesheet" href="/charts.css" />');
+    expect(html).toContain('<section class="trends" id="trends" hidden');
+    expect(html).toMatch(/fetch\("\/audit\/summary"\)/);
+    expect(html).toContain("shown` : \"none shown\"}");                              // a filter on: "Alex · 42 shown"
+    expect(html).not.toContain("· net</div>");                                         // the old net of whatever was loaded
+    const charts = await fetchText("/charts.js");
+    for (const f of ["function area(", "function donut(", "function stat(", "function wire("]) expect(charts).toContain(f);
+    expect(charts).not.toMatch(/fetch\(/);
+  });
+
+  it("the header's pills are one bar with a sliding thumb; ⋯ opens a row of pills", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<div class="pillnav" id="pillNav">');
+    expect(html).toContain('<i class="pn-ind" aria-hidden="true"></i>');
+    expect(html).toMatch(/<div class="pillnav" id="pillNav">[\s\S]*id="abcOpen"[\s\S]*id="eggOpen"[\s\S]*id="moreBtn"[\s\S]*<\/div>\s*<\/div>\s*<\/div>\s*<a class="addlink"/);
+  });
+
+  it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
+    const js = await fetchText("/swipe.js");
+    expect(js).toContain('new CustomEvent("minty:pullrefresh"');
+    expect(js).toContain("{ passive: true }");
+    expect(js).not.toContain("passive: false");                                        // scrolling never waits on it
+    expect(js).not.toMatch(/fetch\(/);
+    const { html } = await page("/");
+    expect(html).toMatch(/document\.addEventListener\("minty:pullrefresh", e => e\.detail\.wait\(refreshAll\(\)\)\)/);
+    expect(html).toContain('fetch("/sync-request", { method: "POST" })');            // records a request; the cron syncs
+    expect(html).toContain("@media (hover: none) { html { overscroll-behavior-y: none; } }");
+  });
+
   it("on phones the header is compact: logo, count and theme on one line, the links on the next, Add in the ⋯ menu", async () => {
     const { html } = await page("/");
     expect(html).toContain('grid-template-areas: "brand count theme" "links links links";');
-    expect(html).toContain('<a class="phoneonly" href="/connect">+ Add account');
-    expect(html).toContain('<a class="phoneonly" href="/add-user">+ Add user');
+    expect(html).toContain('<a class="phoneonly" href="/connect" title="Link a bank, card or retirement account">+ Add account');
+    expect(html).toContain('<a class="phoneonly" href="/add-user" title="People, Plaid keys and Setup checks">+ Add user');
     expect(html).toContain(".links .addlink { display: none; }");
     // A bank's warning is one line; a tap on it shows what it means.
     expect(html).toContain(".health .hl:not(.open) .what, .health .hl:not(.open) .code { display: none; }");
@@ -350,7 +381,7 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
   it("the headers file isn't served, and every moved script is in the service worker's shell", async () => {
     expect((await raw("/_headers")).status).toBe(404);
     const sw = await (await raw("/sw.js")).text();
-    expect(sw).toContain('const CACHE = "minty-v7";');                          // installed apps refresh their copy once (v3: Bills)
+    expect(sw).toContain('const CACHE = "minty-v8";');                          // installed apps refresh their copy once (v3: Bills)
     for (const src of MOVED_SCRIPTS) expect(sw, src).toContain(`"${src}"`);
   });
 });
@@ -359,7 +390,7 @@ describe("Bills (docs/bills.md)", () => {
   it("opens from the ⋯ menu on the dashboard, in a popup fed by /bills", async () => {
     const { html } = await page("/");
     expect(html).toContain('<button type="button" class="pill" id="moreBtn" aria-haspopup="true" aria-expanded="false" aria-controls="moreMenu"');
-    expect(html).toMatch(/<div class="moremenu" id="moreMenu" hidden>\s*<button type="button" data-open-bills>Bills/);
+    expect(html).toMatch(/<div class="moremenu" id="moreMenu" hidden>\s*<button type="button" data-open-bills title="[^"]*">Bills/);
     expect(html).toContain('<dialog id="bills" class="abc bills"');
     expect(html).toContain('<script src="/bills.js" defer></script>');
     expect(html).toContain('<link rel="stylesheet" href="/bills.css" />');

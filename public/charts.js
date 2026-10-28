@@ -1,5 +1,5 @@
-// Small SVG charts for the dashboard's popups (CFA now; EGG later): grouped bars, lines and a
-// legend. No library and no CDN, so the CSP stays 'self'. Colours come from CSS classes on each
+// Small SVG charts: grouped bars, lines and a legend for CFA's and EGG's popups, and the
+// interactive pieces below (area chart, donut, stat card) for the dashboard, CFA and EGG. No library and no CDN, so the CSP stays 'self'. Colours come from CSS classes on each
 // series (cfa.css), so light and dark follow the dashboard's tokens. Each chart returns an SVG
 // string; values in a <title> show on hover. Loaded as a classic script: window.MintyCharts.
 (function () {
@@ -66,5 +66,342 @@
 
   const legend = series => `<div class="ch-legend">${series.map(s => `<span><i class="${esc(s.cls)}"></i>${esc(s.name)}</span>`).join("")}</div>`;
 
-  window.MintyCharts = { bars, lines, legend, ticks };
+  // --- Interactive pieces: the dashboard's cards, chart and donut, and CFA's and EGG's cards -----
+  // Plain-JS takes on EasyUI's Interactive area chart, Donut chart and Stat card designs
+  // (github.com/Surajmaurya1/easyui, MIT), written for Minty: no React, no animation library.
+  // Movement is transform/attribute changes in requestAnimationFrame; reduced motion skips it.
+  const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const easeOut = t => 1 - (1 - t) ** 4;
+  const easeInOut = t => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+  const f1 = v => v.toFixed(1);
+  let uid = 0;
+  /** Runs step(eased 0→1) for `ms`; returns a cancel. */
+  function tween(ms, step, ease = easeOut) {
+    if (reduced() || ms <= 0) { step(1); return () => {}; }
+    let raf, t0;
+    const go = now => { t0 ??= now; const p = Math.min(1, (now - t0) / ms); step(ease(p)); if (p < 1) raf = requestAnimationFrame(go); };
+    raf = requestAnimationFrame(go);
+    return () => cancelAnimationFrame(raf);
+  }
+  /** Catmull-Rom through v at a fractional index. */
+  function spline(v, pos) {
+    const n = v.length;
+    if (n === 1) return v[0];
+    const i = Math.min(Math.floor(pos), n - 2), t = pos - i;
+    const p0 = v[Math.max(i - 1, 0)], p1 = v[i], p2 = v[i + 1], p3 = v[Math.min(i + 2, n - 1)];
+    return p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+  }
+  /** A smooth path through [x, y] points (Catmull-Rom as Béziers). */
+  function smooth(pts) {
+    let d = `M${f1(pts[0][0])},${f1(pts[0][1])}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(i - 1, 0)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(i + 2, pts.length - 1)];
+      d += `C${f1(p1[0] + (p2[0] - p0[0]) / 6)},${f1(p1[1] + (p2[1] - p0[1]) / 6)} ${f1(p2[0] - (p3[0] - p1[0]) / 6)},${f1(p2[1] - (p3[1] - p1[1]) / 6)} ${f1(p2[0])},${f1(p2[1])}`;
+    }
+    return d;
+  }
+  /** A monotone curve (no overshoot) through [x, y] points: the stat cards' sparklines. */
+  function monotone(pts) {
+    const n = pts.length;
+    if (n === 2) return `M${f1(pts[0][0])},${f1(pts[0][1])}L${f1(pts[1][0])},${f1(pts[1][1])}`;
+    const dx = [], s = [], m = [];
+    for (let i = 0; i < n - 1; i++) { dx[i] = pts[i + 1][0] - pts[i][0]; s[i] = (pts[i + 1][1] - pts[i][1]) / dx[i]; }
+    m[0] = s[0]; m[n - 1] = s[n - 2];
+    for (let i = 1; i < n - 1; i++) m[i] = s[i - 1] * s[i] <= 0 ? 0 : (3 * (dx[i - 1] + dx[i])) / ((2 * dx[i] + dx[i - 1]) / s[i - 1] + (dx[i] + 2 * dx[i - 1]) / s[i]);
+    let d = `M${f1(pts[0][0])},${f1(pts[0][1])}`;
+    for (let i = 0; i < n - 1; i++) {
+      const h = dx[i] / 3;
+      d += `C${f1(pts[i][0] + h)},${f1(pts[i][1] + m[i] * h)} ${f1(pts[i + 1][0] - h)},${f1(pts[i + 1][1] - m[i + 1] * h)} ${f1(pts[i + 1][0])},${f1(pts[i + 1][1])}`;
+    }
+    return d;
+  }
+  /** A segmented control's sliding thumb, under its pressed button; returns a re-place. */
+  function segpill(group) {
+    let thumb = group.querySelector(".seg-thumb");
+    if (!thumb) { thumb = document.createElement("i"); thumb.className = "seg-thumb"; group.prepend(thumb); }
+    const place = () => {
+      const b = group.querySelector('[aria-pressed="true"]');
+      thumb.style.opacity = b ? 1 : 0;
+      if (b) { thumb.style.width = `${b.offsetWidth}px`; thumb.style.transform = `translateX(${b.offsetLeft}px)`; }
+    };
+    place();
+    return place;
+  }
+  function deltaHtml(delta, good, text) {
+    if (delta === null || delta === undefined || !Number.isFinite(delta)) return "";
+    const flat = Math.abs(delta) < 0.0005, cls = flat ? "flat" : good ? "good" : "bad";
+    const t = text ?? `${Math.abs(delta * 100).toFixed(Math.abs(delta) < 0.1 ? 1 : 0)}%`;
+    return `<span class="delta ${cls}"><svg viewBox="0 0 10 9" width="8" height="8" aria-hidden="true"${delta < 0 ? ' style="transform:rotate(180deg)"' : ""}><path d="M5 1.5 9 7.5H1Z" fill="currentColor"/></svg>${esc(t)}</span>`;
+  }
+  const isGood = (delta, goodWhen) => (goodWhen === "down" ? delta < 0 : delta > 0);
+
+  /** An interactive area chart: range buttons that morph the line, and a scrubbing tooltip.
+   *  o: { title, ranges: [{ key, label, points: [{ label, axis, value }] }], range, fmt, fmtAxis,
+   *       head(i | null, range) → { value, delta, good, deltaText, caption }, onPoint(i | null, range), height } */
+  function area(el, o) {
+    const id = `ia${++uid}`, H = o.height ?? 230, P = { t: 14, r: 10, b: 24, l: 46 }, N = 72;
+    const fmtAxis = o.fmtAxis ?? o.fmt;
+    el.classList.add("ia");
+    el.innerHTML = `<div class="ia-head"><div class="ia-title">${esc(o.title)}</div><div class="ia-value num"></div><div class="ia-sub"></div></div>
+      <div class="ia-plot"><svg class="ia-svg" height="${H}" tabindex="0" role="img" aria-label="${esc(o.title)}: use the arrow keys to read each point">
+        <defs><linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".2"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient>
+        <clipPath id="${id}c"><rect x="0" y="0" height="${H}" width="0"/></clipPath></defs>
+        <g class="ia-grid"></g><g clip-path="url(#${id}c)"><path class="ia-area" fill="url(#${id}g)"/><path class="ia-line"/></g>
+        <line class="ia-cross" y1="${P.t - 6}" y2="${H - P.b}" visibility="hidden"/><circle class="ia-dot" r="4.5" visibility="hidden"/>
+        <rect class="ia-hit" x="0" y="0" height="${H}" fill="transparent"/></svg><div class="ia-tip" hidden></div></div>
+      <div class="segpill ia-ranges" role="group" aria-label="How far back">${o.ranges.map(r => `<button type="button" data-r="${esc(r.key)}" aria-pressed="${r.key === o.range}">${esc(r.label)}</button>`).join("")}</div>`;
+    const $ = s => el.querySelector(s), svg = $(".ia-svg"), clip = $(`#${id}c rect`), tip = $(".ia-tip");
+    let W = 0, cur = o.range, drawn = null, stop = () => {}, hover = null;
+    const prep = r => {
+      const vals = r.points.map(p => p.value);
+      const t = ticks(Math.min(0, ...vals), Math.max(0, ...vals));
+      const lo = t[0], hi = t[t.length - 1];
+      return { ...r, t, lo, hi, ny: Array.from({ length: N }, (_, k) => Math.max(0, (spline(vals, (k / (N - 1)) * (vals.length - 1)) - lo) / (hi - lo || 1))) };
+    };
+    let R = Object.fromEntries(o.ranges.map(r => [r.key, prep(r)]));
+    const X = k => P.l + (k / (N - 1)) * (W - P.l - P.r), Y = ny => P.t + (1 - ny) * (H - P.t - P.b);
+    const xi = (i, n) => P.l + (n === 1 ? (W - P.l - P.r) / 2 : (i / (n - 1)) * (W - P.l - P.r));
+    function paths() {
+      const pts = drawn.map((ny, k) => [X(k), Y(ny)]);
+      const d = smooth(pts);
+      $(".ia-line").setAttribute("d", d);
+      $(".ia-area").setAttribute("d", `${d}L${f1(X(N - 1))},${H - P.b}L${P.l},${H - P.b}Z`);
+    }
+    function grid() {
+      const r = R[cur], n = r.points.length, count = W < 380 ? 3 : W < 520 ? 4 : 5;
+      const yv = v => P.t + (1 - (v - r.lo) / (r.hi - r.lo || 1)) * (H - P.t - P.b);
+      let g = r.t.map(v => `<line class="ia-gl" x1="${P.l}" x2="${W - P.r}" y1="${f1(yv(v))}" y2="${f1(yv(v))}"/><text class="ch-axis" x="${P.l - 8}" y="${f1(yv(v) + 4)}" text-anchor="end">${esc(fmtAxis(v))}</text>`).join("");
+      const idx = n <= count ? [...Array(n).keys()] : Array.from({ length: count }, (_, j) => Math.round((j * (n - 1)) / (count - 1)));
+      g += idx.map((i, j) => `<text class="ch-axis" x="${f1(xi(i, n))}" y="${H - 6}" text-anchor="${j === 0 && idx.length > 1 ? "start" : j === idx.length - 1 && idx.length > 1 ? "end" : "middle"}">${esc(r.points[i].axis ?? r.points[i].label)}</text>`).join("");
+      const gEl = $(".ia-grid");
+      gEl.innerHTML = g;
+      gEl.classList.remove("in"); void gEl.getBoundingClientRect(); gEl.classList.add("in");
+    }
+    function head(i) {
+      const h = o.head(i, cur) ?? {};
+      $(".ia-value").textContent = h.value === undefined ? "" : o.fmt(h.value);
+      $(".ia-sub").innerHTML = deltaHtml(h.delta, h.good, h.deltaText) + `<span class="ia-cap">${esc(h.caption ?? "")}</span>`;
+    }
+    function show(i) {
+      const r = R[cur], n = r.points.length;
+      if (i === null) {
+        hover = null;
+        for (const s of [".ia-cross", ".ia-dot"]) $(s).setAttribute("visibility", "hidden");
+        tip.hidden = true; head(null); o.onPoint?.(null, cur);
+        return;
+      }
+      hover = i = Math.max(0, Math.min(n - 1, i));
+      const cx = xi(i, n), k = n === 1 ? 0 : (i / (n - 1)) * (N - 1), a = Math.floor(k), b = Math.min(N - 1, a + 1);
+      const cy = Y(drawn[a] + (drawn[b] - drawn[a]) * (k - a));
+      const cross = $(".ia-cross"), dot = $(".ia-dot");
+      cross.setAttribute("x1", f1(cx)); cross.setAttribute("x2", f1(cx)); cross.setAttribute("visibility", "visible");
+      dot.setAttribute("cx", f1(cx)); dot.setAttribute("cy", f1(cy)); dot.setAttribute("visibility", "visible");
+      const p = r.points[i];
+      tip.innerHTML = `<span>${esc(p.label)}</span><b class="num">${esc(o.fmt(p.value))}</b>`;
+      tip.hidden = false;
+      tip.style.transform = `translateX(${f1(Math.max(0, Math.min(W - 124, cx - 62)))}px)`;
+      head(i); o.onPoint?.(i, cur);
+    }
+    function size() {
+      const w = Math.round(el.clientWidth);
+      if (!w || w === W) return;
+      W = w;
+      svg.setAttribute("width", W); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); $(".ia-hit").setAttribute("width", W);
+      if (drawn) { paths(); grid(); clip.setAttribute("width", W); if (hover !== null) show(hover); }
+    }
+    function setRange(key) {
+      if (!R[key]) return;
+      cur = key;
+      el.querySelectorAll(".ia-ranges button").forEach(b => b.setAttribute("aria-pressed", b.dataset.r === key));
+      placeThumb();
+      const from = drawn.slice(), to = R[key].ny;
+      stop();
+      stop = tween(550, t => { for (let k = 0; k < N; k++) drawn[k] = from[k] + (to[k] - from[k]) * t; paths(); }, easeInOut);
+      grid(); show(null);
+    }
+    size();
+    if (!W) { W = 320; svg.setAttribute("width", W); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); $(".ia-hit").setAttribute("width", W); }
+    drawn = R[cur].ny.slice(); paths(); grid(); head(null);
+    const placeThumb = segpill($(".ia-ranges"));
+    tween(1100, t => clip.setAttribute("width", f1(t * W)), easeInOut);
+    el.querySelector(".ia-ranges").addEventListener("click", e => { const b = e.target.closest("[data-r]"); if (b) setRange(b.dataset.r); });
+    const at = e => {
+      const box = svg.getBoundingClientRect(), n = R[cur].points.length;
+      return n === 1 ? 0 : Math.round(((e.clientX - box.left - P.l) / (W - P.l - P.r)) * (n - 1));
+    };
+    const hit = $(".ia-hit");
+    hit.addEventListener("pointermove", e => show(at(e)));
+    hit.addEventListener("pointerdown", e => show(at(e)));
+    hit.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") show(null); });
+    svg.addEventListener("keydown", e => {
+      const n = R[cur].points.length;
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); show(hover === null ? n - 1 : hover + (e.key === "ArrowLeft" ? -1 : 1)); }
+      if (e.key === "Escape") show(null);
+    });
+    svg.addEventListener("blur", () => show(null));
+    new ResizeObserver(size).observe(el);
+    return {
+      setRange, clear: () => show(null),
+      update(ranges) { R = Object.fromEntries(ranges.map(r => [r.key, prep(r)])); if (!R[cur]) cur = ranges[0].key; drawn = drawn ?? R[cur].ny.slice(); setRange(cur); },
+    };
+  }
+
+  /** A donut: segments by value, the hovered one named in the middle, a legend that hides one.
+   *  o: { segments: [{ key, label, value, color }], title, fmt, size, thickness } */
+  function donut(el, o) {
+    const TH = o.thickness ?? 14;
+    const hidden = new Set();
+    let segs = [], title = o.title, active = null, intro = true, stop = () => {};
+    el.classList.add("dn");
+    el.innerHTML = `<div class="dn-ring"><svg class="dn-svg" role="img"></svg><div class="dn-center"><span class="dn-lab"></span><b class="dn-val num"></b><span class="dn-pct"></span></div></div><div class="dn-legend"></div>`;
+    const svg = el.querySelector(".dn-svg"), legend = el.querySelector(".dn-legend");
+    const D = () => Math.max(120, Math.min(o.size ?? 176, el.clientWidth || 176));
+    const shown = () => segs.filter(s => !hidden.has(s.key) && s.value > 0);
+    const total = () => shown().reduce((t, s) => t + s.value, 0);
+    function center() {
+      const s = segs.find(x => x.key === active && !hidden.has(x.key)), t = total();
+      el.querySelector(".dn-lab").textContent = s ? s.label : title;
+      el.querySelector(".dn-val").textContent = o.fmt(s ? s.value : t);
+      el.querySelector(".dn-pct").textContent = s && t ? `${Math.round((s.value / t) * 100)}% of the total` : "";
+      el.querySelector(".dn-center").classList.toggle("on", !!s);
+    }
+    function arcs(progress = () => 1) {
+      const d = D(), c = d / 2, r = c - (TH + 6) / 2 - 1, t = total(), list = shown();
+      const pad = list.length > 1 ? 3.5 / r + TH / 2 / r : 0;
+      const pt = a => `${f1(c + r * Math.sin(a))} ${f1(c - r * Math.cos(a))}`;
+      let a = 0, out = `<circle class="dn-track" cx="${c}" cy="${c}" r="${f1(r)}" stroke-width="${TH}"/>`;
+      list.forEach((s, i) => {
+        const span = (s.value / (t || 1)) * Math.PI * 2;
+        let a0 = a + pad, a1 = a + span - pad;
+        a += span;
+        if (a1 <= a0) return;
+        a1 = a0 + (a1 - a0) * progress(i);
+        const on = s.key === active, w = on ? TH + 4 : TH;
+        const path = list.length === 1 && progress(i) >= 1
+          ? `M${c} ${f1(c - r)}A${f1(r)} ${f1(r)} 0 1 1 ${f1(c - 0.01)} ${f1(c - r)}`
+          : `M${pt(a0)}A${f1(r)} ${f1(r)} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${pt(a1)}`;
+        out += `<path class="dn-arc${on ? " on" : ""}" d="${path}" stroke="${esc(s.color)}" style="stroke-width:${w}px" data-k="${esc(s.key)}"/>` +
+               `<path class="dn-hit" d="${path}" data-k="${esc(s.key)}"><title>${esc(`${s.label}: ${o.fmt(s.value)}`)}</title></path>`;
+      });
+      svg.setAttribute("width", d); svg.setAttribute("height", d); svg.setAttribute("viewBox", `0 0 ${d} ${d}`);
+      svg.innerHTML = out;
+      svg.classList.toggle("hl", active !== null && !hidden.has(active));
+    }
+    function rows() {
+      const t = total();
+      legend.innerHTML = segs.map(s => {
+        const off = hidden.has(s.key);
+        return `<button type="button" class="dn-row${off ? " off" : ""}${s.key === active ? " on" : ""}" data-k="${esc(s.key)}" aria-pressed="${!off}">
+          <i style="background:${esc(s.color)}"></i><span class="dn-name">${esc(s.label)}</span>
+          <span class="dn-v num">${off ? "—" : esc(o.fmt(s.value))}</span><span class="dn-p num">${off || !t ? "" : `${Math.round((s.value / t) * 100)}%`}</span></button>`;
+      }).join("");
+    }
+    function draw() {
+      stop();
+      if (intro && !reduced()) {
+        intro = false;
+        const n = shown().length, dur = 900, start = performance.now();
+        let raf;
+        const step = now => {
+          const ms = now - start;
+          arcs(i => easeOut(Math.max(0, Math.min(1, (ms - 120 - i * 90) / dur))));
+          if (ms < 120 + n * 90 + dur) raf = requestAnimationFrame(step);
+        };
+        raf = requestAnimationFrame(step);
+        stop = () => cancelAnimationFrame(raf);
+        const target = total(), valEl = el.querySelector(".dn-val");
+        center();
+        tween(800, k => { if (active === null) valEl.textContent = o.fmt(target * k); });
+      } else { intro = false; arcs(); center(); }
+      rows();
+    }
+    const highlight = k => { if (active === k) return; active = k; arcs(); center(); rows(); };
+    svg.addEventListener("pointerover", e => { const k = e.target.closest(".dn-hit")?.dataset.k; if (k && e.pointerType === "mouse") highlight(k); });
+    svg.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") highlight(null); });
+    svg.addEventListener("click", e => { const k = e.target.closest(".dn-hit")?.dataset.k ?? null; highlight(k === active ? null : k); });
+    legend.addEventListener("pointerover", e => { const k = e.target.closest(".dn-row")?.dataset.k; if (k && e.pointerType === "mouse" && !hidden.has(k)) highlight(k); });
+    legend.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") highlight(null); });
+    legend.addEventListener("focusin", e => { const k = e.target.closest(".dn-row")?.dataset.k; if (k && !hidden.has(k)) highlight(k); });
+    legend.addEventListener("click", e => {
+      const b = e.target.closest(".dn-row");
+      if (!b) return;
+      const k = b.dataset.k;
+      if (hidden.has(k)) hidden.delete(k);
+      else if (shown().length > 1) hidden.add(k);            // the last one stays
+      if (hidden.has(active)) active = null;
+      arcs(); center(); rows();
+      legend.querySelector(`.dn-row[data-k="${CSS.escape(k)}"]`)?.focus();
+    });
+    return {
+      update(segments, t) {
+        segs = segments; title = t ?? title;
+        for (const k of [...hidden]) if (!segs.some(s => s.key === k)) hidden.delete(k);
+        if (!segs.some(s => s.key === active)) active = null;
+        draw();
+      },
+    };
+  }
+
+  /** A stat card's HTML: label, a change pill, the number, a caption and a sparkline. wire() then
+   *  makes the number count up and the sparkline scrub (pointer, or the arrow keys).
+   *  o: { label, value, fmt, delta, goodWhen: "up" | "down", deltaText, caption, trend: [numbers],
+   *       labels: [strings], dot (a colour), tag, attrs, cls, countUp, touch (scrub by touch too) } */
+  const STATS = new Map();
+  function stat(o) {
+    const id = `sc${++uid}`, tag = o.tag ?? "div";
+    STATS.set(id, o);
+    let spark = "";
+    const v = o.trend ?? [];
+    if (v.length >= 2) {
+      const lo = Math.min(...v), hi = Math.max(...v), Hs = 44;
+      const pts = v.map((x, i) => [(i / (v.length - 1)) * 100, 6 + (1 - (x - lo) / (hi - lo || 1)) * (Hs - 12)]);
+      const d = monotone(pts), last = pts.at(-1);
+      spark = `<div class="sc-spark" style="--h:${Hs}px"><svg viewBox="0 0 100 ${Hs}" preserveAspectRatio="none" aria-hidden="true">
+        <defs><linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".28"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+        <path class="sc-area" d="${d}L100,${Hs}L0,${Hs}Z" fill="url(#${id}g)"/><path class="sc-line" d="${d}" pathLength="1" vector-effect="non-scaling-stroke"/></svg>
+        <i class="sc-last" style="left:${f1(last[0])}%;top:${f1((last[1] / Hs) * 100)}%"></i><i class="sc-cur" hidden></i><i class="sc-pt" hidden></i></div>`;
+      o._pts = pts.map(([x, y]) => [x, (y / Hs) * 100]);
+    }
+    const good = o.delta !== null && o.delta !== undefined && isGood(o.delta, o.goodWhen ?? "up");
+    return `<${tag} class="sc${o.cls ? ` ${esc(o.cls)}` : ""}" data-sc="${id}"${o.attrs ? ` ${o.attrs}` : ""}${tag === "div" && v.length >= 2 ? ' tabindex="0"' : ""}>
+      <span class="sc-top"><span class="sc-label">${o.dot ? `<i class="sc-dot" style="background:${esc(o.dot)}"></i>` : ""}${esc(o.label)}</span>${deltaHtml(o.delta, good, o.deltaText)}</span>
+      <span class="sc-value num">${esc(o.fmt(o.value))}</span>
+      <span class="sc-cap">${esc(o.caption ?? "")}</span>${spark}</${tag}>`;
+  }
+  function wire(root) {
+    for (const card of root.querySelectorAll("[data-sc]")) {
+      const o = STATS.get(card.dataset.sc);
+      STATS.delete(card.dataset.sc);
+      if (!o) continue;
+      const valEl = card.querySelector(".sc-value"), capEl = card.querySelector(".sc-cap");
+      if (o.countUp !== false && Number.isFinite(o.value)) tween(1100, k => { valEl.textContent = o.fmt(o.value * k); });
+      const sp = card.querySelector(".sc-spark");
+      if (!sp) continue;
+      const cur = sp.querySelector(".sc-cur"), pt = sp.querySelector(".sc-pt"), n = o.trend.length;
+      let at = null;
+      const show = i => {
+        if (i === null) { at = null; cur.hidden = pt.hidden = true; valEl.textContent = o.fmt(o.value); capEl.textContent = o.caption ?? ""; card.classList.remove("scrub"); return; }
+        at = i = Math.max(0, Math.min(n - 1, i));
+        const [x, y] = o._pts[i];
+        cur.hidden = pt.hidden = false;
+        cur.style.left = pt.style.left = `${f1(x)}%`;
+        pt.style.top = `${f1(y)}%`;
+        valEl.textContent = o.fmt(o.trend[i]);
+        capEl.textContent = o.labels?.[i] ?? "";
+        card.classList.add("scrub");
+      };
+      const idx = e => { const b = sp.getBoundingClientRect(); return Math.round(((e.clientX - b.left) / b.width) * (n - 1)); };
+      card.addEventListener("pointermove", e => { if (e.pointerType !== "touch" || o.touch) show(idx(e)); });
+      card.addEventListener("pointerleave", e => { if (e.pointerType !== "touch") show(null); });
+      if (o.touch) { sp.style.touchAction = "pan-y"; card.addEventListener("pointerdown", e => { if (e.pointerType === "touch") show(idx(e)); }); }
+      card.addEventListener("keydown", e => {
+        if (e.key === "ArrowLeft" || e.key === "ArrowRight") { e.preventDefault(); show(at === null ? n - 1 : at + (e.key === "ArrowLeft" ? -1 : 1)); }
+        if (e.key === "Escape") show(null);
+      });
+      card.addEventListener("blur", () => show(null));
+    }
+  }
+  const PALETTE = ["#6d7cff", "#34d1bf", "#ffb44c", "#ff6b8b", "#a78bfa", "#5ac8fa", "#f59f00", "#94a3b8"];
+
+  window.MintyCharts = { bars, lines, legend, ticks, area, donut, stat, wire, segpill, deltaHtml, PALETTE };
 })();

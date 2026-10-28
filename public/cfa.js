@@ -85,6 +85,7 @@
     }
 
     html += `<p class="cfa-printed">Complete financial audit${owner ? ` · ${esc(users.find(u => u.key === owner)?.label ?? owner)}` : ""} · ${esc(dayYear(data.today))}</p>`;
+    html += statsHtml(by, full);
     html += adviceHtml();
 
     // 1. Cash flow
@@ -180,6 +181,37 @@
     </section>
     <p class="bill-fine">Educational, not financial advice: Minty isn't a CFP, CFA or registered advisor. The suggestions above are rules of thumb with the arithmetic shown; you decide. How it sorts: money in is income; a move between your own accounts is ignored, or counts as saving when it goes into savings or investments; card payments are ignored, because the purchases already count. Retirement accounts come with EGG.</p>`;
     main.innerHTML = html;
+    C().wire(main);
+  }
+
+  /** The headline numbers as stat cards (charts.js): the last full month against the one before,
+   * each with its line over the months to scrub. */
+  function statsHtml(by, full) {
+    if (!full.length) return "";
+    const name = m => `${MON[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+    const last = full.at(-1), prev = full.at(-2), L = by.get(last), P = prev ? by.get(prev) : null;
+    const cap = prev ? `${name(last)}, against ${MON[Number(prev.slice(5, 7)) - 1]}` : name(last);
+    const ch = (a, b) => (b > 0 ? a / b - 1 : null);
+    const card = (label, k, cls, goodWhen) => C().stat({ label, value: L[k], fmt: money, delta: P ? ch(L[k], P[k]) : null, goodWhen, caption: cap, cls, touch: true,
+      trend: full.map(m => by.get(m)[k]), labels: full.map(m => `${label}, ${name(m)}`) });
+    const cards = [card("Money in", "income", "income", "up"), card("Spending", "spend", "spend", "down")];
+    const rate = x => (x.income > 0 ? Math.round(((x.income - x.spend - x.debt) / x.income) * 1000) / 10 : null);
+    const rated = full.filter(m => rate(by.get(m)) !== null);
+    if (rate(L) !== null) {
+      const d = P && rate(P) !== null ? rate(L) - rate(P) : null;
+      cards.push(C().stat({ label: "Savings rate", value: rate(L), fmt: v => `${Math.round(v)}%`, delta: d === null ? null : d / 100, deltaText: d === null ? null : `${Math.abs(Math.round(d))} pts`,
+        caption: cap, cls: "rate", touch: true, trend: rated.map(m => rate(by.get(m))), labels: rated.map(m => `Savings rate, ${name(m)}`) }));
+    }
+    const nw = data.net_worth;
+    if (nw.length) {
+      const v = r => r.assets - r.debts, now = nw.at(-1);
+      const month = Date.parse(now.date) - 30 * 864e5, base = [...nw].reverse().find(r => Date.parse(r.date) <= month) ?? nw[0];
+      const every = Math.max(1, Math.ceil(nw.length / 60)), pts = nw.filter((_, i) => i % every === 0 || i === nw.length - 1);
+      cards.push(C().stat({ label: "Net worth", value: v(now), fmt: money, delta: base !== now && v(base) ? (v(now) - v(base)) / Math.abs(v(base)) : null,
+        caption: base !== now ? `Since ${dayYear(base.date)}` : `As of ${dayYear(now.date)}`, cls: "rate", touch: true,
+        trend: pts.map(v), labels: pts.map(r => `Net worth, ${dayYear(r.date)}`) }));
+    }
+    return `<div class="scgrid">${cards.join("")}</div>`;
   }
 
   const AREA = { saving: "Saving", spending: "Spending", debt: "Debt", retirement: "Retirement", investing: "Investing" };
