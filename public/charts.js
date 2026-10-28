@@ -358,7 +358,7 @@
       const d = monotone(pts), last = pts.at(-1);
       spark = `<div class="sc-spark" style="--h:${Hs}px"><svg viewBox="0 0 100 ${Hs}" preserveAspectRatio="none" aria-hidden="true">
         <defs><linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".28"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
-        <path class="sc-area" d="${d}L100,${Hs}L0,${Hs}Z" fill="url(#${id}g)"/><path class="sc-line" d="${d}" pathLength="1" vector-effect="non-scaling-stroke"/></svg>
+        <path class="sc-area" d="${d}L100,${Hs}L0,${Hs}Z" fill="url(#${id}g)"/><path class="sc-line" d="${d}" vector-effect="non-scaling-stroke"/></svg>
         <i class="sc-last" style="left:${f1(last[0])}%;top:${f1((last[1] / Hs) * 100)}%"></i><i class="sc-cur" hidden></i><i class="sc-pt" hidden></i></div>`;
       o._pts = pts.map(([x, y]) => [x, (y / Hs) * 100]);
     }

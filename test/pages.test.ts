@@ -183,6 +183,17 @@ describe("static pages", () => {
     expect(html).toContain('allTags.find(x => x.toLowerCase() === typed.toLowerCase()) ?? typed'); // "Sync" adds the existing "sync"
   });
 
+  it("the Select bar sums up what's selected, and matches it up (reconcile.js), from the rows on the page", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<span class="selsum num" id="selSum"></span>');
+    expect(html).toContain('<div class="selpanel" id="selPanel" hidden');
+    expect(html).toContain('<script src="/reconcile.js" defer></script>');
+    for (const k of ["refunds", "transfers", "partial", "openCharges", "openCredits"]) expect(html).toContain(`"${k}"`);
+    const js = await fetchText("/reconcile.js");
+    expect(js).not.toMatch(/fetch\(|localStorage|indexedDB/);                         // pure: nothing leaves the page
+    expect((await page("/sw.js")).html).toContain('"/reconcile.js"');
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');
@@ -389,7 +400,7 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
   it("the headers file isn't served, and every moved script is in the service worker's shell", async () => {
     expect((await raw("/_headers")).status).toBe(404);
     const sw = await (await raw("/sw.js")).text();
-    expect(sw).toContain('const CACHE = "minty-v8";');                          // installed apps refresh their copy once (v3: Bills)
+    expect(sw).toContain('const CACHE = "minty-v9";');                          // installed apps refresh their copy once (v3: Bills)
     for (const src of MOVED_SCRIPTS) expect(sw, src).toContain(`"${src}"`);
   });
 });

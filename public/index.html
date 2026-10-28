@@ -18,6 +18,8 @@
   :root {
     color-scheme: light;
     --bg: #f2f8f5;              /* a whisper of mint */
+    --mint-track: #def3e8;      /* the pill bars' track: light mint */
+    --mint-line: #c6e8d6;
     --brand-ink: #0f3d33;
     --brand-dot: #2db37c;
     --surface: #ffffff;
@@ -52,6 +54,8 @@
   :root[data-theme="dark"] {
     color-scheme: dark;
     --bg: #0e1413;
+    --mint-track: #15271f;
+    --mint-line: #23402f;
     --brand-ink: #e8f5ef;
     --brand-dot: #5fd3a0;
     --surface: #171a21;
@@ -132,6 +136,49 @@
   .selectbar .selmsg { color: var(--muted); flex: 1 1 140px; }
   .selectbar #selDone { margin-left: auto; }
   body.selecting { padding-bottom: 110px; }
+  /* the Select bar's Summary (app.js, reconcile.js) */
+  .selectbar .selsum { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .selectbar .selsum b { color: var(--ink); font-weight: 600; }
+  .selectbar #selSumBtn[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+  .selpanel { flex: 1 1 100%; max-height: min(58vh, 560px); overflow-y: auto; margin: -10px calc(-1 * var(--pad)) 4px; padding: 14px var(--pad) 12px;
+              border-bottom: 1px solid var(--hairline); overscroll-behavior: contain; }
+  .selpanel[hidden] { display: none; }
+  .sp-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 10px; }
+  .sp-head h3 { margin: 0; font-size: 15px; }
+  .sp-head .sellink { margin-left: auto; }
+  .sp-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .sp-tile { border: 1px solid var(--hairline); border-radius: 12px; padding: 8px 11px; background: var(--bg); }
+  .sp-tile span { display: block; font-size: 11.5px; color: var(--muted); }
+  .sp-tile b { font-size: 17px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .sp-tile small { display: block; font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sp-sec { border-top: 1px solid var(--hairline); padding: 10px 0 6px; }
+  .sp-sec h4 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 0 0 6px; font-size: 13.5px; }
+  .sp-sec h4 em { font-style: normal; font-weight: 500; color: var(--muted); font-size: 12.5px; }
+  .sp-sec h4 .sellink { margin-left: auto; font-size: 12.5px; font-weight: 500; }
+  .sp-sec p { margin: 0 0 6px; font-size: 12.5px; color: var(--muted); }
+  .sp-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+  .sp-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 4px 0; border-bottom: 1px dashed var(--hairline); }
+  .sp-list li:last-child { border-bottom: 0; }
+  .sp-list .m { font-weight: 550; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46%; }
+  .sp-list .d { color: var(--muted); font-size: 12px; }
+  .sp-list .amt { padding: 0; font-weight: 600; }
+  .sp-list .r { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .sp-more { font-size: 12px; color: var(--muted); padding-top: 4px; }
+  .sp-split { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 24px; font-size: 12.5px; }
+  .sp-split div { display: flex; gap: 8px; padding: 3px 0; }
+  .sp-split div span:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sp-split .num { white-space: nowrap; }
+  @media (max-width: 640px) {   /* phones: count and Done, the totals, the buttons, then tagging; the panel above */
+    .selectbar { gap: 6px 12px; padding-top: 8px; font-size: 13px; }
+    .selectbar .selcount { order: 0; } .selectbar #selDone { order: 1; }
+    .selectbar .selsum { order: 2; flex: 1 1 100%; font-size: 12.5px; margin-top: -4px; }
+    .selectbar #selSumBtn, .selectbar #selAll, .selectbar #selNone { order: 3; }
+    .selectbar .seltag { order: 4; flex: 1 1 200px; } .selectbar .seltag input { flex: 1 1 0; width: auto; }
+    .selectbar #selRemove { order: 4; flex: 0 1 auto; }
+    .selectbar .selmsg { order: 5; flex: 1 1 100%; } .selectbar .selmsg:empty { display: none; }
+    .selpanel { max-height: 50vh; margin-top: -8px; }
+    .sp-tile b { font-size: 15.5px; }
+  }
   /* "Install Minty as an app" (see setUpInstall below) */
   .installbar { display: flex; align-items: center; gap: 12px; padding: 10px var(--pad); background: var(--surface);
                 border-bottom: 1px solid var(--hairline); font-size: 13.5px; }
@@ -177,8 +224,16 @@
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
   /* the cards above the feed (renderTotals): stat cards (charts.js), and a chart and donut under a tap */
-  .totals { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; padding: var(--pad); padding-bottom: 0; }
-  .totals .sc { cursor: pointer; }
+  .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; padding: var(--pad); padding-bottom: 0; }
+  /* short and wide: the label and pill across the top, the numbers on the left, the sparkline beside them */
+  .totals .sc { cursor: pointer; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(80px, 1fr); grid-template-rows: auto auto 1fr;
+                column-gap: 14px; padding: 12px 14px; }
+  .totals .sc-top { grid-column: 1 / -1; }
+  .totals .sc-value { grid-column: 1; margin-top: 6px; }
+  .totals .sc-cap { grid-column: 1; }
+  .totals .sc:not(:has(.sc-spark)) > * { grid-column: 1 / -1; }
+  .totals .sc-spark svg { position: absolute; inset: 0; }   /* the card's height sets it, never the other way round */
+  .totals .sc-spark { grid-column: 2; grid-row: 2 / 4; height: auto; min-height: 44px; margin: 4px -14px -12px 0; align-self: stretch; }
   .totals .sc[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--card-shadow); }
   .sc-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
   .totals-note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin: -4px 2px 0; }
@@ -219,8 +274,21 @@
 
   /* the header's pill navigation: one track, a thumb sliding to the pill under the pointer or focus
      (app.js), and ⋯ opening a row of pills under it. After EasyUI's Pill navigation (MIT). */
-  .pillnav { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; border: 1px solid var(--hairline);
-             background: color-mix(in srgb, var(--muted) 8%, var(--surface)); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .05); }
+  .pillnav { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; border: 1px solid var(--mint-line);
+             background: var(--mint-track); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .05); }
+  /* the person picker, in the header: the same pill bar, its thumb under the person picked (app.js) */
+  header #ownerSeg { position: relative; gap: 2px; border-radius: 999px; border-color: var(--mint-line); background: var(--mint-track);
+                     box-shadow: inset 0 1px 2px rgba(0, 0, 0, .05); }
+  header #ownerSeg button { position: relative; z-index: 1; min-height: 32px; padding: 6px 14px; border-radius: 999px; font-size: 13.5px; transition: color .15s; }
+  header #ownerSeg button:hover { color: var(--ink); }
+  header #ownerSeg button[aria-pressed="true"] { background: transparent; box-shadow: none; color: var(--ink); }
+  #ownerSeg .seg-thumb { display: none; }
+  header #ownerSeg .seg-thumb { display: block; position: absolute; top: 3px; bottom: 3px; left: 0; border-radius: 999px; background: var(--surface); pointer-events: none;
+                                box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 2px 8px rgba(0, 0, 0, .08);
+                                transition: transform .35s cubic-bezier(.23, 1, .32, 1), width .35s cubic-bezier(.23, 1, .32, 1); }
+  header #ownerSeg .seg-thumb:not([data-ready]) { transition: none; }
+  @media (prefers-reduced-motion: reduce) { header #ownerSeg .seg-thumb { transition: none; } }
+  :root[data-theme="dark"] .pn-ind, :root[data-theme="dark"] header #ownerSeg .seg-thumb { background: #26362f; }
   .pillnav > .pill, .pillnav > .more > .pill { position: relative; z-index: 1; border: 0; background: transparent; box-shadow: none; min-height: 32px;
              padding: 6px 14px; font-size: 13px; font-weight: 550; color: var(--muted); border-radius: 999px; transition: color .15s; }
   .pillnav > .pill:hover, .pillnav > .more > .pill:hover, .pillnav .pill:focus-visible, .pillnav .pill[aria-expanded="true"] { color: var(--ink); background: transparent; }
@@ -432,11 +500,10 @@
     header .controls .tagmenu { left: 0; right: 0; min-width: 0; max-width: none; }
     .totals { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 10px 12px 2px; scrollbar-width: none; scroll-snap-type: x proximity; scroll-padding: 0 12px; }
     .totals::-webkit-scrollbar { display: none; }
-    .totals .sc { flex: 0 0 min(76%, 250px); padding: 11px 13px 0; border-radius: 14px; scroll-snap-align: start; }
-    .totals .sc:not(:has(.sc-spark)) { padding-bottom: 11px; }
-    .totals .sc-value { font-size: 21px; margin-top: 6px; }
-    .totals .sc-cap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .totals .sc-spark { height: 30px; margin: 6px -13px 0; }
+    .totals .sc { flex: 0 0 min(88%, 360px); padding: 10px 12px; border-radius: 14px; scroll-snap-align: start; }
+    .totals .sc:only-child { flex-basis: 100%; }
+    .totals .sc-value { font-size: 21px; margin-top: 5px; }
+    .totals .sc-spark { margin: 4px -12px -10px 0; min-height: 40px; }
     .totals-note { flex: 0 0 100%; }
     .trends { margin: 10px 12px 0; padding: 14px 12px; border-radius: 16px; }
     .trends .dn { justify-content: center; }
@@ -672,7 +739,10 @@
 <div class="selectrow"><button type="button" class="pill" id="selectToggle" aria-pressed="false" title="Select transactions to tag several at once">Select</button></div>
 <main id="feed"><div class="empty">Loading…</div></main>
 <div class="selectbar" id="selectBar" hidden role="region" aria-label="Tag the selected transactions">
+  <div class="selpanel" id="selPanel" hidden aria-label="Summary of the selected transactions"></div>
   <span class="selcount" id="selCount">0 selected</span>
+  <span class="selsum num" id="selSum"></span>
+  <button type="button" class="pill" id="selSumBtn" aria-expanded="false" aria-controls="selPanel" title="Totals, refunds matched to their charges, and what isn't balanced">Summary</button>
   <button type="button" class="sellink" id="selAll">Select all</button>
   <button type="button" class="sellink" id="selNone">Clear</button>
   <span class="seltag"><input id="selTag" list="selTags" maxlength="64" placeholder="Tag to add" aria-label="Tag to add" /><datalist id="selTags"></datalist>
@@ -684,6 +754,7 @@
 
 <script src="/app.js"></script>
 <script src="/swipe.js" defer></script>
+<script src="/reconcile.js" defer></script>
 <script src="/abc.js" defer></script>
 <script src="/bills.js" defer></script>
 <script src="/bam.js" defer></script>
