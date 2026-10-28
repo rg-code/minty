@@ -397,9 +397,23 @@
   .tagbtn::after { content: ""; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px; margin-top: -5px;
                    border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
   .tagbtn.active { border-color: var(--accent); }
-  .tagmenu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 220px; max-width: 300px;
-             background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius);
-             box-shadow: 0 8px 24px var(--shadow); padding: 8px; }
+  .tagmenu { position: absolute; top: calc(100% + 8px); left: 0; z-index: 20; min-width: 220px; max-width: 300px;
+             background: var(--mint-track); border: 1px solid var(--mint-line); border-radius: 18px;
+             box-shadow: 0 10px 28px -6px var(--shadow); padding: 8px; }
+  /* the gooey open (app.js gooOpen): mint pills, and a mint blob that drips into the menu */
+  .goo-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  .tagbtn { background: var(--mint-track); border-color: var(--mint-line); border-radius: 999px; transition: background .15s, border-color .15s; }
+  .tagbtn:hover { background: color-mix(in srgb, var(--mint-line) 60%, var(--mint-track)); }
+  .goo { pointer-events: none; z-index: 19; filter: url(#mintyGoo) drop-shadow(0 10px 16px rgba(0, 0, 0, .1)); }
+  .goo i { position: absolute; display: block; background: var(--mint-track); }
+  .goo-panel { border-radius: 18px; transform-origin: 50% 0; transition: transform .5s cubic-bezier(.3, 1.3, .5, 1); }
+  .tagpick.goo-open > .tagbtn { background: transparent; border-color: transparent; position: relative; z-index: 21; }   /* its label above the blob */
+  .tagpick.goo-open > .tagbtn.active { border-color: var(--accent); }
+  .tagmenu.goo-in { animation: goo-menu .28s ease .2s both; }
+  .tagmenu.goo-in > *, .tagmenu.goo-in .tagopts > *, .tagmenu.goo-in .presets > * { animation: goo-row .32s cubic-bezier(.2, .8, .2, 1) both; animation-delay: calc(.2s + var(--i, 0) * 28ms); }
+  @keyframes goo-menu { from { background-color: transparent; border-color: transparent; box-shadow: none; } }
+  @keyframes goo-row { from { opacity: 0; transform: translateY(-8px); } }
+  @media (prefers-reduced-motion: reduce) { .tagmenu.goo-in, .tagmenu.goo-in * { animation: none !important; } }
   .tagmenu .menuhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
   .tagmenu .seg button { padding: 4px 10px; font-size: 12.5px; }
   .tagclear { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 12.5px; cursor: pointer; padding: 4px; }
@@ -549,11 +563,11 @@
   @media (prefers-reduced-motion: reduce) { .ministrip { animation: none; } }
   .minicoin { flex: none; border: 0; background: none; padding: 0; line-height: 0; cursor: pointer; border-radius: 50%; }
   .ministrip .controls { flex: 1; min-width: 0; margin: 0; flex-wrap: nowrap; gap: 5px; justify-content: space-between; }
-  .ministrip .seg { flex: 0 1 98px; min-width: 70px; height: 38px; padding: 2px; flex-direction: column; overflow: visible; position: relative; z-index: 3; }
-  .ministrip .seg button { flex: none; height: 32px; padding: 0 7px; gap: 5px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ministrip .seg:not(.open) button[aria-pressed="false"] { display: none; }
-  .ministrip .seg.open button { background: var(--surface); border: 1px solid var(--hairline); box-shadow: 0 6px 16px -8px var(--shadow); }
-  .ministrip .seg.open button[aria-pressed="true"] { color: var(--accent); }
+  .ministrip #ownerSeg { flex: 0 1 98px; min-width: 70px; height: 38px; padding: 2px; flex-direction: column; overflow: visible; position: relative; z-index: 3; }
+  .ministrip #ownerSeg button { flex: none; height: 32px; padding: 0 7px; gap: 5px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ministrip #ownerSeg:not(.open) button[aria-pressed="false"] { display: none; }
+  .ministrip #ownerSeg.open button { background: var(--surface); border: 1px solid var(--hairline); box-shadow: 0 6px 16px -8px var(--shadow); }
+  .ministrip #ownerSeg.open button[aria-pressed="true"] { color: var(--accent); }
   .ministrip .iosearch { flex: 0 1 38px; min-width: 32px; position: static; }      /* in the strip: the icon button below, as before */
   .ministrip .iosearch > :not(input) { display: none; }
   .ministrip #q { flex: 0 1 38px; width: 38px; min-width: 32px; height: 38px; padding: 0; color: transparent; caret-color: transparent; cursor: pointer;
@@ -590,6 +604,12 @@
 <script src="/lock.js"></script>
 </head>
 <body>
+<svg class="goo-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs>
+  <filter id="mintyGoo" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="blur"/>
+    <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -14" result="goo"/>
+    <feComposite in="SourceGraphic" in2="goo" operator="atop"/>
+  </filter></defs></svg>
 <header>
   <div class="title-row">
     <h1 class="brand"><button type="button" class="coinbtn" id="syncBtn" aria-label="Refresh: reload now and ask for a sync with your banks" title="Refresh: reload now and ask for a sync with your banks"><img src="/favicon.svg" alt="" width="30" height="30" /></button><svg class="wordmark" viewBox="0 -1834 5405 2374" role="img" aria-label="Minty"><path d="M1434 0.0 1434.67 -673.33Q1434.67 -789.66 1374.67 -855.16Q1314.67 -920.66 1216.67 -920.66Q1157.34 -920.66 1107.5 -893.33Q1057.67 -866 1027.17 -811.33Q996.67 -756.66 996.67 -675.33L896 -726Q894.34 -839.67 944.84 -925.67Q995.34 -1011.67 1082.34 -1059.5Q1169.34 -1107.33 1277.34 -1107.33Q1451.67 -1107.33 1547.84 -1002.33Q1644 -897.33 1644 -723.33L1643.34 0.0ZM138.67 0.0V-1080.0H324.67V-768H349.34V0.0ZM787.33 0.0 788 -668.66Q788 -786.66 728.5 -853.66Q669 -920.66 568.67 -920.66Q470 -920.66 409.67 -853Q349.34 -785.33 349.34 -675.33L248.67 -739.33Q248.67 -844.67 299.67 -927.83Q350.67 -1011 437.84 -1059.17Q525 -1107.33 634.67 -1107.33Q749.67 -1107.33 830.67 -1058.5Q911.67 -1009.67 954.17 -922.67Q996.67 -835.67 996.67 -721.33L996 0.0Z M1912.0 0V-1080H2121.34V0.0Z M3167 0.0V-530.67Q3167 -594 3156.5 -660.5Q3146 -727 3116.67 -784.16Q3087.33 -841.33 3033.83 -876.33Q2980.33 -911.33 2894.33 -911.33Q2838 -911.33 2788.17 -892.5Q2738.34 -873.66 2700.67 -832.66Q2663 -791.67 2641.34 -725Q2619.67 -658.33 2619.67 -562L2489.67 -610.67Q2489.67 -757.67 2544.67 -870.17Q2599.67 -982.67 2702.84 -1046Q2806 -1109.33 2951.67 -1109.33Q3063.67 -1109.33 3139.84 -1073Q3216 -1036.67 3263.5 -978.17Q3311 -919.67 3336 -851Q3361 -782.33 3370 -716.17Q3379 -650 3379 -600V0.0ZM2407.67 0.0V-1080.0H2595V-768H2619.67V0.0Z M4245 0.0Q4143.33 20 4045.33 16.83Q3947.33 13.67 3870.33 -21.17Q3793.33 -56 3753.67 -131.33Q3719 -198.33 3716.67 -267.5Q3714.33 -336.67 3714.33 -424.67V-1380.0H3923.67V-435.34Q3923.67 -370 3925.17 -322Q3926.67 -274 3945.67 -241.34Q3981.67 -179.34 4060.34 -170.5Q4139 -161.67 4245 -177.34ZM3507.0 -912V-1080H4245V-912Z M4606 480.0 4814.67 -89.33 4818 78.67 4346.67 -1080.0H4565.34L4917.33 -185.34H4853.33L5189.33 -1080.0H5400.67L4805.34 480.0Z" fill="currentColor"/><path d="M1912.0 -1257.33V-1460H2121.34V-1257.33Z" fill="var(--brand-dot)"/></svg></h1>
