@@ -414,6 +414,7 @@ function rowAction(txnEl, act) {
   }
   if (act === "similar") {                                   // the search box takes 48 characters (D1's LIKE limit)
     state.q = qInput.value = [...(t.merchant_name || t.name || "")].slice(0, 48).join("").trim();
+    syncQ();
     load();
     window.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
     return;
@@ -831,7 +832,27 @@ document.getElementById("ownerSeg").addEventListener("click", e => {
   load();
 });
 let deb;
-document.getElementById("q").addEventListener("input", e => { clearTimeout(deb); deb = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250); });
+document.getElementById("q").addEventListener("input", e => { syncQ(); clearTimeout(deb); deb = setTimeout(() => { state.q = e.target.value.trim(); load(); }, 250); });
+// The search box's clear button (shown once there's text), Escape to leave it, and ⌘K / Ctrl+K or "/"
+// to jump to it from anywhere on the page.
+const qClear = document.getElementById("qClear");
+function syncQ() { qClear.hidden = !qInput.value; }
+qClear.addEventListener("click", () => {
+  qInput.value = ""; syncQ(); clearTimeout(deb);
+  if (state.q) { state.q = ""; load(); }
+  qInput.focus();
+});
+qInput.addEventListener("keydown", e => { if (e.key === "Escape") qInput.blur(); });
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+document.getElementById("qKbd").textContent = MAC ? "⌘K" : "Ctrl K";
+document.addEventListener("keydown", e => {
+  const typing = e.target.closest?.("input, textarea, select, [contenteditable]");
+  if (((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") || (e.key === "/" && !typing && !e.metaKey && !e.ctrlKey && !e.altKey)) {
+    if (document.querySelector("dialog[open]")) return;
+    e.preventDefault();
+    qInput.focus(); qInput.select();
+  }
+});
 // Filter dropdowns (tags, banks, cards & accounts): opening one closes the others; a click
 // outside or Escape closes them.
 const DROPDOWNS = [["tagPick", "tagBtn", "tagMenu"], ["bankPick", "bankBtn", "bankMenu"], ["acctPick", "acctBtn", "acctMenu"], ["datePick", "dateBtn", "dateMenu"]]
@@ -970,8 +991,7 @@ function renderDateControls() {
     : state.start ? `From ${shortDay(state.start)}` : state.end ? `Until ${shortDay(state.end)}` : "All dates";
   btn.classList.toggle("active", !!(state.start || state.end));
   for (const b of document.querySelectorAll("#datePresets button")) b.setAttribute("aria-pressed", b.dataset.range === preset);
-  document.getElementById("start").value = state.start;
-  document.getElementById("end").value = state.end;
+  dateCal?.set(state.start, state.end);
   document.getElementById("dateClear").disabled = !(state.start || state.end);
 }
 function setDates(start, end) { state.start = start; state.end = end; renderDateControls(); load(); }
@@ -982,8 +1002,15 @@ document.getElementById("datePresets").addEventListener("click", e => {
   setDropdown(DROPDOWNS[3], false);
 });
 document.getElementById("dateClear").addEventListener("click", () => setDates("", ""));
-document.getElementById("start").addEventListener("change", e => setDates(e.target.value, state.end));
-document.getElementById("end").addEventListener("change", e => setDates(state.start, e.target.value));
+// A range of days on the calendar (charts.js): the second tap applies it, and the menu closes.
+let dateCal = null;
+document.addEventListener("DOMContentLoaded", () => {
+  const n = new Date(), today = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+  dateCal = window.MintyCharts?.calendar(document.getElementById("dateCal"), {
+    from: state.start, to: state.end, max: today,
+    onChange: (a, b) => { setDates(a, b); setTimeout(() => setDropdown(DROPDOWNS[3], false), 350); },
+  }) ?? null;
+});
 renderDateControls();
 
 // sample data for offline preview only (includes account fields + tags)

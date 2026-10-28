@@ -401,7 +401,114 @@
       card.addEventListener("blur", () => show(null));
     }
   }
+  /** A range calendar (the Dates menu): a month at a time, sliding between months; the first tap
+   *  picks the start and the band follows the pointer, the second sets the end. Arrow keys move a
+   *  day or a week, Page Up/Down a month, Home/End to the week's ends. After EasyUI's Calendar (MIT).
+   *  o: { from, to, max, onChange(from, to) } (dates as YYYY-MM-DD). Returns { set(from, to) }. */
+  function calendar(el, o) {
+    const iso = (y, m, d) => new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10);
+    const ymd = s => [Number(s.slice(0, 4)), Number(s.slice(5, 7)) - 1, Number(s.slice(8, 10))];
+    const add = (s, n) => { const [y, m, d] = ymd(s); return iso(y, m, d + n); };
+    const now = new Date(), today = iso(now.getFullYear(), now.getMonth(), now.getDate());
+    const MONTH = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
+    const LONG = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
+    const SHORT = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+    const WD = Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(undefined, { weekday: "narrow", timeZone: "UTC" }).format(new Date(Date.UTC(2023, 0, 1 + i))));
+    const at = s => new Date(`${s}T12:00:00Z`);
+    let from = o.from || "", to = o.to || "", hover = "", focus = to || from || today, view = focus.slice(0, 7);
+    el.classList.add("cal2");
+    function render(dir = 0) {
+      const [y, m] = ymd(`${view}-01`);
+      const first = new Date(Date.UTC(y, m, 1)).getUTCDay(), dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+      if (focus.slice(0, 7) !== view) focus = iso(y, m, Math.min(Number(focus.slice(8, 10)), dim));
+      let cells = "";
+      for (let i = 0; i < Math.ceil((first + dim) / 7) * 7; i++) {
+        const d = i - first + 1;
+        if (d < 1 || d > dim) { cells += `<span class="c2-pad" role="gridcell"></span>`; continue; }
+        const s = iso(y, m, d), off = o.max && s > o.max;
+        cells += `<button type="button" class="c2-day${s === today ? " today" : ""}" role="gridcell" data-d="${s}" data-col="${i % 7}" data-last="${d === dim ? 1 : 0}"
+          tabindex="${s === focus ? 0 : -1}"${off ? " disabled" : ""} aria-label="${esc(LONG.format(at(s)))}"><span>${d}</span></button>`;
+      }
+      const slide = dir ? (dir < 0 ? "from-l" : "from-r") : "";
+      if (!el.querySelector(".c2-grid")) {                 // built once: a click on an arrow keeps its button (and the menu open)
+        el.innerHTML = `<div class="c2-head">
+            <button type="button" class="c2-nav" data-nav="-1" aria-label="Previous month"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="c2-title" aria-live="polite"><span class="c2-m"></span></div>
+            <button type="button" class="c2-nav" data-nav="1" aria-label="Next month"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+          <div class="c2-wd" aria-hidden="true">${WD.map(w => `<span>${esc(w)}</span>`).join("")}</div>
+          <div class="c2-grid" role="grid"></div>
+          <div class="c2-sum" role="status"></div>`;
+      }
+      const title = el.querySelector(".c2-m"), grid = el.querySelector(".c2-grid"), label = MONTH.format(at(`${view}-15`));
+      title.textContent = label;
+      grid.setAttribute("aria-label", label);
+      grid.innerHTML = cells;
+      el.querySelector('[data-nav="1"]').disabled = !!(o.max && view >= o.max.slice(0, 7));
+      for (const x of [title, grid]) { x.classList.remove("from-l", "from-r"); if (slide) { void x.offsetWidth; x.classList.add(slide); } }
+      paint();
+    }
+    function paint() {
+      const end = to || (from && hover && hover >= from ? hover : "");
+      for (const b of el.querySelectorAll(".c2-day")) {
+        const s = b.dataset.d, inside = from && end && s >= from && s <= end && from !== end;
+        b.classList.toggle("end", s === from || s === end);
+        b.classList.toggle("in", !!inside);
+        b.classList.toggle("cap-l", !!inside && (s === from || b.dataset.col === "0" || s.endsWith("-01")));
+        b.classList.toggle("cap-r", !!inside && (s === end || b.dataset.col === "6" || b.dataset.last === "1"));
+        b.setAttribute("aria-pressed", s === from || s === to);
+      }
+      const n = from && end ? Math.round((Date.parse(end) - Date.parse(from)) / 864e5) + 1 : 0;
+      el.querySelector(".c2-sum").textContent = !from ? "Pick the first day" : !to ? `From ${SHORT.format(at(from))}: now pick the last day`
+        : `${SHORT.format(at(from))} – ${SHORT.format(at(to))} · ${n} day${n === 1 ? "" : "s"}`;
+    }
+    const go = (s, focusIt = true) => {
+      if (o.max && s > o.max) s = o.max;
+      const dir = s.slice(0, 7) < view ? -1 : s.slice(0, 7) > view ? 1 : 0;
+      focus = s;
+      if (dir) { view = s.slice(0, 7); render(dir); }
+      else for (const b of el.querySelectorAll(".c2-day")) b.tabIndex = b.dataset.d === s ? 0 : -1;
+      if (focusIt) el.querySelector(`.c2-day[data-d="${s}"]`)?.focus();
+    };
+    el.addEventListener("click", e => {
+      const nav = e.target.closest("[data-nav]");
+      if (nav) { const [y, m] = ymd(`${view}-01`); view = iso(y, m + Number(nav.dataset.nav), 1).slice(0, 7); render(Number(nav.dataset.nav)); return; }
+      const b = e.target.closest(".c2-day");
+      if (!b || b.disabled) return;
+      const s = b.dataset.d;
+      if (!from || to || s < from) { from = s; to = ""; }       // a new range starts (or an earlier start)
+      else { to = s; o.onChange?.(from, to); }
+      hover = ""; focus = s; paint();
+    });
+    el.addEventListener("pointerover", e => {
+      const b = e.target.closest(".c2-day");
+      if (!b || !from || to || b.dataset.d === hover) return;
+      hover = b.dataset.d; paint();
+    });
+    el.addEventListener("pointerleave", () => { if (hover) { hover = ""; paint(); } });
+    el.addEventListener("keydown", e => {
+      const b = e.target.closest(".c2-day");
+      if (!b) return;
+      const s = b.dataset.d, [y, m, d] = ymd(s), wd = Number(b.dataset.col);
+      const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+      let next = step ? add(s, step) : e.key === "Home" ? add(s, -wd) : e.key === "End" ? add(s, 6 - wd)
+        : e.key === "PageUp" || e.key === "PageDown" ? iso(y, m + (e.key === "PageUp" ? -1 : 1), Math.min(d, new Date(Date.UTC(y, m + (e.key === "PageUp" ? 0 : 2), 0)).getUTCDate())) : null;
+      if (!next) return;
+      e.preventDefault();
+      go(next);
+      if (from && !to) { hover = focus; paint(); }
+    });
+    render();
+    return {
+      set(f, t) {
+        from = f || ""; to = t || ""; hover = "";
+        const want = (to || from || today).slice(0, 7);
+        focus = to || from || today;
+        if (want !== view) { view = want; render(); } else paint();
+      },
+    };
+  }
+
   const PALETTE = ["#6d7cff", "#34d1bf", "#ffb44c", "#ff6b8b", "#a78bfa", "#5ac8fa", "#f59f00", "#94a3b8"];
 
-  window.MintyCharts = { bars, lines, legend, ticks, area, donut, stat, wire, segpill, deltaHtml, PALETTE };
+  window.MintyCharts = { bars, lines, legend, ticks, area, donut, stat, wire, segpill, deltaHtml, calendar, PALETTE };
 })();

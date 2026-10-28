@@ -194,6 +194,14 @@ describe("static pages", () => {
     expect((await page("/sw.js")).html).toContain('"/reconcile.js"');
   });
 
+  it("the search box: a clear button once there's text, and ⌘K / Ctrl+K or / to jump to it", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<div class="iosearch" id="qWrap">');
+    expect(html).toContain('<button type="button" class="qclear" id="qClear" aria-label="Clear search" hidden>');
+    expect(html).toMatch(/\(e\.metaKey \|\| e\.ctrlKey\) && e\.key\.toLowerCase\(\) === "k"/);
+    expect(html).toContain(".ministrip .iosearch > :not(input) { display: none; }");    // the strip keeps its icon button
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');
@@ -222,8 +230,9 @@ describe("static pages", () => {
     expect(html).toContain('id="dateBtn"');
     expect(html).toMatch(/\["datePick", "dateBtn", "dateMenu"\]/);           // opens and closes like Tags / Banks
     for (const r of ["this-month", "last-month", "30", "90", "this-year", "last-year"]) expect(html).toContain(`data-range="${r}"`);
-    expect(html).toContain('<input type="date" id="start" />');
-    expect(html).toContain('<input type="date" id="end" />');
+    expect(html).toContain('<div class="customrange" id="dateCal" aria-label="Pick a range of days"></div>');   // a range calendar (charts.js)
+    expect(html).toMatch(/MintyCharts\?\.calendar\(document\.getElementById\("dateCal"\)/);
+    expect(await fetchText("/charts.js")).toContain("function calendar(el, o)");
   });
 
   it("ABC folds each card and keeps its settings out of the way", async () => {

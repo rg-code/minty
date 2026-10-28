@@ -222,6 +222,26 @@
   }
   input[type="search"] { flex: 1 1 180px; min-width: 140px; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  /* the search box, in the header: a rounded field with its icon, a clear button once there's text,
+     and the shortcut when it's idle. After EasyUI's iOS search bar (MIT). */
+  .iosearch { position: relative; display: flex; align-items: center; flex: 1 1 180px; min-width: 140px; }
+  .iosearch #q { flex: 1 1 auto; min-width: 0; width: 100%; }
+  header .iosearch .qicon { position: absolute; left: 13px; width: 16px; height: 16px; color: var(--muted); pointer-events: none; transition: color .2s; }
+  header .iosearch:focus-within .qicon { color: var(--ink); }
+  header #q { height: 40px; border-radius: 999px; padding: 0 38px 0 37px; font-size: 15px; transition: border-color .2s, box-shadow .2s; }
+  header #q:hover { border-color: color-mix(in srgb, var(--muted) 45%, var(--hairline)); }
+  header #q:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 60%, var(--hairline)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+  #q::-webkit-search-cancel-button, #q::-webkit-search-decoration { -webkit-appearance: none; appearance: none; display: none; }
+  .qclear { position: absolute; right: 9px; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%;
+            background: color-mix(in srgb, var(--muted) 20%, transparent); color: var(--ink); cursor: pointer; animation: q-pop .15s ease-out; }
+  .qclear:hover { background: color-mix(in srgb, var(--muted) 32%, transparent); }
+  .qclear[hidden] { display: none; }
+  @keyframes q-pop { from { opacity: 0; transform: scale(.8); } }
+  .qkbd { position: absolute; right: 12px; padding: 1px 6px; border: 1px solid var(--hairline); border-radius: 6px; font: 10.5px ui-monospace, SFMono-Regular, Menlo, monospace;
+          color: var(--muted); background: var(--bg); pointer-events: none; }
+  .iosearch:focus-within .qkbd, .iosearch:has(#q:not(:placeholder-shown)) .qkbd { display: none; }
+  @media (hover: none) { .qkbd { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .qclear { animation: none; } }
 
   /* the cards above the feed (renderTotals): stat cards (charts.js), and a chart and donut under a tap */
   .totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; padding: var(--pad); padding-bottom: 0; }
@@ -346,7 +366,7 @@
   .desc { min-width: 0; }
   .desc .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.005em; }
   .desc .meta { font-size: 12px; color: var(--muted); display: flex; gap: 4px 6px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
-  .desc .meta > span:not(.chip) + span:not(.chip)::before { content: "·"; margin-right: 6px; }   /* Alex · Food And Drink */
+  .desc .meta > span:not(.chip):not(.tag) + span:not(.chip):not(.tag)::before { content: "·"; margin-right: 6px; }   /* Alex · Food And Drink */
   @media (hover: none) { .tag.addtag { display: none; } }   /* touch: a swipe, or the opened row, tags it */
   .chip { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--hairline); }
   .chip.pending { color: var(--pending-ink); border-color: var(--warn-line); background: var(--pending-bg); }
@@ -381,16 +401,14 @@
   .tagopts label:hover { background: var(--row-hover); }
   .tagopts input { accent-color: var(--accent); margin: 0; }
   .tagopts .none { color: var(--muted); font-size: 13px; padding: 6px; }
-  .datemenu { min-width: 260px; max-width: min(320px, calc(100vw - 32px)); left: auto; right: 0; }   /* last in the row: open leftwards */
+  .datemenu { min-width: 292px; max-width: min(330px, calc(100vw - 32px)); left: auto; right: 0; }   /* last in the row: open leftwards */
   @media (max-width: 640px) { .datemenu { left: 0; right: auto; } }
   .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px; }
   .presets button { font: inherit; font-size: 13px; text-align: left; padding: 7px 9px; border-radius: 6px; border: 1px solid transparent;
                     background: transparent; color: var(--ink); cursor: pointer; }
   .presets button:hover { background: var(--row-hover); }
   .presets button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
-  .customrange { display: grid; gap: 6px; border-top: 1px solid var(--hairline); padding-top: 8px; }
-  .customrange label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; color: var(--muted); }
-  .customrange input { padding: 5px 8px; font-size: 13px; }
+  .customrange { border-top: 1px solid var(--hairline); padding-top: 8px; }
   .menutitle { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 0 4px; }
   .optgroup { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted);
               padding: 8px 6px 2px; }
@@ -494,7 +512,7 @@
     header .controls { margin-top: 10px; gap: 6px; position: relative; }
     header .controls .seg { flex: 1 1 100%; }
     header .controls .seg button { padding: 6px 12px; }
-    header .controls #q { flex: 1 1 0; min-width: 0; height: 40px; }
+    header .controls .iosearch { flex: 1 1 0; min-width: 0; }
     header .controls .tagpick { flex: 0 0 42px; position: static; }
     header .controls .tagbtn { height: 40px; }
     header .controls .tagmenu { left: 0; right: 0; min-width: 0; max-width: none; }
@@ -528,6 +546,8 @@
   .ministrip .seg:not(.open) button[aria-pressed="false"] { display: none; }
   .ministrip .seg.open button { background: var(--surface); border: 1px solid var(--hairline); box-shadow: 0 6px 16px -8px var(--shadow); }
   .ministrip .seg.open button[aria-pressed="true"] { color: var(--accent); }
+  .ministrip .iosearch { flex: 0 1 38px; min-width: 32px; position: static; }      /* in the strip: the icon button below, as before */
+  .ministrip .iosearch > :not(input) { display: none; }
   .ministrip #q { flex: 0 1 38px; width: 38px; min-width: 32px; height: 38px; padding: 0; color: transparent; caret-color: transparent; cursor: pointer;
                   background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E") center / 18px no-repeat; }
   :root[data-theme="dark"] .ministrip #q { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M20 20l-3.5-3.5'/%3E%3C/svg%3E"); }
@@ -596,7 +616,12 @@
   </div>
   <div class="controls">
     <div class="seg" id="ownerSeg" role="group" aria-label="Filter by person"></div>
-    <input type="search" id="q" placeholder="Search" aria-label="Search descriptions and merchants" maxlength="48" />
+    <div class="iosearch" id="qWrap">
+      <svg class="qicon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" id="q" placeholder="Search" aria-label="Search descriptions and merchants" maxlength="48" autocomplete="off" />
+      <button type="button" class="qclear" id="qClear" aria-label="Clear search" hidden><svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <kbd class="qkbd" id="qKbd" aria-hidden="true">⌘K</kbd>
+    </div>
     <div class="tagpick" id="tagPick">
       <button type="button" class="tagbtn" id="tagBtn" aria-haspopup="true" aria-expanded="false" aria-controls="tagMenu">All tags</button>
       <div class="tagmenu" id="tagMenu" hidden>
@@ -645,10 +670,7 @@
           <button type="button" data-range="this-year">This year</button>
           <button type="button" data-range="last-year">Last year</button>
         </div>
-        <div class="customrange">
-          <label>From <input type="date" id="start" /></label>
-          <label>To <input type="date" id="end" /></label>
-        </div>
+        <div class="customrange" id="dateCal" aria-label="Pick a range of days"></div>
       </div>
     </div>
   </div>
