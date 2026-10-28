@@ -32,7 +32,7 @@ const CARDS_SQL = `
          i.id AS item_id, i.institution_name AS bank,
          ss.status AS statements_status, ss.synced_at AS statements_synced_at, ss.last_error AS statements_error,
          s.issue_date, s.balance_cents AS statement_cents, s.minimum_payment_cents, s.due_date,
-         s.last_payment_cents, s.last_payment_date, s.is_overdue, s.marked_paid_at,
+         s.last_payment_cents, s.last_payment_date, s.is_overdue, s.marked_paid_at, s.issue_estimated,
          CASE WHEN s.issue_date IS NULL THEN NULL ELSE
            (SELECT coalesce(sum(-t.amount_cents), 0) FROM transactions t
             WHERE t.account_id = a.id AND t.date > s.issue_date AND t.date <= date('now', '+2 days') AND ${PAYMENT}) END AS paid_cents
@@ -64,7 +64,7 @@ interface CardRow {
   statements_status: string | null; statements_synced_at: string | null; statements_error: string | null;
   issue_date: string | null; statement_cents: number | null; minimum_payment_cents: number | null; due_date: string | null;
   last_payment_cents: number | null; last_payment_date: string | null; is_overdue: number | null; paid_cents: number | null;
-  marked_paid_at: string | null;
+  marked_paid_at: string | null; issue_estimated: number | null;
 }
 
 const daysUntil = (date: string, today: string) => Math.round((Date.parse(date) - Date.parse(today)) / 864e5);
@@ -121,7 +121,7 @@ export async function bills(env: Env, config: Config): Promise<Response> {
         issue_date: r.issue_date, statement_cents: r.statement_cents, minimum_payment_cents: r.minimum_payment_cents,
         due_date: r.due_date, paid_cents: r.paid_cents, last_payment_cents: r.last_payment_cents,
         last_payment_date: r.last_payment_date, is_overdue: r.is_overdue === null ? null : !!r.is_overdue,
-        marked_paid_at: r.marked_paid_at,
+        marked_paid_at: r.marked_paid_at, issue_estimated: !!r.issue_estimated,
       } : null,
       status: latest?.status ?? "no_statement",
       paid_how: latest?.paid_how ?? null,

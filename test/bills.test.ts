@@ -77,11 +77,23 @@ describe("saving statements", () => {
     expect((await env.DB.prepare("SELECT count(*) AS n FROM card_statements").first<{ n: number }>())!.n).toBe(2);   // a new statement: history grows
   });
 
-  it("skips a card with no dated statement, and a bank with no credit liabilities saves nothing", async () => {
+  it("skips a card with neither a statement date nor a due date, and a bank with no credit liabilities saves nothing", async () => {
     const { item } = await bank();
-    await saveStatements(E, item, liabilities([credit({ last_statement_issue_date: null })]));
+    await saveStatements(E, item, liabilities([credit({ last_statement_issue_date: null, next_payment_due_date: null })]));
     await saveStatements(E, item, JSON.stringify({ accounts: [], liabilities: { credit: null } }));
     expect((await env.DB.prepare("SELECT count(*) AS n FROM card_statements").first<{ n: number }>())!.n).toBe(0);
+  });
+
+  it("keeps a card the bank sends a due date for but no statement date, estimated, until a real date comes", async () => {
+    const { item, card } = await bank();
+    await saveStatements(E, item, liabilities([credit({ last_statement_issue_date: null })]));
+    expect(await env.DB.prepare("SELECT issue_date, issue_estimated, due_date, balance_cents FROM card_statements").all().then((r) => r.results))
+      .toEqual([{ issue_date: day(-20), issue_estimated: 1, due_date: day(5), balance_cents: 41250 }]);   // 25 days before the due date
+    const { body } = await getJson<any>("/bills");
+    expect(body.cards.find((c: any) => c.account_id === card).latest).toMatchObject({ issue_estimated: true, due_date: day(5) });
+    await saveStatements(E, item, liabilities([credit({ last_statement_issue_date: day(-22) })]));
+    expect(await env.DB.prepare("SELECT issue_date, issue_estimated FROM card_statements").all().then((r) => r.results))
+      .toEqual([{ issue_date: day(-22), issue_estimated: 0 }]);                                          // the estimate gives way
   });
 
   it("maps Plaid errors: consent and unsupported wait for the household, the rest retry", () => {
