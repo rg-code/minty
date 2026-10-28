@@ -175,6 +175,14 @@ describe("static pages", () => {
     expect(html).toMatch(/<div class="pillnav" id="pillNav">[\s\S]*id="abcOpen"[\s\S]*id="eggOpen"[\s\S]*id="moreBtn"[\s\S]*<\/div>\s*<\/div>\s*<\/div>\s*<a class="addlink"/);
   });
 
+  it("a row's tag box suggests the tags in use, and fills in the best one", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<div class="tagsugg" role="group" aria-label="Tags in use" hidden></div>');
+    expect(html).toMatch(/function tagSuggestions\(txn, typed\)/);
+    expect(html).toContain("input.setSelectionRange(typed.length, input.value.length);");          // the filled-in part is selected
+    expect(html).toContain('allTags.find(x => x.toLowerCase() === typed.toLowerCase()) ?? typed'); // "Sync" adds the existing "sync"
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');

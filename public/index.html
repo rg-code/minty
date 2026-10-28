@@ -357,6 +357,11 @@
   .notags { color: var(--muted); font-size: 12.5px; }
   .taginput { font: inherit; padding: 7px 10px; border: 1px solid var(--hairline); border-radius: 8px; max-width: 280px;
               background: var(--surface); color: var(--ink); }
+  .tagsugg { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -2px; }
+  .tagsugg[hidden] { display: none; }
+  .tag.sugg { border: 0; font: inherit; font-size: 12.5px; padding: 4px 11px; }
+  .tag.sugg b { font-weight: 700; }
+  @media (hover: none) { .tag.sugg { padding: 6px 13px; font-size: 13.5px; } }   /* touch: room for a finger */
 
   .empty, .banner { padding: 40px var(--pad); text-align: center; color: var(--muted); }
   .banner { padding: 10px var(--pad); background: var(--warn-bg); color: var(--warn-ink); border-bottom: 1px solid var(--warn-line); font-size: 13px; }

@@ -464,7 +464,9 @@ function detailHTML(t) {
     </dl>
     <div class="tagedit">
       <div class="tagchips">${chips}</div>
-      <input class="taginput" type="text" placeholder="Add a tag, press Enter" />
+      <input class="taginput" type="text" placeholder="Add a tag, press Enter" autocomplete="off" autocapitalize="none" spellcheck="false"
+             aria-autocomplete="both" aria-label="Add a tag" />
+      <div class="tagsugg" role="group" aria-label="Tags in use" hidden></div>
     </div>`;
 }
 
@@ -654,6 +656,12 @@ feed.addEventListener("click", (e) => {
     txnEl.querySelector(".taginput").focus();
     return;
   }
+  const sugg = e.target.closest("[data-sugg]");
+  if (sugg) {                                              // a suggested tag: added
+    const txn = txnFromEl(sugg);
+    if (!(txn.tags || []).includes(sugg.dataset.sugg)) saveTags(txn, [...(txn.tags || []), sugg.dataset.sugg], { refocus: true });
+    return;
+  }
   const removeBtn = e.target.closest("[data-removetag]");
   if (removeBtn) {                                          // remove a tag
     const txn = txnFromEl(removeBtn);
@@ -669,17 +677,79 @@ feed.addEventListener("click", (e) => {
 });
 feed.addEventListener("txnaction", e => rowAction(e.detail.txn, e.detail.act));   // a swipe (swipe.js)
 
+// Tag suggestions: a row's tag box suggests the tags already in use as you type (those starting
+// with what's typed first, then a word in them starting with it, then anywhere in them; the most
+// used among the loaded rows first). The best one is filled in, selected, so Enter or Tab takes it
+// and typing on replaces it; a tap on a suggestion adds it.
+function tagSuggestions(txn, typed) {
+  const q = typed.trim().toLowerCase(), have = new Set((txn?.tags || []).map(t => t.toLowerCase()));
+  const uses = new Map();
+  for (const t of loaded) for (const tg of t.tags || []) uses.set(tg, (uses.get(tg) ?? 0) + 1);
+  const rank = tg => {
+    const l = tg.toLowerCase();
+    return !q || l.startsWith(q) ? 0 : l.split(/[\s\-_/.]+/).some(w => w.startsWith(q)) ? 1 : l.includes(q) ? 2 : -1;
+  };
+  return allTags.filter(tg => !have.has(tg.toLowerCase())).map(tg => [tg, rank(tg)]).filter(([, r]) => r >= 0)
+    .sort((a, b) => a[1] - b[1] || (uses.get(b[0]) ?? 0) - (uses.get(a[0]) ?? 0) || a[0].localeCompare(b[0]))
+    .slice(0, 8).map(([tg]) => tg);
+}
+function showSuggestions(input, { complete = false } = {}) {
+  const box = input.closest(".tagedit")?.querySelector(".tagsugg");
+  if (!box) return;
+  const typed = input.dataset.typed ?? input.value, q = typed.trim().toLowerCase();
+  const list = tagSuggestions(txnFromEl(input), typed);
+  box.innerHTML = list.map(tg => {
+    const at = q ? tg.toLowerCase().indexOf(q) : -1;
+    const label = at < 0 ? escapeHtml(tg) : `${escapeHtml(tg.slice(0, at))}<b>${escapeHtml(tg.slice(at, at + q.length))}</b>${escapeHtml(tg.slice(at + q.length))}`;
+    return `<button type="button" class="tag sugg" data-sugg="${escapeAttr(tg)}" tabindex="-1">${label}</button>`;
+  }).join("");
+  box.hidden = !list.length;
+  const best = list[0];
+  if (complete && q && best?.toLowerCase().startsWith(typed.toLowerCase()) && best.length > typed.length) {
+    input.value = typed + best.slice(typed.length);
+    input.setSelectionRange(typed.length, input.value.length);
+  }
+}
+feed.addEventListener("input", e => {
+  if (!e.target.classList.contains("taginput")) return;
+  e.target.dataset.typed = e.target.value;
+  // not while deleting (Backspace removes the filled-in part first), nor mid-composition (a phone keyboard's word)
+  showSuggestions(e.target, { complete: !e.isComposing && !String(e.inputType).startsWith("delete") });
+});
+feed.addEventListener("focusin", e => {
+  if (!e.target.classList?.contains("taginput")) return;
+  e.target.dataset.typed = e.target.value;
+  showSuggestions(e.target);
+});
+feed.addEventListener("focusout", e => {
+  if (e.target.classList?.contains("taginput")) { const box = e.target.closest(".tagedit")?.querySelector(".tagsugg"); if (box) box.hidden = true; }
+});
+feed.addEventListener("pointerdown", e => { if (e.target.closest("[data-sugg]")) e.preventDefault(); });   // the box keeps focus
+
 feed.addEventListener("keydown", (e) => {
   if (e.target.classList.contains("taginput") && e.key === "Enter") {
     e.preventDefault();
     const txn = txnFromEl(e.target);
-    const val = e.target.value.trim();
+    const typed = e.target.value.trim();
+    const val = allTags.find(x => x.toLowerCase() === typed.toLowerCase()) ?? typed;   // a tag in use keeps its spelling
     if (val) {
       const tags = [...(txn.tags || [])];
       if (!tags.some(x => x.toLowerCase() === val.toLowerCase())) tags.push(val);
       saveTags(txn, tags, { refocus: true });
     }
     e.target.value = "";
+  }
+  if (e.target.classList.contains("taginput") && e.key === "Tab" && !e.shiftKey) {     // Tab takes the suggestion
+    const input = e.target, best = tagSuggestions(txnFromEl(input), input.dataset.typed ?? input.value)[0];
+    if (best && input.value.trim() && input.value !== best) {
+      e.preventDefault();
+      input.value = input.dataset.typed = best;
+      showSuggestions(input);
+    }
+  }
+  if (e.target.classList.contains("taginput") && e.key === "Escape") {
+    e.target.value = e.target.dataset.typed ?? e.target.value;
+    e.target.closest(".tagedit").querySelector(".tagsugg").hidden = true;
   }
   if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("row")) {
     e.preventDefault();
