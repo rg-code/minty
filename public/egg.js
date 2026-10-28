@@ -45,7 +45,7 @@
 
   /** The total of the retirement accounts per day: each account's newest snapshot on or before it. */
   function series() {
-    const mine = new Set(data.accounts.filter(a => a.in_retirement).map(a => a.id));
+    const mine = new Set(data.accounts.filter(a => a.in_retirement && !a.left_out).map(a => a.id));
     const rows = data.snapshots.filter(s => mine.has(s.account_id)).sort((a, b) => (a.date < b.date ? -1 : 1));
     const dates = [...new Set(rows.map(r => r.date))];
     const last = new Map(), out = [];
@@ -58,7 +58,9 @@
   }
 
   function render() {
-    const ret = data.accounts.filter(a => a.in_retirement), others = data.accounts.filter(a => !a.in_retirement);
+    // a retirement account left out of the numbers (CFA) is listed, and counted nowhere
+    const ret = data.accounts.filter(a => a.in_retirement && !a.left_out), others = data.accounts.filter(a => !a.in_retirement);
+    const leftOut = data.accounts.filter(a => a.in_retirement && a.left_out);
     const total = ret.reduce((s, a) => s + (a.balance ?? 0), 0);
     const fetching = data.banks.filter(b => b.status === "pending" && !b.synced_at);
     let html = `<div class="cfa-top">
@@ -69,7 +71,7 @@
     if (fetching.length) html += `<p class="cfa-muted">${fetching.map(b => esc(b.bank || "A bank")).join(", ")}: fetching the investment accounts (within about ten minutes).</p>`;
     if (!ret.length) {
       html += `<p class="abc-msg">No retirement accounts yet. <a href="/connect#investments">Link one</a>: a 401(k), IRA or HSA login (Schwab, Fidelity…), or add the investment accounts of a bank you've linked already.${others.length ? " Or move one of the accounts below into EGG." : ""}</p>`;
-      html += accountsHtml(ret, others);
+      html += accountsHtml(ret, others, leftOut);
       main.innerHTML = html;
       return;
     }
@@ -168,7 +170,7 @@
          "From what the accounts hold, sorted by fund names (a bond fund from a stock fund): a guide, not an analysis."]);
     }
 
-    html += accountsHtml(ret, others) + profileHtml(k);
+    html += accountsHtml(ret, others, leftOut) + profileHtml(k);
     html = html.replace("<!--egg-stats-->", statsHtml(total, shown, put12, forecast));
     html += `<p class="bill-fine">Educational, not financial advice: Minty isn't a CFP, CFA or registered advisor. The forecast is arithmetic, not a prediction: it assumes steady real returns (after inflation) of 3, 5 and 7% a year and the contributions of the last 12 months, in today's dollars, before taxes. The 4% rule is a rule of thumb for how much a retirement fund can pay out a year.</p>`;
     main.innerHTML = html;
@@ -194,12 +196,14 @@
     return `<div class="scgrid">${cards.join("")}</div>`;
   }
 
-  function accountsHtml(ret, others) {
+  function accountsHtml(ret, others, leftOut = []) {
     const row = (a, inEgg) => `<div class="egg-acct"><span><b>${esc(a.name || "Account")}</b>${a.mask ? ` ••${esc(a.mask)}` : ""}<small>${esc(a.bank || "")}${users.length > 1 ? ` · ${esc(label(a.owner))}` : ""} · ${esc(a.subtype || a.type)}</small></span>
       <span class="egg-bal">${money(a.balance ?? 0)}</span>
       <label class="egg-switch"><input type="checkbox" data-view="${a.id}" data-in="${inEgg ? 1 : 0}" ${inEgg ? "" : "checked"}> ${inEgg ? "Show on the dashboard too" : "On the dashboard"}</label></div>`;
     return `<section class="cfa-sec"><h3>Accounts</h3>${ret.map(a => row(a, true)).join("") || `<p class="cfa-muted">None in EGG.</p>`}
-      ${others.length ? `<h4>Other investment accounts, on the dashboard</h4>${others.map(a => row(a, false)).join("")}<p class="cfa-muted">Untick one to keep it in EGG instead.</p>` : ""}</section>`;
+      ${others.length ? `<h4>Other investment accounts, on the dashboard</h4>${others.map(a => row(a, false)).join("")}<p class="cfa-muted">Untick one to keep it in EGG instead.</p>` : ""}
+      ${leftOut.length ? `<h4>Left out of the numbers</h4>${leftOut.map(a => `<div class="egg-acct"><span><b>${esc(a.name || "Account")}</b>${a.mask ? ` ••${esc(a.mask)}` : ""}<small>${esc(a.bank || "")}${users.length > 1 ? ` · ${esc(label(a.owner))}` : ""} · ${esc(a.subtype || a.type)}</small></span><span class="egg-bal">${money(a.balance ?? 0)}</span></div>`).join("")}
+        <p class="cfa-muted">Not in the total, the trend, the forecast or the limits. <button type="button" class="abc-link" data-open-leftout>Change in CFA</button></p>` : ""}</section>`;
   }
 
   function profileHtml(k) {

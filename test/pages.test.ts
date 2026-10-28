@@ -202,6 +202,16 @@ describe("static pages", () => {
     expect(html).toContain(".ministrip .iosearch > :not(input) { display: none; }");    // the strip keeps its icon button
   });
 
+  it("what's left out of the numbers: switches in CFA, a note under the cards, the shown totals skip it too", async () => {
+    const cfa = await fetchText("/cfa.js");
+    expect(cfa).toContain('<section class="cfa-sec" id="cfaLeftOut"><h3>Left out of the numbers</h3>');
+    expect(cfa).toMatch(/fetch\("\/audit\/exclusions", \{ method: "PUT"/);
+    const { html } = await page("/");
+    expect(html).toContain('<p class="leftout-note" id="leftOutNote" hidden></p>');
+    expect(html).toContain("txns = txns.filter(t => !leftOut(t));");
+    expect(await fetchText("/egg.js")).toContain("a.in_retirement && !a.left_out");
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');

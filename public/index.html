@@ -260,6 +260,10 @@
   .trends { margin: 12px var(--pad) 0; padding: 16px; background: var(--surface); border: 1px solid var(--hairline); border-radius: 20px;
             box-shadow: var(--card-shadow); display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px 28px; align-items: start; }
   .trends[hidden] { display: none; }
+  .leftout-note { margin: 8px var(--pad) 0; font-size: 12.5px; color: var(--muted); }
+  .leftout-note[hidden] { display: none; }
+  .leftout-note button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+  @media (max-width: 640px) { .leftout-note { margin: 6px 12px 0; } }
   .trends .tr-donut h3 { margin: 0 0 10px; font-size: 13px; font-weight: 500; color: var(--muted); }
   .trends .tr-note { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted); }
   .trends .tr-note button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
@@ -756,6 +760,7 @@
   <div id="bamMain"></div>
 </dialog>
 <div class="totals" id="totals"></div>
+<p class="leftout-note" id="leftOutNote" hidden></p>
 <section class="trends" id="trends" hidden aria-label="Spending by month and by category"></section>
 <!-- Select: tag many transactions at once (app.js). The bar sits at the bottom while selecting. -->
 <div class="selectrow"><button type="button" class="pill" id="selectToggle" aria-pressed="false" title="Select transactions to tag several at once">Select</button></div>

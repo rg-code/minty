@@ -109,3 +109,17 @@
   #cfa .cfa-rec-item details { display: block; }
   #cfa .cfa-rec-item details > :not(summary) { display: block; }
 }
+
+/* Left out of the numbers */
+.cfa .lo-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.cfa .lo-tags .lo-row { padding: 4px 10px 4px 8px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--surface); font-size: 13px; }
+.cfa .lo-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.cfa .lo-row input { accent-color: var(--accent); margin: 0; }
+.cfa .lo-row small { display: block; font-size: 11.5px; color: var(--muted); }
+.cfa .lo-row.off > span { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
+.cfa .lo-row.off small { text-decoration: none; }
+.cfa .lo-bank { padding: 8px 0; border-top: 1px solid var(--hairline); }
+.cfa .lo-bank:first-of-type { border-top: 0; }
+.cfa .lo-accts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; margin: 6px 0 0 24px; font-size: 13px; }
+.cfa .lo-accts input:disabled + span { opacity: .6; }
+.cfa .lo-msg { font-size: 13px; color: var(--in); margin: 4px 0 8px; }

@@ -12,6 +12,11 @@ const MAX_NAME = 60;
 const cleaned = (a: string) => `rtrim(replace(replace(${a}.name, char(65533), ''), '  ', ' '))`;
 
 /** SQL: the name to show for account `a`. */
+/** SQL: true when the household left this account (or its bank) out of the numbers (CFA, the
+ * dashboard's cards, EGG; analytics_exclusions). `a` is the accounts table's alias. */
+export const LEFT_OUT = (a: string) => `EXISTS (SELECT 1 FROM analytics_exclusions x
+  WHERE (x.kind = 'account' AND x.value = CAST(${a}.id AS TEXT)) OR (x.kind = 'bank' AND x.value = CAST(${a}.item_id AS TEXT)))`;
+
 export const ACCOUNT_NAME = (a: string) => `coalesce(nullif(${a}.display_name, ''),
   CASE WHEN ${a}.mask IS NOT NULL AND ${cleaned(a)} LIKE '%...' || ${a}.mask
        THEN rtrim(substr(${cleaned(a)}, 1, length(${cleaned(a)}) - length('...' || ${a}.mask)))

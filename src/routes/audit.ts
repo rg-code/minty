@@ -1,7 +1,7 @@
 import type { Env } from "../env";
 import type { Config } from "../config";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
-import { markAuditDirty } from "../audit/totals";
+import { markAuditDirty, markLeftOutChanged } from "../audit/totals";
 import { ACCOUNT_NAME } from "../accounts";
 
 /** CFA, the Complete financial audit (docs/cfa.md), phase C2: what the audit's charts show. Reads
@@ -62,17 +62,72 @@ export async function audit(env: Env, config: Config, url: URL): Promise<Respons
  * transactions): a range on the table's key, no sort, so it reads each row once. */
 export async function summary(env: Env): Promise<Response> {
   const months = monthsBack(24);
-  const [rows, state] = await env.DB.batch([
+  const [rows, state, left] = await env.DB.batch([
     env.DB.prepare(`SELECT month, owner, bucket, category, amount_cents AS cents, n FROM monthly_totals
                     WHERE month >= ? AND bucket IN ('income', 'spend')`).bind(months[0]),
     env.DB.prepare("SELECT updated_at FROM app_state WHERE key = 'audit_watermark'"),
+    env.DB.prepare(LEFT_OUT_LIST),
   ]);
   return json({
     today: new Date().toISOString().slice(0, 10),
     months,
     totals: rows.results,
+    left_out: left.results,                                 // the cards' "shown" totals leave these out too
     refreshed_at: (state.results[0] as { updated_at?: string } | undefined)?.updated_at ?? null,
   });
+}
+
+// What's left out of the numbers, named: a tag as spelled, a bank by its institution, an account by
+// its name (and the bank it's at, and the account ids that go with a bank, for the dashboard).
+const LEFT_OUT_LIST = `
+  SELECT x.kind, x.value,
+         CASE x.kind WHEN 'tag' THEN x.value WHEN 'bank' THEN i.institution_name ELSE ${ACCOUNT_NAME("a")} END AS name,
+         CASE x.kind WHEN 'account' THEN a.mask END AS mask, CASE x.kind WHEN 'account' THEN ai.institution_name END AS bank,
+         coalesce(i.owner, a.owner) AS owner
+  FROM analytics_exclusions x
+  LEFT JOIN items i ON x.kind = 'bank' AND i.id = CAST(x.value AS INTEGER)
+  LEFT JOIN accounts a ON x.kind = 'account' AND a.id = CAST(x.value AS INTEGER)
+  LEFT JOIN items ai ON ai.id = a.item_id`;
+
+/** GET /audit/exclusions: what's left out of the numbers, and the banks and accounts to choose from
+ * (the tags come from GET /tags). A few dozen rows. */
+export async function exclusions(env: Env): Promise<Response> {
+  const [left, banks, accounts] = await env.DB.batch([
+    env.DB.prepare(LEFT_OUT_LIST),
+    env.DB.prepare("SELECT id, owner, institution_name AS name FROM items"),
+    env.DB.prepare(`SELECT a.id, a.owner, a.item_id, ${ACCOUNT_NAME("a")} AS name, a.mask, a.type, a.subtype, i.institution_name AS bank
+                    FROM accounts a JOIN items i ON i.id = a.item_id`),
+  ]);
+  return json({ left_out: left.results, banks: banks.results, accounts: accounts.results });
+}
+
+const MAX_TAG = 64;
+/** PUT /audit/exclusions {kind: tag | bank | account, value, left_out: boolean}: leaves one out of
+ * the numbers, or brings it back. Every month (and net worth's history) is rebuilt at the next
+ * 10-minute run; the transactions themselves still show on the dashboard. */
+export async function setExclusion(env: Env, request: Request): Promise<Response> {
+  let b: unknown;
+  try { b = await jsonBody(request); } catch (e) {
+    if (e instanceof HttpError) throw e;
+  }
+  if (!b || typeof b !== "object" || Array.isArray(b)) throw unprocessable("body must be a JSON object");
+  const { kind, value, left_out } = b as Record<string, unknown>;
+  if (kind !== "tag" && kind !== "bank" && kind !== "account") throw unprocessable("kind must be tag, bank or account");
+  if (typeof left_out !== "boolean") throw unprocessable("left_out must be true or false");
+  let v: string;
+  if (kind === "tag") {
+    v = typeof value === "string" ? value.trim() : "";
+    if (!v || v.length > MAX_TAG) throw unprocessable(`a tag is 1–${MAX_TAG} characters`);
+  } else {
+    if (!Number.isInteger(value)) throw unprocessable(`value must be the ${kind === "bank" ? "bank" : "account"}'s id`);
+    v = String(value);
+    const found = await env.DB.prepare(`SELECT 1 FROM ${kind === "bank" ? "items" : "accounts"} WHERE id = ?`).bind(value).first();
+    if (!found) throw new HttpError(404, `no such ${kind === "bank" ? "bank" : "account"}`);
+  }
+  await env.DB.prepare(left_out ? "INSERT OR IGNORE INTO analytics_exclusions (kind, value) VALUES (?, ?)" : "DELETE FROM analytics_exclusions WHERE kind = ? AND value = ?")
+    .bind(kind, v).run();
+  await markLeftOutChanged(env);
+  return json({ left_out: (await env.DB.prepare(LEFT_OUT_LIST).all()).results });
 }
 
 const merchantKey = (merchant: unknown) => {

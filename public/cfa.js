@@ -26,13 +26,16 @@
   const EVERY = { weekly: 52, monthly: 12, quarterly: 4, yearly: 1 };
   const DAYS = { weekly: 7, monthly: 30.4, quarterly: 91, yearly: 365 };
 
-  let users = [], data = null, advice = null, months = 12, owner = "";
+  let users = [], data = null, advice = null, months = 12, owner = "", lo = null, tags = [], loMsg = "";
 
   async function load() {
     try {
       const q = new URLSearchParams({ months: String(months), ...(owner ? { owner } : {}) });
-      const [u, r, a] = await Promise.all([users.length ? null : fetch("/users"), fetch(`/audit?${q}`), fetch(`/audit/advice${owner ? `?owner=${encodeURIComponent(owner)}` : ""}`)]);
+      const [u, r, a, x, t] = await Promise.all([users.length ? null : fetch("/users"), fetch(`/audit?${q}`), fetch(`/audit/advice${owner ? `?owner=${encodeURIComponent(owner)}` : ""}`),
+        fetch("/audit/exclusions"), fetch("/tags")]);
       if (u?.ok) users = await u.json();
+      lo = x.ok ? await x.json() : null;                         // what's left out of the numbers, and what can be
+      tags = t.ok ? await t.json() : [];
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
       data = await r.json();
       advice = a.ok ? await a.json() : null;                   // the page still works without it
@@ -174,6 +177,8 @@
 
     html += checklistHtml();
 
+    html += leftOutHtml();
+
     // 6. Corrections, and the fine print
     html += `<section class="cfa-sec"><h3>Your corrections</h3>
       ${data.corrections.length ? `<ul class="cfa-corr">${data.corrections.map(c => `<li><b>${esc(c.merchant)}</b> counts as ${esc(BUCKETS.find(([b]) => b === c.bucket)?.[1] ?? c.bucket)} <button type="button" class="abc-link" data-uncorrect="${esc(c.merchant)}">Undo</button></li>`).join("")}</ul>` : `<p class="cfa-muted">None yet. Minty sorts each transaction itself; correct a merchant here when it guessed wrong.</p>`}
@@ -232,6 +237,28 @@
     </section>`;
   }
 
+  /** Left out of the numbers: tags, banks and accounts, each with a switch (checked: counted). */
+  function leftOutHtml() {
+    if (!lo) return "";
+    const off = new Set(lo.left_out.map(x => `${x.kind}:${x.value}`));
+    const who = o => (users.length > 1 ? ` · ${esc(users.find(u => u.key === o)?.label ?? o)}` : "");
+    const sw = (kind, value, label, sub = "", disabled = false) =>
+      `<label class="lo-row${off.has(`${kind}:${value}`) ? " off" : ""}"><input type="checkbox" data-lo="${kind}" data-v="${esc(value)}"${off.has(`${kind}:${value}`) || disabled ? "" : " checked"}${disabled ? " disabled" : ""}>
+        <span>${label}${sub ? `<small>${sub}</small>` : ""}</span></label>`;
+    const banks = lo.banks.map(b => {
+      const bankOff = off.has(`bank:${b.id}`), accts = lo.accounts.filter(a => a.item_id === b.id);
+      return `<div class="lo-bank">${sw("bank", b.id, `<b>${esc(b.name || "A bank")}</b>`, `${accts.length} account${accts.length === 1 ? "" : "s"}${who(b.owner)}`)}
+        <div class="lo-accts">${accts.map(a => sw("account", a.id, `${esc(a.name || "Account")}${a.mask ? ` ••${esc(a.mask)}` : ""}`, bankOff ? "left out with the bank" : esc(a.subtype || a.type || ""), bankOff)).join("")}</div></div>`;
+    }).join("");
+    const tagSet = [...new Set([...tags, ...lo.left_out.filter(x => x.kind === "tag").map(x => x.value)])].sort((a, b) => a.localeCompare(b));
+    return `<section class="cfa-sec" id="cfaLeftOut"><h3>Left out of the numbers</h3>
+      <p class="cfa-muted">Untick a tag, a bank or an account to keep it out of this audit, the dashboard's cards and charts, and EGG. Its transactions still show on the dashboard. ${lo.left_out.length ? `${lo.left_out.length} left out now.` : "Everything counts now."}</p>
+      ${loMsg ? `<p class="lo-msg" role="status">${esc(loMsg)}</p>` : ""}
+      <h4>Tags</h4>${tagSet.length ? `<div class="lo-tags">${tagSet.map(t => sw("tag", t, esc(t))).join("")}</div>` : `<p class="cfa-muted">No tags yet.</p>`}
+      <h4>Banks and accounts</h4>${banks || `<p class="cfa-muted">No banks linked.</p>`}
+    </section>`;
+  }
+
   function checklistHtml() {
     if (!advice) return "";
     const items = advice.checklist, due = items.filter(i => i.due).length;
@@ -267,6 +294,16 @@
       if (!r.ok) alert((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
       return load();
     }
+    const sw = e.target.closest("input[data-lo]");
+    if (sw) {
+      const kind = sw.dataset.lo, value = kind === "tag" ? sw.dataset.v : Number(sw.dataset.v);
+      sw.disabled = true;
+      const r = await fetch("/audit/exclusions", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, value, left_out: !sw.checked }) });
+      if (!r.ok) { alert((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`); return load(); }
+      document.dispatchEvent(new CustomEvent("minty:leftout"));   // the dashboard's cards and note follow
+      loMsg = `Saved: ${kind === "tag" ? `“${sw.dataset.v}”` : sw.closest("label").querySelector("span").firstChild.textContent.trim()} ${sw.checked ? "counts again" : "is left out"}. The numbers update within about 10 minutes.`;
+      return load();
+    }
     const s = e.target.closest("select[data-merchant]");
     if (s) { try { await correct(s.dataset.merchant, s.value === "spend" ? null : s.value); } catch (err) { alert(err.message); } return load(); }
   });
@@ -287,6 +324,13 @@
   }
   document.addEventListener("click", e => {
     if (e.target.closest("[data-open-cfa]")) { e.preventDefault(); open(); }
+    if (e.target.closest("[data-open-leftout]")) {               // "Change" next to what's left out (the dashboard, EGG)
+      e.preventDefault();
+      document.querySelectorAll("dialog[open]").forEach(d => { if (d !== dialog) d.close(); });
+      open();
+      const go = () => { const s = document.getElementById("cfaLeftOut"); if (s) s.scrollIntoView({ block: "start" }); else setTimeout(go, 150); };
+      setTimeout(go, 150);
+    }
   });
   dialog.addEventListener("click", e => { if (e.target === dialog) dialog.close(); });   // a click on the backdrop
   if (new URLSearchParams(location.search).has("audit")) open();

@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { LEFT_OUT } from "../accounts";
 
 /** CFA, the Complete financial audit (docs/cfa.md), phase C1: what the audit's charts read, kept
  * by the hourly cron, never on a request.
@@ -19,7 +20,11 @@ import type { Env } from "../env";
  *
  * monthly_totals is refreshed from the month of the earliest transaction added since the last
  * run (3 days earlier, for a transfer's other side), and rebuilt whole once a week, or when a
- * correction changed (app_state audit_dirty), which also catches edits and removals. */
+ * correction changed (app_state audit_dirty), which also catches edits and removals.
+ *
+ * Left out of the numbers (analytics_exclusions): a transaction on a left-out account or bank, or
+ * with a left-out tag, isn't in any bucket; a left-out account isn't in net worth either (its
+ * history rebuilt from balance_snapshots when the list changes). It still shows on the dashboard. */
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 export const REBUILD_DAYS = 7;
@@ -36,19 +41,35 @@ const TRANSFERS = "('TRANSFER_IN', 'TRANSFER_OUT', 'LOAN_PAYMENTS')";
 const TYPE = (id: string) => `json_extract(?2, '$."' || ${id} || '"')`;
 const SAVING = (id: string) => `coalesce(json_extract(?3, '$."' || ${id} || '"'), 0)`;
 
-/** ?2 and ?3 for CLASSIFIED: { account id: type } and { account id: 1 } for savings-like accounts. */
-export async function accountMaps(env: Env): Promise<[string, string]> {
-  const { results } = await env.DB.prepare("SELECT id, type, subtype FROM accounts").all<{ id: number; type: string | null; subtype: string | null }>();
-  const types: Record<string, string | null> = {}, saving: Record<string, number> = {};
-  for (const a of results) {
+/** ?2 to ?5 for CLASSIFIED: { account id: type }, { account id: 1 } for savings-like accounts,
+ * { account id: 1 } for the accounts left out of the numbers (their own, or their bank's), and
+ * { transaction id: 1 } for the transactions with a tag left out (found through the tag index,
+ * once: a lookup in the query for each transaction would be a read for each). */
+export async function accountMaps(env: Env): Promise<[string, string, string, string]> {
+  const [acc, ex] = await env.DB.batch([
+    env.DB.prepare("SELECT id, item_id, type, subtype FROM accounts"),
+    env.DB.prepare("SELECT kind, value FROM analytics_exclusions"),
+  ]);
+  const off = { tag: new Set<string>(), bank: new Set<string>(), account: new Set<string>() };
+  for (const x of ex.results as { kind: keyof typeof off; value: string }[]) off[x.kind]?.add(x.value);
+  const types: Record<string, string | null> = {}, saving: Record<string, number> = {}, left: Record<string, number> = {};
+  for (const a of acc.results as { id: number; item_id: number; type: string | null; subtype: string | null }[]) {
     types[a.id] = a.type;
     if (a.type === "investment" || (a.type === "depository" && ["savings", "cd", "money market", "hsa"].includes(a.subtype ?? ""))) saving[a.id] = 1;
+    if (off.account.has(String(a.id)) || off.bank.has(String(a.item_id))) left[a.id] = 1;
   }
-  return [JSON.stringify(types), JSON.stringify(saving)];
+  const tagged: Record<string, number> = {};
+  if (off.tag.size) {
+    const { results } = await env.DB.prepare("SELECT DISTINCT transaction_id AS id FROM transaction_tags WHERE tag IN (SELECT value FROM json_each(?))")
+      .bind(JSON.stringify([...off.tag])).all<{ id: number }>();
+    for (const r of results) tagged[r.id] = 1;
+  }
+  return [JSON.stringify(types), JSON.stringify(saving), JSON.stringify(left), JSON.stringify(tagged)];
 }
 
 /** The bucket of each posted transaction from ?1 (a date) on: id, owner, month, bucket, category,
- * amount_cents. ?2 and ?3 come from accountMaps. */
+ * amount_cents. ?2 to ?5 come from accountMaps. Left out: the accounts in ?4 and the transactions
+ * in ?5 (both looked up in a bound JSON object: no read per transaction). */
 export const CLASSIFIED = `
   WITH t AS (
     SELECT t.id, t.owner, t.date, t.amount_cents AS amt, coalesce(nullif(t.category, ''), 'OTHER') AS category,
@@ -60,6 +81,8 @@ export const CLASSIFIED = `
                AND (t.category IN ${TRANSFERS} OR p.category IN ${TRANSFERS}) LIMIT 1) AS pair_account
     FROM transactions t
     WHERE t.pending = 0 AND t.amount_cents <> 0 AND t.date >= ?1
+      AND json_extract(?4, '$."' || t.account_id || '"') IS NULL
+      AND json_extract(?5, '$."' || t.id || '"') IS NULL
   )
   SELECT t.id, t.owner, t.date, substr(t.date, 1, 7) AS month, t.merchant, t.label, t.amt AS amount_cents,
     CASE WHEN t.amt < 0 AND t.category = 'BANK_FEES' THEN 'CREDITS'
@@ -122,7 +145,7 @@ const RECURRING = [
 ];
 
 const state = async (env: Env) => Object.fromEntries((await env.DB.prepare(
-  "SELECT key, value FROM app_state WHERE key IN ('audit_watermark', 'audit_rebuilt_at', 'audit_dirty', 'audit_version')").all<{ key: string; value: string | null }>()).results
+  "SELECT key, value FROM app_state WHERE key IN ('audit_watermark', 'audit_rebuilt_at', 'audit_dirty', 'audit_version', 'networth_dirty')").all<{ key: string; value: string | null }>()).results
   .map((r) => [r.key, r.value]));
 const setState = (env: Env, key: string, value: string | null) => env.DB.prepare(
   `INSERT INTO app_state (key, value, updated_at) VALUES (?, ?, ${NOW}) ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
@@ -130,6 +153,8 @@ const setState = (env: Env, key: string, value: string | null) => env.DB.prepare
 
 /** A correction changed: the next hourly run rebuilds every month. */
 export const markAuditDirty = (env: Env) => setState(env, "audit_dirty", "1").run();
+/** What's left out changed: every month, and net worth's history, are rebuilt at the next run. */
+export const markLeftOutChanged = (env: Env) => env.DB.batch([setState(env, "audit_dirty", "1"), setState(env, "networth_dirty", "1")]);
 
 /** The hourly cron's step (and the quiet catch-up run's, so a correction shows within minutes):
  * refreshes monthly_totals where something changed; with the weekly rebuild, recurring charges too. */
@@ -148,14 +173,15 @@ export async function refreshTotals(env: Env, now = new Date()): Promise<{ from:
   const recurring = full;
   const writes = [setState(env, "audit_watermark", String(top))];
   if (from || recurring) {
-    const [types, saving] = await accountMaps(env);
-    if (from) writes.unshift(env.DB.prepare(REFRESH[0]).bind(from), env.DB.prepare(REFRESH[1]).bind(from, types, saving));
+    const [types, saving, left, tags] = await accountMaps(env);
+    if (from) writes.unshift(env.DB.prepare(REFRESH[0]).bind(from), env.DB.prepare(REFRESH[1]).bind(from, types, saving, left, tags));
     if (recurring) {
       const since = new Date(now.getTime() - 400 * 864e5).toISOString().slice(0, 10);
-      writes.push(env.DB.prepare(RECURRING[0]), env.DB.prepare(RECURRING[1]).bind(since, types, saving)); 
+      writes.push(env.DB.prepare(RECURRING[0]), env.DB.prepare(RECURRING[1]).bind(since, types, saving, left, tags));
     }
   }
   if (full) writes.push(setState(env, "audit_rebuilt_at", now.toISOString()), setState(env, "audit_dirty", null), setState(env, "audit_version", RULES_VERSION));
+  if (s.networth_dirty) writes.push(...NET_WORTH_REBUILD.map((q) => env.DB.prepare(q)), setState(env, "networth_dirty", null));
   await env.DB.batch(writes);
   return { from, full, ...(recurring ? { recurring: true } : {}) };
 }
@@ -175,9 +201,25 @@ const NET_WORTH = `
   SELECT date('now'), owner,
          sum(CASE WHEN type IN ('depository', 'investment') THEN coalesce(balance_current_cents, 0) ELSE 0 END),
          sum(CASE WHEN type IN ('credit', 'loan') THEN coalesce(balance_current_cents, 0) ELSE 0 END)
-  FROM accounts WHERE true GROUP BY owner
+  FROM accounts WHERE NOT ${LEFT_OUT("accounts")} GROUP BY owner
   ON CONFLICT (date, owner) DO UPDATE SET assets_cents = excluded.assets_cents, debts_cents = excluded.debts_cents
   WHERE net_worth.assets_cents IS NOT excluded.assets_cents OR net_worth.debts_cents IS NOT excluded.debts_cents`;
+
+// Net worth's history again, without what's left out: for each day there's a snapshot, each account's
+// newest balance on or before it (snapshots are written only when a balance changes). About one
+// read per day and account, once, when the list of what's left out changes.
+const NET_WORTH_REBUILD = [
+  "DELETE FROM net_worth",
+  `INSERT INTO net_worth (date, owner, assets_cents, debts_cents)
+   WITH days AS (SELECT DISTINCT date FROM balance_snapshots),
+        acc AS (SELECT id, owner, type FROM accounts WHERE type IN ('depository', 'investment', 'credit', 'loan') AND NOT ${LEFT_OUT("accounts")}),
+        v AS (SELECT d.date, a.owner, a.type,
+                     (SELECT s.current_cents FROM balance_snapshots s WHERE s.account_id = a.id AND s.date <= d.date ORDER BY s.date DESC LIMIT 1) AS c
+              FROM days d CROSS JOIN acc a)
+   SELECT date, owner, sum(CASE WHEN type IN ('depository', 'investment') THEN coalesce(c, 0) ELSE 0 END),
+          sum(CASE WHEN type IN ('credit', 'loan') THEN coalesce(c, 0) ELSE 0 END)
+   FROM v GROUP BY date, owner`,
+];
 
 // Older than a year, a snapshot a week (Sundays) is enough for a trend.
 const THIN = "DELETE FROM balance_snapshots WHERE date < date('now', '-365 days') AND strftime('%w', date) <> '0'";

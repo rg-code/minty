@@ -4,7 +4,7 @@ import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { IN_RETIREMENT } from "../investments";
 import { CHECKED, kindOf } from "../retirement/limits";
 import { limitsFor } from "../retirement/irs";
-import { ACCOUNT_NAME } from "../accounts";
+import { ACCOUNT_NAME, LEFT_OUT } from "../accounts";
 
 /** EGG, phase E2 (docs/cfa.md §3): what the retirement view shows. Reads only what's stored (the
  * accounts, their daily balance snapshots, the holdings and investment transactions the cron
@@ -19,18 +19,19 @@ const HISTORY_YEARS = 5;
 //
 // Cash-like contributions into an account: Plaid's investment transactions credit cash with a
 // negative amount; an HSA held at a bank shows them as money coming in (but not its interest).
+// An account left out of the numbers (or its bank) is listed, but nothing of it is counted.
 const CONTRIBUTED = `
   SELECT a.owner, a.subtype, strftime('%Y', it.date) AS year, -sum(it.amount_cents) AS cents,
          -sum(CASE WHEN it.date >= date('now', '-365 days') THEN it.amount_cents ELSE 0 END) AS last_12m
   FROM accounts a CROSS JOIN investment_txns it ON it.account_id = a.id
   WHERE it.date >= ?1 AND it.amount_cents < 0 AND it.subtype IN ('contribution', 'deposit')         -- not a rollover or transfer: those don't count against a limit
-    AND ${IN_RETIREMENT("a")}
+    AND ${IN_RETIREMENT("a")} AND NOT ${LEFT_OUT("a")}
   GROUP BY a.owner, a.subtype, year
   UNION ALL
   SELECT a.owner, a.subtype, strftime('%Y', t.date) AS year, -sum(t.amount_cents) AS cents,
          -sum(CASE WHEN t.date >= date('now', '-365 days') THEN t.amount_cents ELSE 0 END) AS last_12m
   FROM accounts a CROSS JOIN transactions t ON t.account_id = a.id
-  WHERE a.type = 'depository' AND a.subtype = 'hsa' AND ${IN_RETIREMENT("a")} AND t.date >= ?1 AND t.pending = 0
+  WHERE a.type = 'depository' AND a.subtype = 'hsa' AND ${IN_RETIREMENT("a")} AND NOT ${LEFT_OUT("a")} AND t.date >= ?1 AND t.pending = 0
     AND t.amount_cents < 0 AND coalesce(t.category, '') <> 'INCOME' AND upper(t.name) NOT LIKE '%INTEREST%'
   GROUP BY a.owner, a.subtype, year`;
 
@@ -45,11 +46,11 @@ const MIX = `
            ELSE 'other' END AS class,
          sum(h.value_cents) AS cents
   FROM accounts a CROSS JOIN holdings h ON h.account_id = a.id LEFT JOIN securities s ON s.security_id = h.security_id
-  WHERE ${IN_RETIREMENT("a")}`;
+  WHERE ${IN_RETIREMENT("a")} AND NOT ${LEFT_OUT("a")}`;
 
 const FEES = `
   SELECT a.owner, sum(it.amount_cents) AS cents FROM accounts a CROSS JOIN investment_txns it ON it.account_id = a.id
-  WHERE it.date >= ?1 AND it.amount_cents > 0 AND (it.type = 'fee' OR it.subtype LIKE '%fee%') AND ${IN_RETIREMENT("a")}`;
+  WHERE it.date >= ?1 AND it.amount_cents > 0 AND (it.type = 'fee' OR it.subtype LIKE '%fee%') AND ${IN_RETIREMENT("a")} AND NOT ${LEFT_OUT("a")}`;
 
 const PROFILE_KEY = (owner: string) => `retirement_profile:${owner}`;
 
@@ -70,11 +71,11 @@ export async function retirementData(env: Env, owner: string | null) {
   const since = `${year - 1}-01-01`;
   const [accounts, snapshots, contributions, fees, mix, profiles, banks] = await env.DB.batch([
     env.DB.prepare(`SELECT a.id, a.owner, ${ACCOUNT_NAME("a")} AS name, a.mask, a.type, a.subtype, a.view, a.balance_current_cents AS balance, i.institution_name AS bank,
-                           ${IN_RETIREMENT("a")} AS in_retirement
+                           ${IN_RETIREMENT("a")} AS in_retirement, ${LEFT_OUT("a")} AS left_out
                     FROM accounts a JOIN items i ON i.id = a.item_id
                     WHERE (a.type = 'investment' OR ${IN_RETIREMENT("a")})${by("a.owner")}`).bind(...who),
     env.DB.prepare(`SELECT s.account_id, s.date, s.current_cents AS cents FROM accounts a CROSS JOIN balance_snapshots s ON s.account_id = a.id
-                    WHERE ${IN_RETIREMENT("a")} AND s.date >= date('now', '-${HISTORY_YEARS} years')${by("a.owner")}`).bind(...who),
+                    WHERE ${IN_RETIREMENT("a")} AND NOT ${LEFT_OUT("a")} AND s.date >= date('now', '-${HISTORY_YEARS} years')${by("a.owner")}`).bind(...who),
     env.DB.prepare(`SELECT * FROM (${CONTRIBUTED}) WHERE 1${by("owner")}`).bind(since, ...who),
     env.DB.prepare(`${FEES}${by("a.owner")} GROUP BY a.owner`).bind(`${year}-01-01`, ...who),
     env.DB.prepare(`${MIX}${by("a.owner")} GROUP BY class`).bind(...who),
@@ -84,7 +85,7 @@ export async function retirementData(env: Env, owner: string | null) {
   const limits = await limitsFor(env, year, CHECKED);    // fetched from irs.gov once a year, else the code's
   return {
     today: new Date().toISOString().slice(0, 10), year, owner,
-    accounts: (accounts.results as Record<string, unknown>[]).map((a) => ({ ...a, in_retirement: Boolean(a.in_retirement), kind: kindOf(a.subtype as string | null) })),
+    accounts: (accounts.results as Record<string, unknown>[]).map((a) => ({ ...a, in_retirement: Boolean(a.in_retirement), left_out: Boolean(a.left_out), kind: kindOf(a.subtype as string | null) })),
     snapshots: snapshots.results,
     contributions: (contributions.results as Record<string, unknown>[]).map((c) => ({ ...c, kind: kindOf(c.subtype as string | null) })),
     fees: fees.results,
