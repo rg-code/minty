@@ -44,6 +44,7 @@ export interface Finding {
   yearly_cents: number | null;                    // dollars a year at stake, when there's an honest number
   numbers: [string, string][];                    // what it used, to check it
   basis: string;
+  transactions?: { categories: string[]; from: string; to: string };   // the rows behind it (GET /audit/transactions)
 }
 
 const money = (c: number) => (c < 0 ? "−" : "") + "$" + Math.round(Math.abs(c) / 100).toLocaleString("en-US");
@@ -61,6 +62,10 @@ export function fullMonths(months: Month[], today: string): Month[] {
   const start = months.findIndex((m) => most && m.n >= Math.max(5, most * 0.4));
   return start < 0 ? [] : months.slice(start).filter((m) => m.month !== today.slice(0, 7));
 }
+
+const lastDay = (m: string) => new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)).toISOString().slice(0, 10);
+/** The days a list of months covers, for a finding's transactions. */
+const span = (categories: string[], ms: Month[]) => (ms.length ? { transactions: { categories, from: `${ms[0].month}-01`, to: lastDay(ms.at(-1)!.month) } } : {});
 
 export function recommend(x: AdviceInput): Finding[] {
   const out: Finding[] = [];
@@ -116,13 +121,14 @@ export function recommend(x: AdviceInput): Finding[] {
       why: "Card interest rates are usually far above what savings or investments earn, so paying it off is the surest return there is.",
       action: "Pay each card's statement balance in full; until then, put every extra dollar on the highest-rate balance first.",
       yearly_cents: Math.round(perYear(interest)), numbers: [["Interest charged", money(interest)], ["Months", String(n)]],
-      basis: "Paying off high-interest debt first (the avalanche method)." });
+      basis: "Paying off high-interest debt first (the avalanche method).", ...span(["INTEREST"], full) });
   }
   if (fees > 0) {
     out.push({ id: "fees", area: "spending", level: "consider", title: `${money(perYear(fees))} a year in fees`,
       why: "Annual fees can be worth it for a card whose credits you use (see ABC); late, overdraft, ATM and foreign transaction fees usually aren't.",
       action: "Look at what each fee was for, and turn on autopay or alerts for the avoidable ones.",
-      yearly_cents: Math.round(perYear(fees)), numbers: [["Fees", money(fees)], ["Months", String(n)]], basis: "Fees you can avoid are a sure saving." });
+      yearly_cents: Math.round(perYear(fees)), numbers: [["Fees", money(fees)], ["Months", String(n)]], basis: "Fees you can avoid are a sure saving.",
+      ...span(["BANK_FEES"], full) });
   }
 
   // Spending: rising categories, price rises, subscriptions
@@ -135,7 +141,8 @@ export function recommend(x: AdviceInput): Finding[] {
         out.push({ id: `rising_${c}`, area: "spending", level: "consider", title: `${catName(c)} is up ${pct(l / a - 1)} lately`,
           why: `${money(l)} a month over the last 3 months, against ${money(a)} on average.`,
           action: `Look at its biggest merchants on the dashboard: is it a one-off, or the new normal?`, yearly_cents: Math.round((l - a) * 12),
-          numbers: [["Last 3 months, a month", money(l)], [`Average over ${n} months`, money(a)]], basis: "A category 20% and $50 a month above its own average." });
+          numbers: [["Last 3 months, a month", money(l)], [`Average over ${n} months`, money(a)]], basis: "A category 20% and $50 a month above its own average.",
+          ...span([c], last3) });
       }
     }
   }

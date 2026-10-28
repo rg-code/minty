@@ -610,7 +610,7 @@ function renderTrends(fresh) {
   const s = monthsOf(trendKey), L = s.spend.length - 1, first = Math.max(0, s.first);
   const avail = L - first + 1;
   const who = trendKey ? labelOf(trendKey) : "Everyone";
-  box.innerHTML = `<div class="tr-chart"></div><div class="tr-donut"><h3></h3><div class="tr-dn"></div></div>
+  box.innerHTML = `<div class="tr-chart"></div><div class="tr-donut"><h3></h3><div class="tr-dn"></div></div><div class="tr-list cfa-ct" hidden></div>
     <p class="tr-note">From posted transactions${summary.refreshed_at ? `, as of ${new Date(summary.refreshed_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}. Transfers between your accounts and card payments aren't spending. <button type="button" data-open-cfa>The full audit (CFA)</button></p>`;
   if (avail < 2) { box.querySelector(".tr-chart").innerHTML = `<p class="tr-empty">The chart starts once there are two months of history.</p>`; }
   const point = i => ({ label: `${monName(summary.months[i])}${i === L ? " so far" : ""}`, axis: monName(summary.months[i], { month: "short" }), value: s.spend[i] / 100 });
@@ -618,9 +618,11 @@ function renderTrends(fresh) {
     .map(([key, n]) => ({ key, label: key, points: Array.from({ length: Math.min(n, avail) }, (_, j) => point(L - Math.min(n, avail) + 1 + j)) }));
   const range = ranges.find(r => r.key === "1Y") ? "1Y" : ranges.at(-1).key;
   const monthAt = (i, rk) => i === null ? L : L - ranges.find(r => r.key === rk).points.length + 1 + i;
+  let restCats = [];
   const segments = m => {
     const all = Object.entries(s.cats[m]).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]);
     const top = all.slice(0, 6), rest = all.slice(6).reduce((t, [, c]) => t + c, 0);
+    restCats = all.slice(6).map(([c]) => c);
     return [...top.map(([c, v], i) => ({ key: c, label: catName(c), value: v / 100, color: C.PALETTE[i] })),
             ...(rest > 0 ? [{ key: "_rest", label: "Everything else", value: rest / 100, color: C.PALETTE[7] }] : [])];
   };
@@ -628,8 +630,19 @@ function renderTrends(fresh) {
     box.querySelector(".tr-donut h3").textContent = `${who} · by category, ${monName(summary.months[m], { month: "long", year: "numeric" })}${m === L ? " so far" : ""}`;
     trendDonut.update(segments(m), m === L ? "Spent so far" : "Spent");
   };
-  trendDonut = C.donut(box.querySelector(".tr-dn"), { fmt: v => fmt0.format(v), title: "Spent", size: 176 });
   let shownMonth = L;
+  // A slice picked: its transactions for that month, under the chart and donut (cfa.js lists them).
+  const list = box.querySelector(".tr-list");
+  const onSelect = key => {
+    if (!key || !window.MintyCategory) { list.hidden = true; return; }
+    const m = summary.months[shownMonth], cats = key === "_rest" ? restCats : [key];
+    const to = shownMonth === L ? summary.today : new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).toISOString().slice(0, 10);
+    const name = key === "_rest" ? "Everything else" : window.MintyCategory.name(key);
+    window.MintyCategory.show(list, { categories: cats, from: `${m}-01`, to, owner: trendKey || null, label: labelOf,
+      title: `${who} · ${name}, ${monName(m, { month: "long", year: "numeric" })}${shownMonth === L ? " so far" : ""}` });
+  };
+  list.addEventListener("click", e => { if (e.target.closest("[data-ct-close]")) list.hidden = true; });
+  trendDonut = C.donut(box.querySelector(".tr-dn"), { fmt: v => fmt0.format(v), title: "Spent", size: 176, onSelect });
   donutFor(L);
   if (avail >= 2) {
     trendChart = C.area(box.querySelector(".tr-chart"), {

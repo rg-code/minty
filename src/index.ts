@@ -64,6 +64,7 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["DELETE", /^\/bills\/(\d+)$/, ({ env, params }) => ownBills.deleteBill(env, Number(params[0]))],
   ["GET", /^\/audit$/, ({ env, config, url }) => cfa.audit(env, config, url)],
   ["GET", /^\/audit\/summary$/, ({ env }) => cfa.summary(env)],
+  ["GET", /^\/audit\/transactions$/, ({ env, config, url }) => cfa.categoryTransactions(env, config, url)],
   ["GET", /^\/audit\/exclusions$/, ({ env }) => cfa.exclusions(env)],
   ["PUT", /^\/audit\/exclusions$/, ({ env, request }) => cfa.setExclusion(env, request)],
   ["GET", /^\/audit\/buckets$/, ({ env, url }) => cfa.getBucket(env, url)],

@@ -22,6 +22,41 @@
                 HOME_IMPROVEMENT: "Home", GOVERNMENT_AND_NON_PROFIT: "Government & giving", BANK_FEES: "Fees", INTEREST: "Interest charged", CREDITS: "Card credits",
                 TRANSFER_OUT: "Transfers out (not matched)", LOAN_PAYMENTS: "Loan payments", INCOME: "Income", TRANSFER_IN: "Money in", OTHER: "Other" };
   const catName = c => CAT[c] ?? c.toLowerCase().replace(/_and_/g, " & ").replace(/_/g, " ").replace(/^./, x => x.toUpperCase());
+  const lastDay = m => new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)).toISOString().slice(0, 10);
+  const monYear = m => `${MON[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`;
+  const spanLabel = (a, b) => (a.slice(0, 7) === b.slice(0, 7) ? monYear(a.slice(0, 7)) : `${monYear(a.slice(0, 7))} – ${monYear(b.slice(0, 7))}`);
+  let ctN = 0;
+  /** A link that lists a category's transactions (into the list right after it): categories, days, a title. */
+  const catLink = (text, cats, from, to, title) =>
+    `<button type="button" class="cfa-catlink" data-cats="${esc(cats.join(","))}" data-from="${from}" data-to="${to}" data-title="${esc(title)}" aria-expanded="false" title="List these transactions">${text}</button>`;
+  const ctBox = () => `<div class="cfa-ct" id="ct${++ctN}" hidden></div>`;
+
+  /** A category's transactions, listed under what was tapped (CFA's categories, statements and
+   * findings, the dashboard's donut): GET /audit/transactions, sorted as the audit sorts them, so
+   * they add up to the figure. o: { categories, from, to, owner, title, label(owner) }. */
+  async function showCategory(el, o) {
+    const fmt = c => (c < 0 ? "−" : "") + "$" + (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const many = o.from.slice(0, 4) !== o.to.slice(0, 4);
+    const day = d => `${MON[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}${many ? `, ${d.slice(0, 4)}` : ""}`;
+    el.hidden = false;
+    el.innerHTML = `<div class="ct-head"><b>${esc(o.title)}</b><span class="ct-sub">Loading…</span><button type="button" class="ct-x" data-ct-close aria-label="Close the list">×</button></div>`;
+    try {
+      const q = new URLSearchParams({ category: o.categories.join(","), from: o.from, to: o.to, ...(o.owner ? { owner: o.owner } : {}) });
+      const r = await fetch(`/audit/transactions?${q}`);
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
+      const d = await r.json();
+      const who = o.label ?? (k => users.find(u => u.key === k)?.label ?? k);
+      const people = new Set(d.transactions.map(t => t.owner)).size > 1;
+      el.querySelector(".ct-sub").textContent = d.count ? `${d.count.toLocaleString()} transaction${d.count === 1 ? "" : "s"} · ${d.total_cents < 0 ? `${fmt(-d.total_cents)} back` : `${fmt(d.total_cents)} spent`}${d.more ? " · the newest 500 shown" : ""}` : "None in this time.";
+      if (!d.count) return;
+      el.insertAdjacentHTML("beforeend", `<div class="ct-scroll"><table class="ct-table"><tbody>${d.transactions.map(t => `<tr>
+        <td class="ct-d">${esc(day(t.date))}</td><td class="ct-n">${esc(t.name || "—")}<small>${esc([t.institution_name, t.account_name].filter(Boolean).join(" · "))}${t.account_mask ? ` ••${esc(t.account_mask)}` : ""}${people ? ` · ${esc(who(t.owner))}` : ""}${o.categories.length > 1 ? ` · ${esc(catName(t.category))}` : ""}</small></td>
+        <td class="ct-a num${t.amount_cents < 0 ? " in" : ""}">${fmt(t.amount_cents)}</td></tr>`).join("")}</tbody></table></div>`);
+    } catch (e) {
+      el.querySelector(".ct-sub").textContent = `Couldn't load them: ${e.message}`;
+    }
+  }
+  window.MintyCategory = { show: showCategory, name: c => catName(c) };
   const BUCKETS = [["spend", "Spending"], ["saving", "Saving"], ["transfer", "A transfer (ignore)"], ["debt", "A debt payment"], ["income", "Income"]];
   const EVERY = { weekly: 52, monthly: 12, quarterly: 4, yearly: 1 };
   const DAYS = { weekly: 7, monthly: 30.4, quarterly: 91, yearly: 365 };
@@ -119,14 +154,18 @@
     }).filter(x => Math.abs(x.a) >= 100).sort((x, y) => y.a - x.a);
     const top = Math.max(...cats.map(x => Math.max(x.a, x.l)), 1);
     const rising = cats.filter(x => x.up);
-    html += section("Spending by category", `<div class="cfa-cats">${cats.map(x => `<div class="cfa-cat${x.up ? " up" : ""}">
+    const win = full.length ? full : all, w3 = last3.length ? last3 : win;   // no full month yet: the one there is
+    const fromFull = `${win[0]}-01`, toFull = lastDay(win.at(-1)), fullLabel = spanLabel(fromFull, toFull);
+    const from3 = `${w3[0]}-01`, label3 = spanLabel(from3, toFull);
+    html += section("Spending by category", `<div class="cfa-cats">${cats.map(x => `<div class="cfa-cat${x.up ? " up" : ""}" role="button" tabindex="0" aria-expanded="false"
+          data-cats="${esc(x.c)}" data-from="${fromFull}" data-to="${toFull}" data-title="${esc(`${catName(x.c)} · ${fullLabel}`)}" title="List these transactions">
         <span class="cfa-cat-name">${esc(catName(x.c))}</span>
         <span class="cfa-cat-bar"><i style="width:${Math.max(0, (x.a / top) * 100).toFixed(1)}%"></i><b style="left:${Math.max(0, Math.min(100, (x.l / top) * 100)).toFixed(1)}%" title="Last 3 months: ${esc(money(x.l))} a month"></b></span>
-        <span class="cfa-cat-num">${money(x.a)}<small>/mo</small>${x.up ? `<em>▲ ${pct(x.l / x.a - 1)}</em>` : ""}</span></div>`).join("")}</div>
+        <span class="cfa-cat-num">${money(x.a)}<small>/mo</small>${x.up ? `<em>▲ ${pct(x.l / x.a - 1)}</em>` : ""}</span></div>${ctBox()}`).join("")}</div>
       <p class="cfa-key"><i></i> average a month over ${full.length} months <b></b> the last ${last3.length}</p>`,
-      [rising.length ? rising.map(x => `<b>${esc(catName(x.c))}</b> is up ${pct(x.l / x.a - 1)} lately: ${money(x.l)} a month against ${money(x.a)} on average (${money(x.l - x.a)} a month more).`).join(" ")
+      [rising.length ? rising.map(x => `<b>${catLink(esc(catName(x.c)), [x.c], from3, toFull, `${catName(x.c)} · ${label3}`)}</b> is up ${pct(x.l / x.a - 1)} lately: ${money(x.l)} a month against ${money(x.a)} on average (${money(x.l - x.a)} a month more).`).join(" ") + ctBox()
         : full.length >= 6 ? "No category is running well above its own average lately." : "Rising categories are flagged once there are 6 full months to compare with.",
-       cats.find(x => x.c === "CREDITS") ? `Card credits gave back ${money(-cats.find(x => x.c === "CREDITS").a)} a month on average.` : null]);
+       cats.find(x => x.c === "CREDITS") ? `${catLink("Card credits", ["CREDITS"], fromFull, toFull, `Card credits · ${fullLabel}`)} gave back ${money(-cats.find(x => x.c === "CREDITS").a)} a month on average.${ctBox()}` : null]);
 
     // 3. Recurring charges
     const rec = data.recurring.map(r => {
@@ -157,7 +196,7 @@
     const anyDebt = debtSeries.some(s => s.values.some(v => v));
     html += section("Fees, interest and debt", (anyDebt ? C().legend(debtSeries) + C().bars({ labels: all, series: debtSeries, width: width(), height: 160, fmt: short, short: monLabel }) : "") +
       (data.cards.length ? `<div class="cfa-cards">${data.cards.filter(c => (c.balance ?? 0) > 0).sort((a, b) => b.balance - a.balance).map(c => `<span>${esc(c.name || "Card")}${c.mask ? ` ••${esc(c.mask)}` : ""} <b>${money(c.balance)}</b></span>`).join("")}</div>` : ""),
-      [fees > 0 ? `You paid <b>${money(fees)}</b> in fees and interest over ${full.length} months (annual fees included). Card interest is usually the one worth ending first: paying off the highest-rate balance first saves the most.` : "No fees or interest charged in this period.",
+      [fees > 0 ? `You paid <b>${money(fees)}</b> in ${(full.length ? catLink("fees and interest", ["BANK_FEES", "INTEREST"], `${full[0]}-01`, lastDay(full.at(-1)), `Fees and interest · ${spanLabel(`${full[0]}-01`, lastDay(full.at(-1)))}`) : "fees and interest")} over ${full.length} months (annual fees included). Card interest is usually the one worth ending first: paying off the highest-rate balance first saves the most.${full.length ? ctBox() : ""}` : "No fees or interest charged in this period.",
        owed ? `Cards owe ${money(owed)} today. Paid in full by each due date, that costs nothing.` : null]);
 
     // 5. Net worth
@@ -232,6 +271,7 @@
       ${todo.map(x => `<div class="cfa-rec-item ${esc(x.level)}">
         <div class="cfa-rec-head"><span class="cfa-tag">${esc(AREA[x.area] ?? x.area)}</span><b>${esc(x.title)}</b>${x.yearly_cents ? `<span class="cfa-yearly">${money(x.yearly_cents)} a year</span>` : ""}</div>
         <p>${esc(x.why)} <b>${esc(x.action)}</b></p>
+        ${x.transactions ? `<p>${catLink("See the transactions", x.transactions.categories, x.transactions.from, x.transactions.to, `${x.transactions.categories.map(catName).join(", ")} · ${spanLabel(x.transactions.from, x.transactions.to)}`)}</p>${ctBox()}` : ""}
         ${x.numbers.length || x.basis ? `<details><summary>How this was worked out</summary><ul>${x.numbers.map(([k, v]) => `<li>${esc(k)}: ${esc(v)}</li>`).join("")}</ul>${x.basis ? `<p class="cfa-muted">${esc(x.basis)}</p>` : ""}</details>` : ""}
       </div>`).join("")}
       ${good.map(x => `<p class="cfa-good">✓ ${esc(x.title)}: ${esc(x.why)}</p>`).join("")}
@@ -284,7 +324,27 @@
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
   }
 
+  /** A tap on a category row or link: its list opens right after it (and closes on a second tap). */
+  function toggleList(trigger) {
+    // the list box right after the row, or after the statement's paragraph (a <div> can't sit in a <p>)
+    const after = trigger.matches(".cfa-cat") ? trigger : trigger.closest("p") ?? trigger;
+    const box = after.nextElementSibling?.matches(".cfa-ct") ? after.nextElementSibling : null;
+    if (!box) return;
+    const key = `${trigger.dataset.cats}|${trigger.dataset.from}|${trigger.dataset.to}`;
+    main.querySelectorAll('[aria-expanded="true"][data-cats]').forEach(t => { if (t !== trigger) t.setAttribute("aria-expanded", "false"); });
+    if (!box.hidden && box.dataset.key === key) { box.hidden = true; trigger.setAttribute("aria-expanded", "false"); return; }
+    main.querySelectorAll(".cfa-ct:not([hidden])").forEach(b => { if (b !== box) b.hidden = true; });
+    box.dataset.key = key;
+    trigger.setAttribute("aria-expanded", "true");
+    showCategory(box, { categories: trigger.dataset.cats.split(","), from: trigger.dataset.from, to: trigger.dataset.to, owner: owner || null, title: trigger.dataset.title });
+  }
+  main.addEventListener("keydown", e => { const r = e.target.closest(".cfa-cat[data-cats]"); if (r && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleList(r); } });
+
   main.addEventListener("click", async e => {
+    const closeList = e.target.closest("[data-ct-close]");
+    if (closeList) { const box = closeList.closest(".cfa-ct"); box.hidden = true; main.querySelectorAll('[aria-expanded="true"][data-cats]').forEach(t => t.setAttribute("aria-expanded", "false")); return; }
+    const cat = e.target.closest("[data-cats]");
+    if (cat) { toggleList(cat); return; }
     const m = e.target.closest("[data-months]");
     if (m) { months = Number(m.dataset.months); return load(); }
     if (e.target.closest('[data-act="print"]')) return window.print();
