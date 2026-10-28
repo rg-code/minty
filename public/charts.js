@@ -91,16 +91,7 @@
     const p0 = v[Math.max(i - 1, 0)], p1 = v[i], p2 = v[i + 1], p3 = v[Math.min(i + 2, n - 1)];
     return p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
   }
-  /** A smooth path through [x, y] points (Catmull-Rom as Béziers). */
-  function smooth(pts) {
-    let d = `M${f1(pts[0][0])},${f1(pts[0][1])}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[Math.max(i - 1, 0)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(i + 2, pts.length - 1)];
-      d += `C${f1(p1[0] + (p2[0] - p0[0]) / 6)},${f1(p1[1] + (p2[1] - p0[1]) / 6)} ${f1(p2[0] - (p3[0] - p1[0]) / 6)},${f1(p2[1] - (p3[1] - p1[1]) / 6)} ${f1(p2[0])},${f1(p2[1])}`;
-    }
-    return d;
-  }
-  /** A monotone curve (no overshoot) through [x, y] points: the stat cards' sparklines. */
+  /** A monotone curve (no overshoot) through [x, y] points: the sparklines and the area chart. */
   function monotone(pts) {
     const n = pts.length;
     if (n === 2) return `M${f1(pts[0][0])},${f1(pts[0][1])}L${f1(pts[1][0])},${f1(pts[1][1])}`;
@@ -137,7 +128,7 @@
 
   /** An interactive area chart: range buttons that morph the line, and a scrubbing tooltip.
    *  o: { title, ranges: [{ key, label, points: [{ label, axis, value }] }], range, fmt, fmtAxis,
-   *       head(i | null, range) → { value, delta, good, deltaText, caption }, onPoint(i | null, range), height } */
+   *       head(i | null, range) → { value, delta, good, deltaText, caption }, onPoint(i | null, range), onRange(range), height } */
   function area(el, o) {
     const id = `ia${++uid}`, H = o.height ?? 230, P = { t: 14, r: 10, b: 24, l: 46 }, N = 72;
     const fmtAxis = o.fmtAxis ?? o.fmt;
@@ -163,7 +154,7 @@
     const xi = (i, n) => P.l + (n === 1 ? (W - P.l - P.r) / 2 : (i / (n - 1)) * (W - P.l - P.r));
     function paths() {
       const pts = drawn.map((ny, k) => [X(k), Y(ny)]);
-      const d = smooth(pts);
+      const d = monotone(pts);                 // never past a point's value: a spiky month of days stays above $0
       $(".ia-line").setAttribute("d", d);
       $(".ia-area").setAttribute("d", `${d}L${f1(X(N - 1))},${H - P.b}L${P.l},${H - P.b}Z`);
     }
@@ -218,6 +209,7 @@
       stop();
       stop = tween(550, t => { for (let k = 0; k < N; k++) drawn[k] = from[k] + (to[k] - from[k]) * t; paths(); }, easeInOut);
       grid(); show(null);
+      o.onRange?.(key);
     }
     size();
     if (!W) { W = 320; svg.setAttribute("width", W); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); $(".ia-hit").setAttribute("width", W); }

@@ -107,6 +107,47 @@ export const CLASSIFIED = `
  * list; through idx_txn_category_date, so only those rows are read), bucketed as CLASSIFIED does,
  * left-out ones skipped. The caller filters the result by bucket, category and owner. */
 export const CATEGORY_ROWS = CLASSIFIED.replace("t.date >= ?1", "t.date >= ?6 AND t.date <= ?7 AND t.category IN (SELECT value FROM json_each(?8)) AND ?1 IS NOT NULL");
+/** Posted transactions in [?6, ?7], bucketed as CLASSIFIED does, left-out ones skipped: the 1M
+ * range's days (by the date index, so only the range's rows are read). */
+export const RANGE_ROWS = CLASSIFIED.replace("t.date >= ?1", "t.date >= ?6 AND t.date <= ?7 AND ?1 IS NOT NULL");
+
+// The left-out transactions themselves, bucketed (the dashboard's "Left out" view): the ones with a
+// left-out tag (?8, their ids, each a primary-key lookup), or on a left-out account (?8, the
+// account ids, by idx_txn_account_date), in [?6, ?7]. Two queries rather than an OR, so each
+// keeps its index.
+const LEFT_OUT_FILTER = `WHERE t.pending = 0 AND t.amount_cents <> 0 AND t.date >= ?1
+      AND json_extract(?4, '$."' || t.account_id || '"') IS NULL
+      AND json_extract(?5, '$."' || t.id || '"') IS NULL`;
+if (!CLASSIFIED.includes(LEFT_OUT_FILTER)) throw new Error("audit: CLASSIFIED's filter changed; update LEFT_OUT_FILTER");   // fail loudly, never quietly
+const leftOutRows = (term: string) => CLASSIFIED.replace(LEFT_OUT_FILTER,
+  `WHERE t.pending = 0 AND t.amount_cents <> 0 AND t.date >= ?6 AND t.date <= ?7 AND ?1 IS NOT NULL AND ?4 IS NOT NULL AND ?5 IS NOT NULL AND ${term}`);
+export const LEFT_OUT_TAGGED = leftOutRows("t.id IN (SELECT value FROM json_each(?8))");
+export const LEFT_OUT_ACCOUNTS = leftOutRows("t.account_id IN (SELECT value FROM json_each(?8))");
+
+/** What each left-out transaction is left out by: { account id: "bank:7" | "account:12" } and
+ * { transaction id: "tag:sync" } (an account's own switch, or its bank's; a tag in any case). */
+export async function leftOutIndex(env: Env): Promise<{ accounts: Record<string, string>; tagged: Record<string, string>; keys: string[] }> {
+  const [ex, acc] = await env.DB.batch([
+    env.DB.prepare("SELECT kind, value FROM analytics_exclusions"),
+    env.DB.prepare("SELECT id, item_id FROM accounts"),
+  ]);
+  const xs = ex.results as { kind: string; value: string }[];
+  const has = (kind: string, value: string) => xs.some((x) => x.kind === kind && x.value === value);
+  const accounts: Record<string, string> = {}, tagged: Record<string, string> = {};
+  for (const a of acc.results as { id: number; item_id: number }[]) {
+    if (has("account", String(a.id))) accounts[a.id] = `account:${a.id}`;
+    else if (has("bank", String(a.item_id))) accounts[a.id] = `bank:${a.item_id}`;
+  }
+  const tags = xs.filter((x) => x.kind === "tag");
+  if (tags.length) {
+    const byLower = Object.fromEntries(tags.map((t) => [t.value.toLowerCase(), t.value]));
+    const { results } = await env.DB.prepare("SELECT transaction_id AS id, lower(tag) AS tag FROM transaction_tags WHERE lower(tag) IN (SELECT lower(value) FROM json_each(?))")
+      .bind(JSON.stringify(tags.map((t) => t.value))).all<{ id: number; tag: string }>();
+    for (const r of results) tagged[r.id] ??= `tag:${byLower[r.tag]}`;
+  }
+  return { accounts, tagged, keys: xs.map((x) => `${x.kind}:${x.value}`) };
+}
+
 /** The same for category OTHER (no category from Plaid), which the index can't narrow. */
 export const OTHER_ROWS = CLASSIFIED.replace("t.date >= ?1", "t.date >= ?6 AND t.date <= ?7 AND coalesce(t.category, '') IN ('', 'OTHER') AND ?1 IS NOT NULL AND ?8 IS NOT NULL");
 

@@ -126,6 +126,8 @@ describe("D1 rows read per request (budgets)", () => {
     ["/audit", 3000],                    // monthly_totals for 12 months (the grouping's sort counts twice), net worth by day, recurring
     ["/audit/buckets?merchant=Whole%20Foods", 10],   // one correction, by the table's key
     ["/audit/transactions?category=OTHER&from=2025-03-01&to=2025-03-31", 1200],   // the worst case: no category (the index can't narrow it), a month of rows by date
+    ["/audit/daily?from=2025-03-01&to=2025-03-31", 800],   // a month of rows by the date index (the 1M range)
+    ["/audit/left-out?from=2024-10-01&to=2026-10-31", 200],   // nothing left out here: the lookups only
     ["/audit/exclusions", 200],          // what's left out, and the banks and accounts (a few dozen rows)
     ["/audit/summary", 400],             // monthly_totals' money in and spending for 24 months, each row once
     ["/points", 400],                    // every reading once (288 here; no ORDER BY, which D1 counts as a second read)
@@ -227,3 +229,16 @@ describe("D1 rows read by Link sessions (src/routes/link.ts)", () => {
   });
 });
 
+
+describe("D1 rows read by the dashboard's Left out view", () => {
+  it("reads the left-out rows (and the tag index), not every transaction in the range", async () => {
+    const tag = (await env.DB.prepare("SELECT tag, count(*) AS n FROM transaction_tags GROUP BY tag ORDER BY n DESC LIMIT 1").first<{ tag: string; n: number }>());
+    if (!tag) return;
+    await env.DB.prepare("INSERT OR IGNORE INTO analytics_exclusions (kind, value) VALUES ('tag', ?)").bind(tag.tag).run();
+    const tags = (await env.DB.prepare("SELECT count(*) AS n FROM transaction_tags").first<{ n: number }>())!.n;
+    const rows = await readsOf("/audit/left-out?from=2024-10-01&to=2026-10-31");
+    console.warn(`/audit/left-out with "${tag.tag}" left out (${tag.n} rows, ${tags} tags in all): ${rows} rows read`);
+    expect(rows).toBeLessThanOrEqual(tags + 6 * tag.n + 200);         // every tag once (the case-blind match), ~5 per left-out row
+    await env.DB.prepare("DELETE FROM analytics_exclusions").run();
+  });
+});
