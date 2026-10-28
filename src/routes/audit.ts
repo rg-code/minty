@@ -57,6 +57,24 @@ export async function audit(env: Env, config: Config, url: URL): Promise<Respons
   });
 }
 
+/** GET /audit/summary: the dashboard's cards, chart and donut. Each person's money in and spending
+ * by month and category for 24 months, from monthly_totals (what the cron prepared, never the
+ * transactions): a range on the table's key, no sort, so it reads each row once. */
+export async function summary(env: Env): Promise<Response> {
+  const months = monthsBack(24);
+  const [rows, state] = await env.DB.batch([
+    env.DB.prepare(`SELECT month, owner, bucket, category, amount_cents AS cents, n FROM monthly_totals
+                    WHERE month >= ? AND bucket IN ('income', 'spend')`).bind(months[0]),
+    env.DB.prepare("SELECT updated_at FROM app_state WHERE key = 'audit_watermark'"),
+  ]);
+  return json({
+    today: new Date().toISOString().slice(0, 10),
+    months,
+    totals: rows.results,
+    refreshed_at: (state.results[0] as { updated_at?: string } | undefined)?.updated_at ?? null,
+  });
+}
+
 const merchantKey = (merchant: unknown) => {
   const m = typeof merchant === "string" ? merchant.replace(/\s+/g, " ").trim().toUpperCase() : "";
   if (!m || m.length > MAX_MERCHANT) throw unprocessable(`merchant must be 1–${MAX_MERCHANT} characters`);

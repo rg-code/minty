@@ -245,7 +245,7 @@ also starts with C1, and every later trend needs it.
   - `public/cfa.js` and `cfa.css`;
   - `public/charts.js`: grouped bars, lines and a legend in SVG, drawn at the container's pixel
     width so the text stays its size on a phone;
-  - `src/routes/audit.ts`: `GET /audit` and `PUT /audit/buckets`;
+  - `src/routes/audit.ts`: `GET /audit` and `PUT /audit/buckets`; `GET /audit/buckets?merchant=` (one correction, for "Counts as" on a transaction) and `GET /audit/summary` (the dashboard's cards, chart and donut: 24 months of money in and spending by person and category, from `monthly_totals`);
   - migration `0014_audit_views.sql`: `net_worth` and `recurring_charges`.
 - **Its sections**, each with plain-words findings:
   - **Cash flow**, with the savings rate (money in, less spending and loan payments) against the

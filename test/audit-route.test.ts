@@ -77,3 +77,24 @@ describe("GET /audit/buckets?merchant=", () => {
     expect((await getJson<any>("/audit/buckets")).status).toBe(422);
   });
 });
+
+describe("GET /audit/summary (the dashboard's cards, chart and donut)", () => {
+  it("is behind Access", async () => {
+    expect((await call("/audit/summary", { token: null })).status).toBe(403);
+  });
+
+  it("24 months of money in and spending, by person and category; nothing else", async () => {
+    const ins = db.prepare("INSERT INTO monthly_totals (month, owner, bucket, category, amount_cents, n) VALUES (?, ?, ?, ?, ?, ?)");
+    await db.batch([ins.bind(month(1), "me", "transfer", "TRANSFER_OUT", 99999, 1), ins.bind(month(1), "me", "debt", "LOAN_PAYMENTS", 88888, 1),
+                    ins.bind(month(24), "me", "spend", "TRAVEL", 77777, 1)]);
+    const { status, body } = await getJson<any>("/audit/summary");
+    expect(status).toBe(200);
+    expect(body.months).toHaveLength(24);
+    expect(body.months.at(-1)).toBe(month(0));
+    expect(body.totals.map((t: any) => `${t.month}|${t.owner}|${t.bucket}|${t.category}|${t.cents}`).sort()).toEqual([
+      `${month(1)}|me|income|INCOME|-500000`, `${month(1)}|me|spend|FOOD_AND_DRINK|60000`, `${month(1)}|spouse|spend|FOOD_AND_DRINK|20000`,
+      `${month(13)}|me|spend|TRAVEL|90000`,
+    ].sort());                                              // transfers, debt payments and month 25 back aren't in it
+  });
+});
+

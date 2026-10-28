@@ -464,25 +464,167 @@ function detailHTML(t) {
     </dl>
     <div class="tagedit">
       <div class="tagchips">${chips}</div>
-      <input class="taginput" type="text" placeholder="Add a tag, press Enter" />
+      <input class="taginput" type="text" placeholder="Add a tag, press Enter" autocomplete="off" autocapitalize="none" spellcheck="false"
+             aria-autocomplete="both" aria-label="Add a tag" />
+      <div class="tagsugg" role="group" aria-label="Tags in use" hidden></div>
     </div>`;
 }
 
-function renderTotals(txns) {
-  const by = {};
-  for (const t of txns) by[t.owner] = (by[t.owner] ?? 0) + displayAmount(t.amount);
-  // everyone configured, plus anyone with rows who has since been removed from MINTY_USERS
-  const owners = state.owner === "all"
-    ? [...USERS.map(u => u.key), ...Object.keys(by).filter(k => !USERS.some(u => u.key === k))]
-    : [state.owner];
-  document.getElementById("totals").innerHTML = owners.map(o => {
-    const v = by[o] ?? 0;
-    return `<div class="stat">
-      <div class="k"><span class="dot" style="width:8px;height:8px;border-radius:50%;display:inline-block;background:${colorOf(o)}"></span>${escapeHtml(labelOf(o))} · net</div>
-      <div class="v num" style="color:${v < 0 ? "var(--out)" : "var(--in)"}">${v < 0 ? "−" : "+"}${fmt.format(Math.abs(v))}</div>
-    </div>`;
-  }).join("");
+// --- The cards above the feed --------------------------------------------------------------
+// Unfiltered: each person's spending this month, from CFA's monthly totals (GET /audit/summary,
+// which the hourly cron keeps: transfers and card payments aren't spending), with a sparkline and
+// the pace against last month. A tap opens a chart by month and a donut by category. With a search
+// or a filter on, they add up what's shown instead, and say so. charts.js draws them.
+let summary = null;                    // GET /audit/summary (null: not loaded, or no totals yet)
+let trendKey = null;                   // whose chart is open: a person's key, "" for everyone; null when closed
+let trendSig = "", trendChart = null, trendDonut = null;
+try { const v = localStorage.getItem("minty.trends"); trendKey = v === null ? (matchMedia("(max-width: 640px)").matches ? null : "") : v === "off" ? null : v; }
+catch { trendKey = matchMedia("(max-width: 640px)").matches ? null : ""; }
+const fmt0 = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const money0 = c => fmt0.format(c / 100);
+const signed = v => `${v < 0 ? "−" : "+"}${fmt.format(Math.abs(v))}`;
+const CAT = { FOOD_AND_DRINK: "Food & drink", GENERAL_MERCHANDISE: "Shopping", RENT_AND_UTILITIES: "Rent & utilities", TRANSPORTATION: "Transportation",
+              TRAVEL: "Travel", ENTERTAINMENT: "Entertainment", MEDICAL: "Medical", PERSONAL_CARE: "Personal care", GENERAL_SERVICES: "Services",
+              HOME_IMPROVEMENT: "Home", GOVERNMENT_AND_NON_PROFIT: "Government & giving", BANK_FEES: "Fees", INTEREST: "Interest charged",
+              LOAN_PAYMENTS: "Loan payments", TRANSFER_OUT: "Transfers out (not matched)", OTHER: "Other" };
+const catName = c => CAT[c] ?? titleCase(c);
+const monName = (m, opts = { month: "short", year: "numeric" }) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString(undefined, { ...opts, timeZone: "UTC" });
+const filtersOn = () => !!(state.q || state.start || state.end || state.tags.length || state.banks.length || state.accounts.length || state.cards.length);
+
+async function loadSummary() {
+  if (offline) return;
+  try { const r = await fetch("/audit/summary"); summary = r.ok ? await r.json() : null; } catch { summary = null; }
+  trendSig = "";
+  renderTotals(loaded);
 }
+
+/** One person's (or, for "", everyone's) money in, spending and spending by category, by month. */
+function monthsOf(key) {
+  const idx = new Map(summary.months.map((m, i) => [m, i])), n = summary.months.length;
+  const s = { spend: Array(n).fill(0), income: Array(n).fill(0), count: Array(n).fill(0), cats: summary.months.map(() => ({})) };
+  for (const t of summary.totals) {
+    const i = idx.get(t.month);
+    if (i === undefined || (key && t.owner !== key)) continue;
+    s.count[i] += t.n;
+    if (t.bucket === "income") s.income[i] -= t.cents;
+    else { s.spend[i] += t.cents; s.cats[i][t.category] = (s.cats[i][t.category] ?? 0) + t.cents; }
+  }
+  // Where the history really starts (as CFA judges): the first month with 40% of the busiest month's transactions.
+  const most = Math.max(0, ...s.count);
+  s.first = most ? s.count.findIndex(c => c >= Math.max(5, most * 0.4)) : -1;
+  return s;
+}
+
+function renderTotals(txns) {
+  const el = document.getElementById("totals"), C = window.MintyCharts;
+  if (!C) { document.addEventListener("DOMContentLoaded", () => renderTotals(loaded), { once: true }); return; }
+  const present = [...new Set(txns.map(t => t.owner))];
+  // everyone configured, plus anyone with rows who has since been removed from MINTY_USERS
+  const people = state.owner === "all" ? [...USERS.map(u => u.key), ...present.filter(k => !USERS.some(u => u.key === k))] : [state.owner];
+  const cur = summary?.today?.slice(0, 7);
+  const useSummary = summary && !filtersOn() && summary.months.at(-1) === cur && people.some(k => monthsOf(k).first >= 0);
+  const sig = `${useSummary}|${summary?.refreshed_at}|${state.owner}|${people.join()}|${trendKey}`;
+  const fresh = sig !== trendSig;
+  if (!useSummary) {
+    // What's shown: each person's money in less money out, over the rows on the page.
+    const by = {};
+    for (const t of txns) {
+      const b = (by[t.owner] ??= { net: 0, n: 0, lo: t.date, hi: t.date });
+      b.net += displayAmount(t.amount); b.n++;
+      if (t.date < b.lo) b.lo = t.date; if (t.date > b.hi) b.hi = t.date;
+    }
+    const span = b => b.lo === b.hi ? prettyDate(b.lo) : `${shortDate(b.lo)} – ${shortDate(b.hi)}`;
+    el.innerHTML = people.map(k => {
+      const b = by[k];
+      return C.stat({ label: `${labelOf(k)} · ${b ? `${b.n.toLocaleString()} shown` : "none shown"}`, dot: colorOf(k), value: b ? b.net : 0, fmt: signed,
+                      caption: b ? `In less out, ${span(b)}${hasMore ? " (loaded so far)" : ""}` : filtersOn() ? "Nothing matches the filters" : "", countUp: false });
+    }).join("");
+    C.wire(el);
+    document.getElementById("trends").hidden = true;
+    trendSig = sig;
+    return;
+  }
+  const keys = people.length > 1 ? ["", ...people] : people;
+  if (trendKey !== null && !keys.includes(trendKey)) trendKey = keys[0];
+  const today = summary.today, day = Number(today.slice(8, 10)), dim = new Date(Date.UTC(+today.slice(0, 4), +today.slice(5, 7), 0)).getUTCDate();
+  const lastMonth = monName(summary.months.at(-2), { month: "long" });
+  el.innerHTML = keys.map(k => {
+    const s = monthsOf(k), L = s.spend.length - 1, spent = s.spend[L], prev = s.spend[L - 1];
+    const pace = day >= 5 ? (spent / day) * dim : null;
+    const from = Math.max(s.first < 0 ? L : s.first, L - 11);
+    return C.stat({
+      label: `${k ? labelOf(k) : "Everyone"} · ${monName(cur, { month: "short" })}`, dot: k ? colorOf(k) : null, value: spent / 100, fmt: v => fmt0.format(v), cls: "spend",
+      delta: pace !== null && prev > 0 ? pace / prev - 1 : null, goodWhen: "down",
+      caption: `Spent so far · in ${money0(s.income[L])}${pace !== null ? ` · on pace for ${money0(pace)}` : ` · ${lastMonth} ${money0(prev)}`}`,
+      trend: s.spend.slice(from).map(c => c / 100), labels: summary.months.slice(from).map((m, i, a) => `Spent in ${monName(m)}${i === a.length - 1 ? " so far" : ""}`),
+      tag: "button", attrs: `type="button" data-trend="${escapeAttr(k)}" aria-expanded="${trendKey === k}" title="${pace !== null && prev > 0 ? `On pace for ${money0(pace)} this month, against ${money0(prev)} in ${lastMonth}. ` : ""}Tap for the months and the categories"`,
+      countUp: fresh,
+    });
+  }).join("");
+  C.wire(el);
+  renderTrends(fresh);
+  trendSig = sig;
+}
+const shortDate = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+
+/** The open card's chart (spending by month, 6 months to 2 years) and donut (by category, for the
+ * month under the pointer, else this month). Built once per card and data; filters don't touch it. */
+function renderTrends(fresh) {
+  const box = document.getElementById("trends"), C = window.MintyCharts;
+  box.hidden = trendKey === null;
+  if (trendKey === null || !fresh) return;
+  const s = monthsOf(trendKey), L = s.spend.length - 1, first = Math.max(0, s.first);
+  const avail = L - first + 1;
+  const who = trendKey ? labelOf(trendKey) : "Everyone";
+  box.innerHTML = `<div class="tr-chart"></div><div class="tr-donut"><h3></h3><div class="tr-dn"></div></div>
+    <p class="tr-note">From posted transactions${summary.refreshed_at ? `, as of ${new Date(summary.refreshed_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}. Transfers between your accounts and card payments aren't spending. <button type="button" data-open-cfa>The full audit (CFA)</button></p>`;
+  if (avail < 2) { box.querySelector(".tr-chart").innerHTML = `<p class="tr-empty">The chart starts once there are two months of history.</p>`; }
+  const point = i => ({ label: `${monName(summary.months[i])}${i === L ? " so far" : ""}`, axis: monName(summary.months[i], { month: "short" }), value: s.spend[i] / 100 });
+  const ranges = [["6M", 6], ["1Y", 12], ["2Y", 24]].filter(([, n], j, a) => j === 0 || avail > a[j - 1][1])
+    .map(([key, n]) => ({ key, label: key, points: Array.from({ length: Math.min(n, avail) }, (_, j) => point(L - Math.min(n, avail) + 1 + j)) }));
+  const range = ranges.find(r => r.key === "1Y") ? "1Y" : ranges.at(-1).key;
+  const monthAt = (i, rk) => i === null ? L : L - ranges.find(r => r.key === rk).points.length + 1 + i;
+  const segments = m => {
+    const all = Object.entries(s.cats[m]).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]);
+    const top = all.slice(0, 6), rest = all.slice(6).reduce((t, [, c]) => t + c, 0);
+    return [...top.map(([c, v], i) => ({ key: c, label: catName(c), value: v / 100, color: C.PALETTE[i] })),
+            ...(rest > 0 ? [{ key: "_rest", label: "Everything else", value: rest / 100, color: C.PALETTE[7] }] : [])];
+  };
+  const donutFor = m => {
+    box.querySelector(".tr-donut h3").textContent = `${who} · by category, ${monName(summary.months[m], { month: "long", year: "numeric" })}${m === L ? " so far" : ""}`;
+    trendDonut.update(segments(m), m === L ? "Spent so far" : "Spent");
+  };
+  trendDonut = C.donut(box.querySelector(".tr-dn"), { fmt: v => fmt0.format(v), title: "Spent", size: 176 });
+  let shownMonth = L;
+  donutFor(L);
+  if (avail >= 2) {
+    trendChart = C.area(box.querySelector(".tr-chart"), {
+      title: `${who} · spending by month`, ranges, range, fmt: v => fmt0.format(v),
+      fmtAxis: v => (Math.abs(v) >= 1000 ? `$${Math.round(v / 100) / 10}k` : `$${Math.round(v)}`),
+      head: (i, rk) => {
+        const r = ranges.find(x => x.key === rk), pts = r.points;
+        if (i === null) {
+          const full = pts.slice(0, -1);
+          const avg = full.length ? full.reduce((t, p) => t + p.value, 0) / full.length : pts[0].value;
+          return { value: avg, caption: full.length ? `a month on average over the last ${full.length} full month${full.length === 1 ? "" : "s"}` : "this month so far" };
+        }
+        const p = pts[i], before = pts[i - 1];
+        return { value: p.value, delta: before && before.value > 0 && i < pts.length - 1 ? p.value / before.value - 1 : null, good: before && p.value < before.value, caption: `${p.label}${before && i < pts.length - 1 ? ` · against ${monName(summary.months[monthAt(i - 1, rk)], { month: "short" })}` : ""}` };
+      },
+      onPoint: (i, rk) => { const m = monthAt(i, rk); if (m !== shownMonth) { shownMonth = m; donutFor(m); } },
+    });
+  }
+}
+
+document.getElementById("totals").addEventListener("click", e => {
+  const card = e.target.closest("[data-trend]");
+  if (!card) return;
+  trendKey = trendKey === card.dataset.trend ? null : card.dataset.trend;
+  try { localStorage.setItem("minty.trends", trendKey === null ? "off" : trendKey); } catch {}
+  renderTotals(loaded);
+  if (trendKey !== null) document.getElementById("trends").scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+});
+document.getElementById("trends").addEventListener("click", e => { if (e.target.closest("[data-open-cfa]")) document.querySelector("#moreMenu [data-open-cfa]")?.click(); });
 
 // --- interaction (event delegation on the feed) ------------------------------
 const feed = document.getElementById("feed");
@@ -514,6 +656,12 @@ feed.addEventListener("click", (e) => {
     txnEl.querySelector(".taginput").focus();
     return;
   }
+  const sugg = e.target.closest("[data-sugg]");
+  if (sugg) {                                              // a suggested tag: added
+    const txn = txnFromEl(sugg);
+    if (!(txn.tags || []).includes(sugg.dataset.sugg)) saveTags(txn, [...(txn.tags || []), sugg.dataset.sugg], { refocus: true });
+    return;
+  }
   const removeBtn = e.target.closest("[data-removetag]");
   if (removeBtn) {                                          // remove a tag
     const txn = txnFromEl(removeBtn);
@@ -529,17 +677,79 @@ feed.addEventListener("click", (e) => {
 });
 feed.addEventListener("txnaction", e => rowAction(e.detail.txn, e.detail.act));   // a swipe (swipe.js)
 
+// Tag suggestions: a row's tag box suggests the tags already in use as you type (those starting
+// with what's typed first, then a word in them starting with it, then anywhere in them; the most
+// used among the loaded rows first). The best one is filled in, selected, so Enter or Tab takes it
+// and typing on replaces it; a tap on a suggestion adds it.
+function tagSuggestions(txn, typed) {
+  const q = typed.trim().toLowerCase(), have = new Set((txn?.tags || []).map(t => t.toLowerCase()));
+  const uses = new Map();
+  for (const t of loaded) for (const tg of t.tags || []) uses.set(tg, (uses.get(tg) ?? 0) + 1);
+  const rank = tg => {
+    const l = tg.toLowerCase();
+    return !q || l.startsWith(q) ? 0 : l.split(/[\s\-_/.]+/).some(w => w.startsWith(q)) ? 1 : l.includes(q) ? 2 : -1;
+  };
+  return allTags.filter(tg => !have.has(tg.toLowerCase())).map(tg => [tg, rank(tg)]).filter(([, r]) => r >= 0)
+    .sort((a, b) => a[1] - b[1] || (uses.get(b[0]) ?? 0) - (uses.get(a[0]) ?? 0) || a[0].localeCompare(b[0]))
+    .slice(0, 8).map(([tg]) => tg);
+}
+function showSuggestions(input, { complete = false } = {}) {
+  const box = input.closest(".tagedit")?.querySelector(".tagsugg");
+  if (!box) return;
+  const typed = input.dataset.typed ?? input.value, q = typed.trim().toLowerCase();
+  const list = tagSuggestions(txnFromEl(input), typed);
+  box.innerHTML = list.map(tg => {
+    const at = q ? tg.toLowerCase().indexOf(q) : -1;
+    const label = at < 0 ? escapeHtml(tg) : `${escapeHtml(tg.slice(0, at))}<b>${escapeHtml(tg.slice(at, at + q.length))}</b>${escapeHtml(tg.slice(at + q.length))}`;
+    return `<button type="button" class="tag sugg" data-sugg="${escapeAttr(tg)}" tabindex="-1">${label}</button>`;
+  }).join("");
+  box.hidden = !list.length;
+  const best = list[0];
+  if (complete && q && best?.toLowerCase().startsWith(typed.toLowerCase()) && best.length > typed.length) {
+    input.value = typed + best.slice(typed.length);
+    input.setSelectionRange(typed.length, input.value.length);
+  }
+}
+feed.addEventListener("input", e => {
+  if (!e.target.classList.contains("taginput")) return;
+  e.target.dataset.typed = e.target.value;
+  // not while deleting (Backspace removes the filled-in part first), nor mid-composition (a phone keyboard's word)
+  showSuggestions(e.target, { complete: !e.isComposing && !String(e.inputType).startsWith("delete") });
+});
+feed.addEventListener("focusin", e => {
+  if (!e.target.classList?.contains("taginput")) return;
+  e.target.dataset.typed = e.target.value;
+  showSuggestions(e.target);
+});
+feed.addEventListener("focusout", e => {
+  if (e.target.classList?.contains("taginput")) { const box = e.target.closest(".tagedit")?.querySelector(".tagsugg"); if (box) box.hidden = true; }
+});
+feed.addEventListener("pointerdown", e => { if (e.target.closest("[data-sugg]")) e.preventDefault(); });   // the box keeps focus
+
 feed.addEventListener("keydown", (e) => {
   if (e.target.classList.contains("taginput") && e.key === "Enter") {
     e.preventDefault();
     const txn = txnFromEl(e.target);
-    const val = e.target.value.trim();
+    const typed = e.target.value.trim();
+    const val = allTags.find(x => x.toLowerCase() === typed.toLowerCase()) ?? typed;   // a tag in use keeps its spelling
     if (val) {
       const tags = [...(txn.tags || [])];
       if (!tags.some(x => x.toLowerCase() === val.toLowerCase())) tags.push(val);
       saveTags(txn, tags, { refocus: true });
     }
     e.target.value = "";
+  }
+  if (e.target.classList.contains("taginput") && e.key === "Tab" && !e.shiftKey) {     // Tab takes the suggestion
+    const input = e.target, best = tagSuggestions(txnFromEl(input), input.dataset.typed ?? input.value)[0];
+    if (best && input.value.trim() && input.value !== best) {
+      e.preventDefault();
+      input.value = input.dataset.typed = best;
+      showSuggestions(input);
+    }
+  }
+  if (e.target.classList.contains("taginput") && e.key === "Escape") {
+    e.target.value = e.target.dataset.typed ?? e.target.value;
+    e.target.closest(".tagedit").querySelector(".tagsugg").hidden = true;
   }
   if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("row")) {
     e.preventDefault();
@@ -627,7 +837,26 @@ document.addEventListener("keydown", e => {
 // The ⋯ menu (Bills, and more features later): opens and closes like the filter menus; picking an
 // item closes it (the item's own handler, e.g. bills.js, does the rest).
 const moreBtn = document.getElementById("moreBtn"), moreMenu = document.getElementById("moreMenu");
-const setMore = open => { moreMenu.hidden = !open; moreBtn.setAttribute("aria-expanded", open); };
+const setMore = open => { moreMenu.hidden = !open; moreBtn.setAttribute("aria-expanded", open); pnRest(); };
+// The pill navigation's thumb: it slides to the pill under the pointer or the keyboard's focus, and
+// rests on ⋯ while its row is open (index.html, .pillnav).
+const pillNav = document.getElementById("pillNav"), pnInd = pillNav.querySelector(".pn-ind");
+const pnPill = t => t.closest(".pillnav > .pill, .pillnav > .more > .pill");
+function pnMove(p) {
+  if (!p) { pnInd.style.opacity = 0; return; }
+  const jump = pnInd.style.opacity !== "1";                 // appearing: no slide from where it last was
+  pnInd.classList.toggle("jump", jump);
+  pnInd.style.width = `${p.offsetWidth}px`;
+  pnInd.style.transform = `translateX(${p.getBoundingClientRect().left - pillNav.getBoundingClientRect().left - pillNav.clientLeft}px)`;
+  if (jump) void pnInd.offsetWidth;
+  pnInd.classList.remove("jump");
+  pnInd.style.opacity = 1;
+}
+function pnRest() { pnMove(moreMenu.hidden ? (pillNav.contains(document.activeElement) && document.activeElement.matches(":focus-visible") ? pnPill(document.activeElement) : null) : moreBtn); }
+pillNav.addEventListener("pointerover", e => { const p = pnPill(e.target); if (p && e.pointerType === "mouse") pnMove(p); });
+pillNav.addEventListener("pointerleave", () => pnRest());
+pillNav.addEventListener("focusin", e => { const p = pnPill(e.target); if (p && e.target.matches(":focus-visible")) pnMove(p); });
+pillNav.addEventListener("focusout", () => setTimeout(pnRest));
 moreBtn.addEventListener("click", () => setMore(moreMenu.hidden));
 moreMenu.addEventListener("click", e => { if (e.target.closest("button")) setMore(false); });
 document.addEventListener("click", e => { if (!document.getElementById("morePick").contains(e.target)) setMore(false); });
@@ -825,7 +1054,7 @@ setUpInstall();
 let syncPoll = null;
 const syncBtn = document.getElementById("syncBtn"), syncNote = document.getElementById("syncNote");
 const hhmm = iso => new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-function reloadAll() { loadItems(); loadAccounts(); load(); loadHealth(); }
+function reloadAll() { loadItems(); loadAccounts(); loadHealth(); return Promise.all([load(), loadSummary()]); }
 function showLastSync(iso) {
   if (!iso) return;
   const d = new Date(iso), today = new Date().toDateString() === d.toDateString();
@@ -847,13 +1076,20 @@ async function checkSync(wasPending) {
   clearTimeout(syncPoll);
   if (st.pending) syncPoll = setTimeout(() => checkSync(true), 60000);
 }
-syncBtn.addEventListener("click", async () => {
-  reloadAll();                                      // fresh from Minty's database right away
+/** The logo's tap, and pull to refresh (swipe.js): fresh from Minty's database right away, and a
+ * sync request for the next cron run (never a sync from here). Returns the line pull to refresh shows. */
+async function refreshAll() {
+  const loading = reloadAll();
+  let st = null;
   try {
     const r = await fetch("/sync-request", { method: "POST" });
-    if (r.ok) { const st = await r.json(); showSync(st); clearTimeout(syncPoll); if (st.pending) syncPoll = setTimeout(() => checkSync(true), 60000); }
+    if (r.ok) { st = await r.json(); showSync(st); clearTimeout(syncPoll); if (st.pending) syncPoll = setTimeout(() => checkSync(true), 60000); }
   } catch {}
-});
+  await loading.catch(() => {});
+  return st?.pending ? `Up to date here. Asked your banks: anything new by ${hhmm(st.runs_by)}` : "Up to date";
+}
+syncBtn.addEventListener("click", () => { refreshAll(); });
+document.addEventListener("minty:pullrefresh", e => e.detail.wait(refreshAll()));
 document.getElementById("feed").addEventListener("click", e => { if (e.target.id === "showMore") { e.target.disabled = true; load(true); } });
 
 // --- Select: tag many transactions at once ------------------------------------
@@ -925,6 +1161,6 @@ document.getElementById("selRemove").addEventListener("change", e => {
   if (tag) bulkTag({ remove: [tag] }, n => `Removed “${tag}” from ${n.toLocaleString()}.`);
 });
 
-loadUsers().then(() => { loadItems(); loadAccounts(); load(); loadHealth(); checkSync(false); });
+loadUsers().then(() => { loadItems(); loadAccounts(); load(); loadSummary(); loadHealth(); checkSync(false); });
 setInterval(() => { if (!document.hidden && !syncBtn.classList.contains("syncing")) checkSync(false); }, 10 * 60 * 1000);   // keep "Last synced" current
 setInterval(() => { if (!document.hidden) loadHealth(); }, 5 * 60 * 1000);   // downloads move every 10 minutes

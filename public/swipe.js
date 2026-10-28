@@ -1,3 +1,4 @@
+// Gestures on the dashboard: swipe actions on transactions, and pull to refresh (at the end).
 // Swipe actions on the dashboard's transactions, like Mail on iOS: drag a row right for Select,
 // left for Tag, Similar and Counts as; a long drag does the first one (Select, or Tag). Touch and
 // pen only: a mouse opens the row, whose detail has the same buttons. app.js does the actions
@@ -116,4 +117,75 @@
     }
     if (Date.now() < swallowUntil) { e.stopImmediatePropagation(); e.preventDefault(); }
   }, true);
+})();
+
+// Pull to refresh (touch screens): at the top of the page, pull it down and let go to load what's
+// new and ask the banks for more, as a tap on the logo does (app.js answers "minty:pullrefresh").
+// After EasyUI's Pull to refresh (MIT). Touch listeners are passive, so scrolling never waits on
+// them; at the top a downward pull scrolls nothing (index.html turns the browser's own off).
+(() => {
+  if (!document.getElementById("feed") || !matchMedia("(hover: none)").matches) return;
+  const THRESHOLD = 64, MAX = 110, RES = 0.55, HOLD = 52;
+  const ind = document.createElement("div");
+  ind.className = "ptr";
+  ind.setAttribute("role", "status");
+  ind.innerHTML = `<span class="ptr-icon"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle class="ptr-track" cx="8" cy="8" r="6.5"/><circle class="ptr-ring" cx="8" cy="8" r="6.5" pathLength="1"/><path class="ptr-arrow" d="M8 4.8v6.4M5.6 8.8 8 11.2l2.4-2.4"/><path class="ptr-check" d="M5 8.3l2.1 2.1L11 6.3"/></svg></span><span class="ptr-text"></span>`;
+  document.body.append(ind);
+  let x0 = 0, y0 = null, pull = 0, pulling = false, busy = false;
+  const damp = d => (d <= 0 ? 0 : Math.min(MAX, MAX * (1 - Math.exp(-(d * RES) / THRESHOLD))));
+  const say = t => { ind.querySelector(".ptr-text").textContent = t; };
+  function set(px, animate) {
+    document.body.classList.toggle("ptr-anim", !!animate);
+    document.documentElement.style.setProperty("--pull", `${px.toFixed(1)}px`);
+    const p = Math.min(1, px / THRESHOLD);
+    ind.style.setProperty("--p", p.toFixed(3));
+    ind.style.opacity = busy ? 1 : px <= 0 ? 0 : p < 0.3 ? (p / 0.3) * 0.75 : 0.75 + ((p - 0.3) / 0.7) * 0.25;
+    ind.classList.toggle("ready", !busy && px >= THRESHOLD);
+  }
+  const blocked = t => document.querySelector("dialog[open]") || document.body.classList.contains("selecting") ||
+    t.closest("input, textarea, select, .tagmenu, .moremenu, .ia, .dn, .totals, .swipeacts, .selectbar");
+  addEventListener("touchstart", (e) => {
+    y0 = null;
+    if (busy || e.touches.length !== 1 || scrollY > 0 || blocked(e.target)) return;
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; pulling = false;
+  }, { passive: true });
+  addEventListener("touchmove", (e) => {
+    if (y0 === null || busy) return;
+    const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+    if (!pulling) {
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) { y0 = null; return; }       // sideways: a swipe
+      if (dy < 8) { if (dy < -8 || scrollY > 0) y0 = null; return; }
+      pulling = true;
+      document.body.classList.add("ptr-on");
+    }
+    pull = damp(dy - 8);
+    say(pull >= THRESHOLD ? "Release to refresh" : "Pull to refresh");
+    set(pull);
+  }, { passive: true });
+  async function end() {
+    y0 = null;
+    if (!pulling) return;
+    pulling = false;
+    if (pull < THRESHOLD) { set(0, true); setTimeout(() => { if (!pulling) document.body.classList.remove("ptr-on"); }, 380); return; }
+    busy = true;
+    ind.classList.add("busy");
+    say("Refreshing…");
+    set(HOLD, true);
+    let msg;
+    try {
+      msg = await Promise.race([
+        new Promise((ok, fail) => document.dispatchEvent(new CustomEvent("minty:pullrefresh", { detail: { wait: p => p.then(ok, fail) } }))),
+        new Promise(ok => setTimeout(() => ok("Still loading…"), 15000)),
+      ]);
+    } catch { msg = "Couldn't refresh. Try again in a moment."; }
+    ind.classList.remove("busy");
+    ind.classList.add("done");
+    say(msg);
+    await new Promise(r => setTimeout(r, 1100));
+    busy = false;
+    set(0, true);
+    setTimeout(() => { ind.classList.remove("done"); if (!pulling) document.body.classList.remove("ptr-on"); }, 380);
+  }
+  addEventListener("touchend", end);
+  addEventListener("touchcancel", end);
 })();

@@ -176,11 +176,69 @@
   input[type="search"] { flex: 1 1 180px; min-width: 140px; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-  .totals { display: flex; gap: var(--pad); flex-wrap: wrap; padding: var(--pad); padding-bottom: 0; }
-  .stat { background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius);
-          padding: 14px 16px; flex: 1 1 160px; }
-  .stat .k { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
-  .stat .v { font-size: 22px; font-weight: 650; margin-top: 3px; letter-spacing: -0.02em; }
+  /* the cards above the feed (renderTotals): stat cards (charts.js), and a chart and donut under a tap */
+  .totals { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; padding: var(--pad); padding-bottom: 0; }
+  .totals .sc { cursor: pointer; }
+  .totals .sc[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--card-shadow); }
+  .sc-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+  .totals-note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin: -4px 2px 0; }
+  .trends { margin: 12px var(--pad) 0; padding: 16px; background: var(--surface); border: 1px solid var(--hairline); border-radius: 20px;
+            box-shadow: var(--card-shadow); display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 18px 28px; align-items: start; }
+  .trends[hidden] { display: none; }
+  .trends .tr-donut h3 { margin: 0 0 10px; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .trends .tr-note { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--muted); }
+  .trends .tr-note button { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; }
+  .trends .tr-empty { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 13.5px; }
+  @media (max-width: 860px) { .trends { grid-template-columns: minmax(0, 1fr); } }
+
+  /* pull to refresh (swipe.js): the page moves down under a small pill */
+  @media (hover: none) { html { overscroll-behavior-y: none; } }
+  body.ptr-on > :not(.ptr):not(.selectbar):not(.ministrip):not(dialog):not(script) { transform: translate3d(0, var(--pull, 0px), 0); }
+  body.ptr-anim > :not(.ptr):not(.selectbar):not(.ministrip):not(dialog):not(script) { transition: transform .38s cubic-bezier(.2, .8, .2, 1); }
+  .ptr { position: fixed; z-index: 40; top: calc(env(safe-area-inset-top) + 10px); left: 50%; display: flex; align-items: center; gap: 7px;
+         padding: 6px 14px; border-radius: 999px; border: 1px solid var(--hairline); background: color-mix(in srgb, var(--surface) 94%, transparent);
+         backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 4px 16px rgba(0, 0, 0, .1); font-size: 12px; color: var(--ink);
+         opacity: 0; pointer-events: none; transform: translateX(-50%) scale(calc(.75 + .25 * var(--p, 0))); max-width: calc(100vw - 32px); }
+  body.ptr-anim .ptr { transition: opacity .3s, transform .3s; }
+  .ptr-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ptr-icon { display: inline-flex; color: var(--accent); }
+  .ptr svg { overflow: visible; }
+  .ptr-track { fill: none; stroke: var(--hairline); stroke-width: 1.6; }
+  .ptr-ring { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: calc(1 - var(--p, 0));
+              transform: rotate(-90deg); transform-origin: 8px 8px; }
+  .ptr-arrow, .ptr-check { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transform-origin: 8px 8px; transition: transform .2s; }
+  .ptr.ready .ptr-arrow { transform: rotate(180deg); }
+  .ptr-check { opacity: 0; }
+  .ptr.busy .ptr-arrow { opacity: 0; }
+  .ptr.busy .ptr-ring { stroke-dashoffset: .7; animation: ptr-spin .75s linear infinite; }
+  .ptr.done .ptr-arrow, .ptr.done .ptr-ring { opacity: 0; }
+  .ptr.done .ptr-check { opacity: 1; animation: ptr-pop .25s cubic-bezier(.2, .8, .2, 1.4); }
+  @keyframes ptr-spin { to { transform: rotate(270deg); } }
+  @keyframes ptr-pop { from { transform: scale(0); } }
+  @media (prefers-reduced-motion: reduce) { body.ptr-anim > * { transition: none !important; } .ptr.busy .ptr-ring { animation: none; } }
+
+  /* the header's pill navigation: one track, a thumb sliding to the pill under the pointer or focus
+     (app.js), and ⋯ opening a row of pills under it. After EasyUI's Pill navigation (MIT). */
+  .pillnav { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; border: 1px solid var(--hairline);
+             background: color-mix(in srgb, var(--muted) 8%, var(--surface)); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .05); }
+  .pillnav > .pill, .pillnav > .more > .pill { position: relative; z-index: 1; border: 0; background: transparent; box-shadow: none; min-height: 32px;
+             padding: 6px 14px; font-size: 13px; font-weight: 550; color: var(--muted); border-radius: 999px; transition: color .15s; }
+  .pillnav > .pill:hover, .pillnav > .more > .pill:hover, .pillnav .pill:focus-visible, .pillnav .pill[aria-expanded="true"] { color: var(--ink); background: transparent; }
+  .pn-ind { position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; border-radius: 999px; background: var(--surface); pointer-events: none; opacity: 0;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 2px 8px rgba(0, 0, 0, .08);
+            transition: transform .35s cubic-bezier(.23, 1, .32, 1), width .35s cubic-bezier(.23, 1, .32, 1), opacity .2s; }
+  .pn-ind.jump { transition: opacity .2s; }
+  .pillnav .moremenu { top: calc(100% + 8px); right: -3px; min-width: 0; display: flex; gap: 2px; padding: 3px; border-radius: 999px; white-space: nowrap;
+             background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+             box-shadow: 0 8px 20px rgba(0, 0, 0, .14); animation: pn-in .22s cubic-bezier(.23, 1, .32, 1); }
+  .pillnav .moremenu[hidden] { display: none; }
+  .pillnav .moremenu button, .pillnav .moremenu a { flex-direction: row; align-items: center; width: auto; padding: 7px 13px; border-radius: 999px;
+             font-size: 12.5px; font-weight: 550; color: var(--muted); }
+  .pillnav .moremenu button:hover, .pillnav .moremenu a:hover, .pillnav .moremenu button:focus-visible, .pillnav .moremenu a:focus-visible {
+             color: var(--ink); background: color-mix(in srgb, var(--muted) 13%, transparent); }
+  .pillnav .moremenu small { display: none; }
+  @keyframes pn-in { from { opacity: 0; transform: translateY(-4px) scale(.97); } }
+  @media (prefers-reduced-motion: reduce) { .pn-ind { transition: opacity .2s; } .pillnav .moremenu { animation: none; } }
 
   main { padding: var(--pad); }
   .daygroup + .daygroup { margin-top: 22px; }
@@ -299,6 +357,11 @@
   .notags { color: var(--muted); font-size: 12.5px; }
   .taginput { font: inherit; padding: 7px 10px; border: 1px solid var(--hairline); border-radius: 8px; max-width: 280px;
               background: var(--surface); color: var(--ink); }
+  .tagsugg { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -2px; }
+  .tagsugg[hidden] { display: none; }
+  .tag.sugg { border: 0; font: inherit; font-size: 12.5px; padding: 4px 11px; }
+  .tag.sugg b { font-weight: 700; }
+  @media (hover: none) { .tag.sugg { padding: 6px 13px; font-size: 13.5px; } }   /* touch: room for a finger */
 
   .empty, .banner { padding: 40px var(--pad); text-align: center; color: var(--muted); }
   .banner { padding: 10px var(--pad); background: var(--warn-bg); color: var(--warn-ink); border-bottom: 1px solid var(--warn-line); font-size: 13px; }
@@ -354,11 +417,12 @@
     .title-row .countstack .sub { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .title-row .themetoggle { grid-area: theme; }
     .links { grid-area: links; margin: 0; gap: 6px; flex-wrap: nowrap; justify-content: stretch; }
-    .links > .pill, .links > .more { flex: 1 1 0; min-width: 0; }
-    .links .pill { justify-content: center; padding: 6px 6px; gap: 5px; }
-    .links .more .pill { width: 100%; }
+    .pillnav { display: flex; width: 100%; }
+    .pillnav > .pill, .pillnav > .more { flex: 1 1 0; min-width: 0; }
+    .pillnav > .pill, .pillnav > .more > .pill { justify-content: center; padding: 6px 4px; gap: 5px; }
+    .pillnav > .more { position: static; } .pillnav > .more > .pill { width: 100%; }
+    .pillnav .moremenu { left: 0; right: 0; justify-content: space-between; overflow-x: auto; scrollbar-width: none; }
     .links .addlink { display: none; }
-    .moremenu { right: 0; }
     header .controls { margin-top: 10px; gap: 6px; position: relative; }
     header .controls .seg { flex: 1 1 100%; }
     header .controls .seg button { padding: 6px 12px; }
@@ -366,10 +430,16 @@
     header .controls .tagpick { flex: 0 0 42px; position: static; }
     header .controls .tagbtn { height: 40px; }
     header .controls .tagmenu { left: 0; right: 0; min-width: 0; max-width: none; }
-    .totals { flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 10px 12px 0; scrollbar-width: none; }
+    .totals { display: flex; flex-wrap: nowrap; overflow-x: auto; gap: 8px; padding: 10px 12px 2px; scrollbar-width: none; scroll-snap-type: x proximity; scroll-padding: 0 12px; }
     .totals::-webkit-scrollbar { display: none; }
-    .stat { flex: 1 0 auto; min-width: calc(50% - 4px); padding: 8px 12px; }
-    .stat .v { font-size: 18px; margin-top: 1px; }
+    .totals .sc { flex: 0 0 min(76%, 250px); padding: 11px 13px 0; border-radius: 14px; scroll-snap-align: start; }
+    .totals .sc:not(:has(.sc-spark)) { padding-bottom: 11px; }
+    .totals .sc-value { font-size: 21px; margin-top: 6px; }
+    .totals .sc-cap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .totals .sc-spark { height: 30px; margin: 6px -13px 0; }
+    .totals-note { flex: 0 0 100%; }
+    .trends { margin: 10px 12px 0; padding: 14px 12px; border-radius: 16px; }
+    .trends .dn { justify-content: center; }
     main { padding: 12px; }
   }
 
@@ -420,6 +490,7 @@
 <link rel="stylesheet" href="/bam.css" />
 <link rel="stylesheet" href="/cfa.css" />
 <link rel="stylesheet" href="/egg.css" />
+<link rel="stylesheet" href="/charts.css" />
 <link rel="stylesheet" href="/lock.css" />
 <script src="/lock.js"></script>
 </head>
@@ -430,6 +501,8 @@
     <span class="countstack"><span class="sub" id="count">—</span>
       <span class="sub lastsync"><span id="lastSync"></span><span class="syncnote" id="syncNote" aria-live="polite"></span></span></span>
     <nav class="links">
+      <div class="pillnav" id="pillNav">
+      <i class="pn-ind" aria-hidden="true"></i>
       <button type="button" class="pill" id="abcOpen" aria-haspopup="dialog" data-open-abc
               title="All but coupon clipping: your cards' credits, used and still open"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.4V5.5A1.5 1.5 0 0 1 5.5 4h6.9l7.6 7.6a1.5 1.5 0 0 1 0 2.1l-6.3 6.3a1.5 1.5 0 0 1-2.1 0z"/><circle cx="8.5" cy="8.5" r="1.4"/></svg><span>ABC</span></button>
       <button type="button" class="pill" id="bamOpen" aria-haspopup="dialog" data-open-bam
@@ -439,11 +512,12 @@
       <div class="more" id="morePick">
         <button type="button" class="pill" id="moreBtn" aria-haspopup="true" aria-expanded="false" aria-controls="moreMenu" aria-label="More" title="More"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
         <div class="moremenu" id="moreMenu" hidden>
-          <button type="button" data-open-bills>Bills<small>Card statements and your bills, by due date</small></button>
-          <button type="button" data-open-cfa>CFA<small>Complete financial audit: cash flow, spending, recurring charges, net worth</small></button>
-          <a class="phoneonly" href="/connect">+ Add account<small>Link a bank, card or retirement account</small></a>
-          <a class="phoneonly" href="/add-user">+ Add user<small>People, Plaid keys and Setup checks</small></a>
+          <button type="button" data-open-bills title="Card statements and your bills, by due date">Bills<small>Card statements and your bills, by due date</small></button>
+          <button type="button" data-open-cfa title="Complete financial audit: cash flow, spending, recurring charges, net worth">CFA<small>Complete financial audit: cash flow, spending, recurring charges, net worth</small></button>
+          <a class="phoneonly" href="/connect" title="Link a bank, card or retirement account">+ Add account<small>Link a bank, card or retirement account</small></a>
+          <a class="phoneonly" href="/add-user" title="People, Plaid keys and Setup checks">+ Add user<small>People, Plaid keys and Setup checks</small></a>
         </div>
+      </div>
       </div>
       <a class="addlink" href="/connect">+ Add account</a>
       <a class="addlink" href="/add-user">+ Add user</a>
@@ -593,6 +667,7 @@
   <div id="bamMain"></div>
 </dialog>
 <div class="totals" id="totals"></div>
+<section class="trends" id="trends" hidden aria-label="Spending by month and by category"></section>
 <!-- Select: tag many transactions at once (app.js). The bar sits at the bottom while selecting. -->
 <div class="selectrow"><button type="button" class="pill" id="selectToggle" aria-pressed="false" title="Select transactions to tag several at once">Select</button></div>
 <main id="feed"><div class="empty">Loading…</div></main>

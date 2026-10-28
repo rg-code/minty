@@ -65,6 +65,7 @@
       ${users.length > 1 ? `<select id="eggOwner" aria-label="Person"><option value="">Everyone</option>${users.map(u => `<option value="${esc(u.key)}"${u.key === owner ? " selected" : ""}>${esc(u.label)}</option>`).join("")}</select>` : ""}
       <span class="egg-total">${money(total)} <small>in ${ret.length} retirement account${ret.length === 1 ? "" : "s"}</small></span>
     </div>`;
+    html += "<!--egg-stats-->";
     if (fetching.length) html += `<p class="cfa-muted">${fetching.map(b => esc(b.bank || "A bank")).join(", ")}: fetching the investment accounts (within about ten minutes).</p>`;
     if (!ret.length) {
       html += `<p class="abc-msg">No retirement accounts yet. <a href="/connect#investments">Link one</a>: a 401(k), IRA or HSA login (Schwab, Fidelity…), or add the investment accounts of a bank you've linked already.${others.length ? " Or move one of the accounts below into EGG." : ""}</p>`;
@@ -101,12 +102,14 @@
     const years = age !== null ? Math.max(0, retireAge - age) : 20;
     const mineTotal = k ? ret.filter(a => a.owner === k).reduce((s, a) => s + (a.balance ?? 0), 0) : total;
     const yearly = data.contributions.filter(c => !k || c.owner === k).reduce((s, c) => s + (c.last_12m ?? 0), 0);
+    let forecast = null;
     const fv = (r, n) => mineTotal * (1 + r) ** n + (r ? yearly * (((1 + r) ** n - 1) / r) : yearly * n);
     if (years > 0) {
       const labels = Array.from({ length: years + 1 }, (_, i) => (age !== null ? String(age + i) : `+${i}`));
       const lines = RATES.map(([name, r]) => ({ name: `${name} (${pct(r)})`, cls: `f-${name}`, values: labels.map((_, i) => fv(r, i)) }));
       const at = RATES.map(([name, r]) => [name, fv(r, years)]);
       const mid = at[1][1];
+      forecast = { mid, when: age !== null ? `At ${retireAge}` : `In ${years} years` };
       const notes = [
         `${age !== null ? `At ${retireAge}` : `In ${years} years`}: about <b>${money(mid)}</b> in today's dollars (${money(at[0][1])} cautious, ${money(at[2][1])} hopeful), from ${money(mineTotal)} now and ${money(yearly)} a year going in.`,
         `At a 4% withdrawal rate, ${money(mid)} supports about <b>${money(mid * 0.04)} a year</b> (${money(mid * 0.04 / 12)} a month).`,
@@ -166,8 +169,29 @@
     }
 
     html += accountsHtml(ret, others) + profileHtml(k);
+    html = html.replace("<!--egg-stats-->", statsHtml(total, shown, put12, forecast));
     html += `<p class="bill-fine">Educational, not financial advice: Minty isn't a CFP, CFA or registered advisor. The forecast is arithmetic, not a prediction: it assumes steady real returns (after inflation) of 3, 5 and 7% a year and the contributions of the last 12 months, in today's dollars, before taxes. The 4% rule is a rule of thumb for how much a retirement fund can pay out a year.</p>`;
     main.innerHTML = html;
+    C().wire(main);
+  }
+
+  /** The headline numbers as stat cards (charts.js): the balance with its line over the range,
+   * what went in, what the investments earned, and the forecast's middle case. */
+  function statsHtml(total, shown, put12, forecast) {
+    const cards = [];
+    const first = shown[0], lastP = shown.at(-1);
+    const every = Math.max(1, Math.ceil(shown.length / 80)), pts = shown.filter((_, i) => i % every === 0 || i === shown.length - 1);
+    cards.push(C().stat({ label: "Retirement accounts", value: total, fmt: money, touch: true, cls: "rate",
+      delta: shown.length >= 2 && first.cents > 0 ? lastP.cents / first.cents - 1 : null,
+      caption: shown.length >= 2 ? `Since ${dayYear(first.date)}` : "The line fills in day by day",
+      trend: pts.length >= 2 ? pts.map(p => p.cents) : null, labels: pts.map(p => dayYear(p.date)) }));
+    if (put12 > 0) cards.push(C().stat({ label: "Put in, last 12 months", value: put12, fmt: money, caption: "Contributions Minty saw" }));
+    if (shown.length >= 2 && (Date.parse(lastP.date) - Date.parse(first.date)) / 864e5 >= 360) {
+      const earned = lastP.cents - first.cents - put12;
+      cards.push(C().stat({ label: earned >= 0 ? "Investments earned" : "Investments lost", value: Math.abs(earned), fmt: money, caption: `Since ${dayYear(first.date)}, apart from what went in` }));
+    }
+    if (forecast) cards.push(C().stat({ label: forecast.when, value: forecast.mid, fmt: money, caption: "Middle case, in today's dollars" }));
+    return `<div class="scgrid">${cards.join("")}</div>`;
   }
 
   function accountsHtml(ret, others) {
