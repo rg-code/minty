@@ -235,6 +235,14 @@ describe("static pages", () => {
     expect(await fetchText("/charts.js")).toContain("o.onRange?.(key);");
   });
 
+  it("the filter menus open like a drop of liquid: an SVG goo filter, a blob from the button to the menu", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<filter id="mintyGoo"');
+    expect(html).toContain(".goo { pointer-events: none; z-index: 19; filter: url(#mintyGoo)");
+    expect(html).toMatch(/if \(open && !was\) gooOpen\(d\); else if \(!open && was\) gooClose\(d\);/);
+    expect(html).toContain(".ministrip #ownerSeg:not(.open)");                            // the strip's picker rules leave the Tags menu's Any/All alone
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');

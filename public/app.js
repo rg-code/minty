@@ -981,7 +981,54 @@ document.addEventListener("keydown", e => {
 // outside or Escape closes them.
 const DROPDOWNS = [["tagPick", "tagBtn", "tagMenu"], ["bankPick", "bankBtn", "bankMenu"], ["acctPick", "acctBtn", "acctMenu"], ["datePick", "dateBtn", "dateMenu"]]
   .map(([pick, btn, menu]) => ({ pick: document.getElementById(pick), btn: document.getElementById(btn), menu: document.getElementById(menu) }));
-function setDropdown(d, open) { d.menu.hidden = !open; d.btn.setAttribute("aria-expanded", open); }
+function setDropdown(d, open) {
+  const was = !d.menu.hidden;
+  d.menu.hidden = !open; d.btn.setAttribute("aria-expanded", open);
+  if (open && !was) gooOpen(d); else if (!open && was) gooClose(d);
+}
+// The filter menus open like a drop of liquid (after EasyUI's Gooey menu, MIT): a mint blob drips
+// from the button and swells into the menu's shape, and closes back into it. Two plain shapes
+// under an SVG "goo" filter (index.html, #mintyGoo: a blur, then a sharp alpha cut, so shapes near
+// each other merge); the menu's own content sits above, and its rows fade in one after another.
+// Reduced motion: the menu just appears.
+const GOO_PAD = 32;
+function gooOpen(d) {
+  const menu = d.menu;
+  menu.querySelectorAll(":scope > *, .tagopts > *, .presets > *").forEach((el, i) => el.style.setProperty("--i", Math.min(i, 14)));
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const fixed = getComputedStyle(menu).position === "fixed";              // the strip's menus sit on the screen
+  const parent = fixed ? menu.parentElement : menu.offsetParent;
+  if (!parent) return;
+  const pr = fixed ? { left: 0, top: 0 } : parent.getBoundingClientRect(), dx = fixed ? 0 : parent.clientLeft, dy = fixed ? 0 : parent.clientTop;
+  const b = d.btn.getBoundingClientRect(), m = menu.getBoundingClientRect();
+  const left = Math.min(b.left, m.left), top = Math.min(b.top, m.top), right = Math.max(b.right, m.right), bottom = Math.max(b.bottom, m.bottom);
+  const layer = d.goo ??= Object.assign(document.createElement("div"), { className: "goo", innerHTML: '<i class="goo-pill"></i><i class="goo-panel"></i>' });
+  layer.setAttribute("aria-hidden", "true");
+  Object.assign(layer.style, { position: fixed ? "fixed" : "absolute", left: `${left - pr.left - dx - GOO_PAD}px`, top: `${top - pr.top - dy - GOO_PAD}px`,
+    width: `${right - left + 2 * GOO_PAD}px`, height: `${bottom - top + 2 * GOO_PAD}px` });
+  const pill = layer.firstChild, panel = layer.lastChild;
+  Object.assign(pill.style, { left: `${b.left - left + GOO_PAD}px`, top: `${b.top - top + GOO_PAD}px`, width: `${b.width}px`, height: `${b.height}px`, borderRadius: `${Math.min(b.height / 2, 999)}px` });
+  Object.assign(panel.style, { left: `${m.left - left + GOO_PAD}px`, top: `${b.top - top + GOO_PAD}px`, width: `${m.width}px`, height: `${m.height}px`, transition: "none",
+    transform: `scaleY(${(b.height / m.height).toFixed(3)})` });
+  d.gooDrop = m.top - b.top;
+  menu.before(layer);
+  d.pick.classList.add("goo-open"); menu.classList.add("goo-in");
+  void panel.offsetWidth;                                               // start from the button, then drop
+  panel.style.transition = "";
+  panel.style.transform = `translateY(${d.gooDrop}px) scaleY(1)`;
+  d.gooSize ??= new ResizeObserver(() => { if (!menu.hidden && d.goo?.isConnected) { const r = menu.getBoundingClientRect(); d.goo.lastChild.style.height = `${r.height}px`; } });
+  d.gooSize.observe(menu);
+}
+function gooClose(d) {
+  d.menu.classList.remove("goo-in");
+  d.gooSize?.unobserve(d.menu);
+  const layer = d.goo;
+  if (!layer?.isConnected) { d.pick.classList.remove("goo-open"); return; }
+  const pill = layer.firstChild, panel = layer.lastChild;
+  panel.style.transform = `scaleY(${(pill.offsetHeight / Math.max(1, panel.offsetHeight)).toFixed(3)})`;
+  clearTimeout(d.gooTimer);
+  d.gooTimer = setTimeout(() => { if (d.menu.hidden) { layer.remove(); d.pick.classList.remove("goo-open"); } }, 340);
+}
 for (const d of DROPDOWNS) d.btn.addEventListener("click", () => {
   const open = d.menu.hidden;
   for (const o of DROPDOWNS) setDropdown(o, o === d && open);
