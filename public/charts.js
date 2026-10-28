@@ -246,20 +246,23 @@
     };
   }
 
-  /** A donut: segments by value, the hovered one named in the middle, a legend that hides one.
-   *  o: { segments: [{ key, label, value, color }], title, fmt, size, thickness } */
+  /** A donut: segments by value, the hovered (or picked) one named in the middle, and a legend.
+   *  A tap on a slice or a legend row picks it (onSelect(key), or null to let go: the caller lists
+   *  its transactions); the ⊘ on a row hides it from the ring.
+   *  o: { segments: [{ key, label, value, color }], title, fmt, size, thickness, onSelect } */
   function donut(el, o) {
     const TH = o.thickness ?? 14;
     const hidden = new Set();
-    let segs = [], title = o.title, active = null, intro = true, stop = () => {};
+    let segs = [], title = o.title, hover = null, sel = null, intro = true, stop = () => {};
     el.classList.add("dn");
     el.innerHTML = `<div class="dn-ring"><svg class="dn-svg" role="img"></svg><div class="dn-center"><span class="dn-lab"></span><b class="dn-val num"></b><span class="dn-pct"></span></div></div><div class="dn-legend"></div>`;
     const svg = el.querySelector(".dn-svg"), legend = el.querySelector(".dn-legend");
     const D = () => Math.max(120, Math.min(o.size ?? 176, el.clientWidth || 176));
     const shown = () => segs.filter(s => !hidden.has(s.key) && s.value > 0);
     const total = () => shown().reduce((t, s) => t + s.value, 0);
+    const focus = () => hover ?? sel;
     function center() {
-      const s = segs.find(x => x.key === active && !hidden.has(x.key)), t = total();
+      const s = segs.find(x => x.key === focus() && !hidden.has(x.key)), t = total();
       el.querySelector(".dn-lab").textContent = s ? s.label : title;
       el.querySelector(".dn-val").textContent = o.fmt(s ? s.value : t);
       el.querySelector(".dn-pct").textContent = s && t ? `${Math.round((s.value / t) * 100)}% of the total` : "";
@@ -276,7 +279,7 @@
         a += span;
         if (a1 <= a0) return;
         a1 = a0 + (a1 - a0) * progress(i);
-        const on = s.key === active, w = on ? TH + 4 : TH;
+        const on = s.key === focus(), w = on ? TH + 4 : TH;
         const path = list.length === 1 && progress(i) >= 1
           ? `M${c} ${f1(c - r)}A${f1(r)} ${f1(r)} 0 1 1 ${f1(c - 0.01)} ${f1(c - r)}`
           : `M${pt(a0)}A${f1(r)} ${f1(r)} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${pt(a1)}`;
@@ -285,15 +288,18 @@
       });
       svg.setAttribute("width", d); svg.setAttribute("height", d); svg.setAttribute("viewBox", `0 0 ${d} ${d}`);
       svg.innerHTML = out;
-      svg.classList.toggle("hl", active !== null && !hidden.has(active));
+      svg.classList.toggle("hl", focus() !== null && !hidden.has(focus()));
     }
     function rows() {
       const t = total();
       legend.innerHTML = segs.map(s => {
         const off = hidden.has(s.key);
-        return `<button type="button" class="dn-row${off ? " off" : ""}${s.key === active ? " on" : ""}" data-k="${esc(s.key)}" aria-pressed="${!off}">
-          <i style="background:${esc(s.color)}"></i><span class="dn-name">${esc(s.label)}</span>
-          <span class="dn-v num">${off ? "—" : esc(o.fmt(s.value))}</span><span class="dn-p num">${off || !t ? "" : `${Math.round((s.value / t) * 100)}%`}</span></button>`;
+        return `<div class="dn-row${off ? " off" : ""}${s.key === focus() ? " on" : ""}${s.key === sel ? " sel" : ""}" data-k="${esc(s.key)}">
+          <button type="button" class="dn-pick" aria-pressed="${s.key === sel}"${off ? " disabled" : ""} title="${o.onSelect ? `List ${esc(s.label)}'s transactions` : esc(s.label)}">
+            <i style="background:${esc(s.color)}"></i><span class="dn-name">${esc(s.label)}</span>
+            <span class="dn-v num">${off ? "—" : esc(o.fmt(s.value))}</span><span class="dn-p num">${off || !t ? "" : `${Math.round((s.value / t) * 100)}%`}</span></button>
+          <button type="button" class="dn-eye" data-hide aria-pressed="${off}" aria-label="${off ? "Show" : "Hide"} ${esc(s.label)}" title="${off ? "Show" : "Hide"} it in the ring">
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.4"/>${off ? "" : `<path d="M4.2 11.8 11.8 4.2" stroke="currentColor" stroke-width="1.4"/>`}</svg></button></div>`;
       }).join("");
     }
     function draw() {
@@ -311,34 +317,42 @@
         stop = () => cancelAnimationFrame(raf);
         const target = total(), valEl = el.querySelector(".dn-val");
         center();
-        tween(800, k => { if (active === null) valEl.textContent = o.fmt(target * k); });
+        tween(800, k => { if (focus() === null) valEl.textContent = o.fmt(target * k); });
       } else { intro = false; arcs(); center(); }
       rows();
     }
-    const highlight = k => { if (active === k) return; active = k; arcs(); center(); rows(); };
-    svg.addEventListener("pointerover", e => { const k = e.target.closest(".dn-hit")?.dataset.k; if (k && e.pointerType === "mouse") highlight(k); });
-    svg.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") highlight(null); });
-    svg.addEventListener("click", e => { const k = e.target.closest(".dn-hit")?.dataset.k ?? null; highlight(k === active ? null : k); });
-    legend.addEventListener("pointerover", e => { const k = e.target.closest(".dn-row")?.dataset.k; if (k && e.pointerType === "mouse" && !hidden.has(k)) highlight(k); });
-    legend.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") highlight(null); });
-    legend.addEventListener("focusin", e => { const k = e.target.closest(".dn-row")?.dataset.k; if (k && !hidden.has(k)) highlight(k); });
+    const repaint = () => { arcs(); center(); rows(); };
+    const setHover = k => { if (hover === k) return; hover = k; repaint(); };
+    const pick = k => { sel = k === sel ? null : k; hover = null; repaint(); o.onSelect?.(sel); };
+    svg.addEventListener("pointerover", e => { const k = e.target.closest(".dn-hit")?.dataset.k; if (k && e.pointerType === "mouse") setHover(k); });
+    svg.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") setHover(null); });
+    svg.addEventListener("click", e => { const k = e.target.closest(".dn-hit")?.dataset.k; if (k) pick(k); });
+    legend.addEventListener("pointerover", e => { const k = e.target.closest(".dn-row")?.dataset.k; if (k && e.pointerType === "mouse" && !hidden.has(k)) setHover(k); });
+    legend.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") setHover(null); });
     legend.addEventListener("click", e => {
-      const b = e.target.closest(".dn-row");
-      if (!b) return;
-      const k = b.dataset.k;
-      if (hidden.has(k)) hidden.delete(k);
-      else if (shown().length > 1) hidden.add(k);            // the last one stays
-      if (hidden.has(active)) active = null;
-      arcs(); center(); rows();
-      legend.querySelector(`.dn-row[data-k="${CSS.escape(k)}"]`)?.focus();
+      const row = e.target.closest(".dn-row");
+      if (!row) return;
+      const k = row.dataset.k;
+      if (e.target.closest("[data-hide]")) {
+        if (hidden.has(k)) hidden.delete(k);
+        else if (shown().length > 1) hidden.add(k);            // the last one stays
+        if (hidden.has(sel)) { sel = null; o.onSelect?.(null); }
+        hover = null; repaint();
+        legend.querySelector(`.dn-row[data-k="${CSS.escape(k)}"] [data-hide]`)?.focus();
+        return;
+      }
+      pick(k);
+      legend.querySelector(`.dn-row[data-k="${CSS.escape(k)}"] .dn-pick`)?.focus();
     });
     return {
       update(segments, t) {
         segs = segments; title = t ?? title;
         for (const k of [...hidden]) if (!segs.some(s => s.key === k)) hidden.delete(k);
-        if (!segs.some(s => s.key === active)) active = null;
+        if (hover !== null && !segs.some(s => s.key === hover)) hover = null;
+        if (sel !== null && !segs.some(s => s.key === sel)) { sel = null; o.onSelect?.(null); }
         draw();
       },
+      selected: () => sel,
     };
   }
 

@@ -1,7 +1,7 @@
 import type { Env } from "../env";
 import type { Config } from "../config";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
-import { markAuditDirty, markLeftOutChanged } from "../audit/totals";
+import { CATEGORY_ROWS, OTHER_ROWS, accountMaps, markAuditDirty, markLeftOutChanged } from "../audit/totals";
 import { ACCOUNT_NAME } from "../accounts";
 
 /** CFA, the Complete financial audit (docs/cfa.md), phase C2: what the audit's charts show. Reads
@@ -132,6 +132,42 @@ export async function setExclusion(env: Env, request: Request): Promise<Response
     .bind(kind, v).run();
   await markLeftOutChanged(env);
   return json({ left_out: (await env.DB.prepare(LEFT_OUT_LIST).all()).results });
+}
+
+const MAX_ROWS = 500;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** GET /audit/transactions?category=A[,B]&from=&to=&owner=&bucket=spend: the transactions behind a
+ * figure (CFA's categories, the dashboard's donut), sorted as the audit sorts them, so they add up
+ * to it: corrections apply, transfers aren't spending, what's left out stays out. The newest 500.
+ * A statement credit or interest charged (categories CREDITS, INTEREST) is found under BANK_FEES. */
+export async function categoryTransactions(env: Env, config: Config, url: URL): Promise<Response> {
+  const cats = (url.searchParams.get("category") ?? "").split(",").map((c) => c.trim()).filter(Boolean);
+  if (!cats.length || cats.length > 30 || cats.some((c) => !/^[A-Z_]{2,48}$/.test(c))) throw unprocessable("category must be one or more of the audit's categories, like FOOD_AND_DRINK");
+  const from = url.searchParams.get("from") ?? "", to = url.searchParams.get("to") ?? "";
+  if (!DAY_RE.test(from) || !DAY_RE.test(to) || from > to) throw unprocessable("from and to must be dates (YYYY-MM-DD), from on or before to");
+  if ((Date.parse(to) - Date.parse(from)) / 864e5 > 800) throw unprocessable("at most about two years at a time");
+  const owner = url.searchParams.get("owner");
+  if (owner !== null && !config.users.has(owner)) throw unprocessable("owner must be one of the people in MINTY_USERS");
+  const bucket = url.searchParams.get("bucket") ?? "spend";
+  if (!(BUCKETS as readonly string[]).includes(bucket)) throw unprocessable(`bucket must be one of ${BUCKETS.join(", ")}`);
+  const source = [...new Set(cats.map((c) => (c === "CREDITS" || c === "INTEREST" ? "BANK_FEES" : c)).filter((c) => c !== "OTHER"))];
+  const maps = await accountMaps(env);
+  const wrap = (rows: string) => `
+    SELECT c.id, c.date, c.label AS name, c.amount_cents, c.owner, c.category, c.bucket, ${ACCOUNT_NAME("a")} AS account_name, a.mask AS account_mask, i.institution_name
+    FROM (${rows}) c JOIN transactions t ON t.id = c.id JOIN accounts a ON a.id = t.account_id JOIN items i ON i.id = a.item_id
+    WHERE c.bucket = ?9 AND c.category IN (SELECT value FROM json_each(?10))${owner === null ? " AND ?11 IS NULL" : " AND c.owner = ?11"}`;
+  const bind = [ "0000-01-01", ...maps, from, to, JSON.stringify(source), bucket, JSON.stringify(cats), owner ];
+  const queries = [
+    ...(source.length ? [env.DB.prepare(wrap(CATEGORY_ROWS)).bind(...bind)] : []),
+    ...(cats.includes("OTHER") ? [env.DB.prepare(wrap(OTHER_ROWS)).bind(...bind)] : []),
+  ];
+  const rows = (await env.DB.batch(queries)).flatMap((r) => r.results as { id: number; date: string; amount_cents: number }[])
+    .sort((a, b) => (a.date === b.date ? b.id - a.id : a.date < b.date ? 1 : -1));    // sorted here: D1 counts a sort as another read
+  return json({
+    categories: cats, from, to, owner, bucket,
+    count: rows.length, total_cents: rows.reduce((s, r) => s + r.amount_cents, 0),
+    transactions: rows.slice(0, MAX_ROWS), more: rows.length > MAX_ROWS,
+  });
 }
 
 const merchantKey = (merchant: unknown) => {

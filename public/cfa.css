@@ -123,3 +123,23 @@
 .cfa .lo-accts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 16px; margin: 6px 0 0 24px; font-size: 13px; }
 .cfa .lo-accts input:disabled + span { opacity: .6; }
 .cfa .lo-msg { font-size: 13px; color: var(--in); margin: 4px 0 8px; }
+
+/* A category's transactions (showCategory; the dashboard's donut too) */
+.cfa .cfa-cat[data-cats] { cursor: pointer; border-radius: 8px; }
+.cfa .cfa-cat[data-cats]:hover, .cfa .cfa-cat[aria-expanded="true"] { background: var(--row-hover); }
+.cfa-catlink { font: inherit; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+b > .cfa-catlink { font-weight: 650; }
+.cfa-ct { margin: 6px 0 10px; border: 1px solid var(--hairline); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.cfa-ct[hidden] { display: none; }
+.ct-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 9px 12px; border-bottom: 1px solid var(--hairline); font-size: 13.5px; }
+.ct-sub { color: var(--muted); font-size: 12.5px; }
+.ct-x { margin-left: auto; font: inherit; font-size: 18px; line-height: 1; border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 4px; }
+.ct-x:hover { color: var(--ink); }
+.ct-scroll { max-height: 340px; overflow-y: auto; overscroll-behavior: contain; }
+.ct-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ct-table td { padding: 6px 12px; border-top: 1px solid var(--hairline); vertical-align: top; }
+.ct-table tr:first-child td { border-top: 0; }
+.ct-d { white-space: nowrap; color: var(--muted); width: 1%; }
+.ct-n small { display: block; font-size: 11.5px; color: var(--muted); }
+.ct-a { text-align: right; white-space: nowrap; font-weight: 600; width: 1%; }
+.ct-a.in { color: var(--in); }

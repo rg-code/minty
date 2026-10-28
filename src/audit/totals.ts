@@ -103,6 +103,13 @@ export const CLASSIFIED = `
   FROM t
   LEFT JOIN bucket_overrides o ON o.merchant = t.merchant`;
 
+/** The transactions behind a figure: posted ones in [?6, ?7] whose source category is in ?8 (a JSON
+ * list; through idx_txn_category_date, so only those rows are read), bucketed as CLASSIFIED does,
+ * left-out ones skipped. The caller filters the result by bucket, category and owner. */
+export const CATEGORY_ROWS = CLASSIFIED.replace("t.date >= ?1", "t.date >= ?6 AND t.date <= ?7 AND t.category IN (SELECT value FROM json_each(?8)) AND ?1 IS NOT NULL");
+/** The same for category OTHER (no category from Plaid), which the index can't narrow. */
+export const OTHER_ROWS = CLASSIFIED.replace("t.date >= ?1", "t.date >= ?6 AND t.date <= ?7 AND coalesce(t.category, '') IN ('', 'OTHER') AND ?1 IS NOT NULL AND ?8 IS NOT NULL");
+
 const REFRESH = [
   "DELETE FROM monthly_totals WHERE month >= substr(?1, 1, 7)",
   `INSERT INTO monthly_totals (month, owner, bucket, category, amount_cents, n)

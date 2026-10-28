@@ -212,6 +212,20 @@ describe("static pages", () => {
     expect(await fetchText("/egg.js")).toContain("a.in_retirement && !a.left_out");
   });
 
+  it("a category's transactions: the donut's slices and CFA's categories, statements and findings list them", async () => {
+    const cfa = await fetchText("/cfa.js");
+    expect(cfa).toMatch(/fetch\(`\/audit\/transactions\?\$\{q\}`\)/);
+    expect(cfa).toContain("window.MintyCategory = { show: showCategory");
+    expect(cfa).toContain('class="cfa-cat${x.up ? " up" : ""}" role="button"');
+    expect(cfa).toContain('catLink("See the transactions", x.transactions.categories');
+    const charts = await fetchText("/charts.js");
+    expect(charts).toContain('<button type="button" class="dn-eye" data-hide');                 // ⊘ hides; the row itself picks
+    expect(charts).toContain("o.onSelect?.(sel)");
+    const { html } = await page("/");
+    expect(html).toContain('<div class="tr-list cfa-ct" hidden></div>');
+    expect(html).toContain("window.MintyCategory.show(list,");
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');
