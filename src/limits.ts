@@ -52,7 +52,7 @@ export async function rateLimited(env: Env, email: string, method: string, url: 
 
 /** Routes whose reads grow with the number of transactions: refused once the day's budget is spent. */
 export const isHeavyRead = (method: string, url: URL) =>
-  method === "GET" && ["/transactions", "/accounts", "/benefits", "/bills", "/audit/transactions"].includes(url.pathname);
+  method === "GET" && ["/transactions", "/accounts", "/benefits", "/bills", "/audit/transactions", "/audit/daily", "/audit/left-out"].includes(url.pathname);
 
 /** READ_BUDGET_PER_DAY: unset or blank = the default; "0" = no budget; anything that isn't a whole
  * number = the default, and Setup checks flag it (rather than refusing every request). */

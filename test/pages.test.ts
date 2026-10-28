@@ -214,7 +214,7 @@ describe("static pages", () => {
 
   it("a category's transactions: the donut's slices and CFA's categories, statements and findings list them", async () => {
     const cfa = await fetchText("/cfa.js");
-    expect(cfa).toMatch(/fetch\(`\/audit\/transactions\?\$\{q\}`\)/);
+    expect(cfa).toContain("fetch(o.url ?? `/audit/transactions?${q}`)");
     expect(cfa).toContain("window.MintyCategory = { show: showCategory");
     expect(cfa).toContain('class="cfa-cat${x.up ? " up" : ""}" role="button"');
     expect(cfa).toContain('catLink("See the transactions", x.transactions.categories');
@@ -224,6 +224,15 @@ describe("static pages", () => {
     const { html } = await page("/");
     expect(html).toContain('<div class="tr-list cfa-ct" hidden></div>');
     expect(html).toContain("window.MintyCategory.show(list,");
+  });
+
+  it("the dashboard's panel: Counted or Left out, and 1M by day alongside 6M, 1Y and 2Y", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<button type="button" data-mode="left" aria-pressed="${left}">Left out</button>');
+    expect(html).toContain('const ranges = [{ key: "1M", label: "1M", points: days.map(dayPt) },');
+    expect(html).toMatch(/trendFetch\(`\/audit\/daily\$\{q\(days30\)\}`\)/);
+    expect(html).toMatch(/trendFetch\(`\/audit\/left-out\$\{q\(/);
+    expect(await fetchText("/charts.js")).toContain("o.onRange?.(key);");
   });
 
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {

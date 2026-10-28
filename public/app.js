@@ -601,64 +601,153 @@ function renderTotals(txns) {
 }
 const shortDate = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 
-/** The open card's chart (spending by month, 6 months to 2 years) and donut (by category, for the
- * month under the pointer, else this month). Built once per card and data; filters don't touch it. */
+/** The open card's chart and donut. Counted: spending by month from the stored totals (6M, 1Y,
+ * 2Y) or by day for the last 30 days (1M, GET /audit/daily), and by category. Left out (when
+ * something is): the left-out transactions' spending, the same ways, by what left each out
+ * (GET /audit/left-out). The donut adds up the range shown, or the month or day under the pointer;
+ * a slice lists its transactions. Built once per card and data; filters don't touch it. */
+let trendMode = "counted", trendSeq = 0;
+const trendCache = new Map();                 // what the panel fetched, by owner, mode, day and totals' age
+const isoDay = d => d.toISOString().slice(0, 10);
+const addDays = (day, n) => isoDay(new Date(Date.parse(`${day}T12:00:00Z`) + n * 864e5));
+async function trendFetch(url) {
+  const key = `${url}|${summary.refreshed_at}`;
+  if (!trendCache.has(key)) trendCache.set(key, fetch(url).then(r => (r.ok ? r.json() : null)).catch(() => null));
+  return trendCache.get(key);
+}
 function renderTrends(fresh) {
   const box = document.getElementById("trends"), C = window.MintyCharts;
   box.hidden = trendKey === null;
   if (trendKey === null || !fresh) return;
-  const s = monthsOf(trendKey), L = s.spend.length - 1, first = Math.max(0, s.first);
-  const avail = L - first + 1;
-  const who = trendKey ? labelOf(trendKey) : "Everyone";
-  box.innerHTML = `<div class="tr-chart"></div><div class="tr-donut"><h3></h3><div class="tr-dn"></div></div><div class="tr-list cfa-ct" hidden></div>
-    <p class="tr-note">From posted transactions${summary.refreshed_at ? `, as of ${new Date(summary.refreshed_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}. Transfers between your accounts and card payments aren't spending. <button type="button" data-open-cfa>The full audit (CFA)</button></p>`;
-  if (avail < 2) { box.querySelector(".tr-chart").innerHTML = `<p class="tr-empty">The chart starts once there are two months of history.</p>`; }
-  const point = i => ({ label: `${monName(summary.months[i])}${i === L ? " so far" : ""}`, axis: monName(summary.months[i], { month: "short" }), value: s.spend[i] / 100 });
-  const ranges = [["6M", 6], ["1Y", 12], ["2Y", 24]].filter(([, n], j, a) => j === 0 || avail > a[j - 1][1])
-    .map(([key, n]) => ({ key, label: key, points: Array.from({ length: Math.min(n, avail) }, (_, j) => point(L - Math.min(n, avail) + 1 + j)) }));
-  const range = ranges.find(r => r.key === "1Y") ? "1Y" : ranges.at(-1).key;
-  const monthAt = (i, rk) => i === null ? L : L - ranges.find(r => r.key === rk).points.length + 1 + i;
-  let restCats = [];
-  const segments = m => {
-    const all = Object.entries(s.cats[m]).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]);
-    const top = all.slice(0, 6), rest = all.slice(6).reduce((t, [, c]) => t + c, 0);
-    restCats = all.slice(6).map(([c]) => c);
-    return [...top.map(([c, v], i) => ({ key: c, label: catName(c), value: v / 100, color: C.PALETTE[i] })),
-            ...(rest > 0 ? [{ key: "_rest", label: "Everything else", value: rest / 100, color: C.PALETTE[7] }] : [])];
+  const seq = ++trendSeq;                      // a later render wins over an answer that comes back late
+  const owner = trendKey || null, who = trendKey ? labelOf(trendKey) : "Everyone", today = summary.today, from30 = addDays(today, -29);
+  const leftList = summary.left_out ?? [];
+  if (!leftList.length) trendMode = "counted";
+  const left = trendMode === "left";
+  const s = monthsOf(trendKey), L = s.spend.length - 1;
+  const q = extra => `?${new URLSearchParams({ ...extra, ...(owner ? { owner } : {}) })}`;
+  box.innerHTML = `${leftList.length ? `<div class="segpill tr-mode" role="group" aria-label="Which transactions"><button type="button" data-mode="counted" aria-pressed="${!left}">Counted</button><button type="button" data-mode="left" aria-pressed="${left}">Left out</button></div>` : ""}
+    <div class="tr-chart"><p class="tr-empty">Loading…</p></div><div class="tr-donut"><h3></h3><div class="tr-dn"></div><p class="tr-other" hidden></p></div><div class="tr-list cfa-ct" hidden></div>
+    <p class="tr-note">${left ? "What's left out of the numbers (CFA's “Left out of the numbers”), as the audit would count it: a transaction left out twice counts once, under its bank or card. " : ""}From posted transactions${summary.refreshed_at ? `, as of ${new Date(summary.refreshed_at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}. Transfers between your accounts and card payments aren't spending. <button type="button" data-open-cfa>The full audit (CFA)</button></p>`;
+  const mode = box.querySelector(".tr-mode");
+  if (mode) { C.segpill(mode); mode.addEventListener("click", e => { const b = e.target.closest("[data-mode]"); if (b && b.dataset.mode !== trendMode) { trendMode = b.dataset.mode; renderTrends(true); } }); }
+
+  // The months (cents by key: a category, or what left it out) and the last 30 days.
+  const months = summary.months, days = Array.from({ length: 30 }, (_, i) => addDays(from30, i));
+  let monthKeys, dayKeys = null, otherM = null, otherD = null, keepRange = null;
+  if (!left) monthKeys = s.cats;
+  const name = k => {
+    if (!left) return k === "_rest" ? "Everything else" : catName(k);
+    const x = leftList.find(x => `${x.kind}:${x.value}` === k);
+    return !x ? "Everything else" : x.kind === "tag" ? `“${x.name}”` : x.kind === "bank" ? `${x.name || "A bank"} (bank)` : `${x.name || "An account"}${x.mask ? ` ••${x.mask}` : ""}`;
   };
-  const donutFor = m => {
-    box.querySelector(".tr-donut h3").textContent = `${who} · by category, ${monName(summary.months[m], { month: "long", year: "numeric" })}${m === L ? " so far" : ""}`;
-    trendDonut.update(segments(m), m === L ? "Spent so far" : "Spent");
-  };
-  let shownMonth = L;
-  // A slice picked: its transactions for that month, under the chart and donut (cfa.js lists them).
-  const list = box.querySelector(".tr-list");
-  const onSelect = key => {
-    if (!key || !window.MintyCategory) { list.hidden = true; return; }
-    const m = summary.months[shownMonth], cats = key === "_rest" ? restCats : [key];
-    const to = shownMonth === L ? summary.today : new Date(Date.UTC(+m.slice(0, 4), +m.slice(5, 7), 0)).toISOString().slice(0, 10);
-    const name = key === "_rest" ? "Everything else" : window.MintyCategory.name(key);
-    window.MintyCategory.show(list, { categories: cats, from: `${m}-01`, to, owner: trendKey || null, label: labelOf,
-      title: `${who} · ${name}, ${monName(m, { month: "long", year: "numeric" })}${shownMonth === L ? " so far" : ""}` });
-  };
-  list.addEventListener("click", e => { if (e.target.closest("[data-ct-close]")) list.hidden = true; });
-  trendDonut = C.donut(box.querySelector(".tr-dn"), { fmt: v => fmt0.format(v), title: "Spent", size: 176, onSelect });
-  donutFor(L);
-  if (avail >= 2) {
-    trendChart = C.area(box.querySelector(".tr-chart"), {
-      title: `${who} · spending by month`, ranges, range, fmt: v => fmt0.format(v),
+  const sumKeys = rec => Object.values(rec ?? {}).reduce((t, v) => t + v, 0);
+  const draw = () => {
+    const spendAt = i => (left ? sumKeys(monthKeys[i]) : s.spend[i]);
+    const first = left ? Math.max(0, monthKeys.findIndex(r => sumKeys(r) !== 0)) : Math.max(0, s.first);
+    const avail = L - first + 1;
+    const monthPt = i => ({ label: `${monName(months[i])}${i === L ? " so far" : ""}`, axis: monName(months[i], { month: "short" }), value: spendAt(i) / 100 });
+    const dayPt = (d, i) => ({ label: `${shortDate(d)}${d === today ? " (today)" : ""}`, axis: shortDate(d), value: sumKeys(dayKeys?.[i]) / 100 });
+    const ranges = [{ key: "1M", label: "1M", points: days.map(dayPt) },
+      ...[["6M", 6], ["1Y", 12], ["2Y", 24]].filter(([, n], j, a) => j === 0 || avail > a[j - 1][1])
+        .map(([key, n]) => ({ key, label: key, points: Array.from({ length: Math.min(n, avail) }, (_, j) => monthPt(L - Math.min(n, avail) + 1 + j)) }))];
+    let rk = keepRange && ranges.some(r => r.key === keepRange) ? keepRange : ranges.find(r => r.key === "1Y") ? "1Y" : ranges.at(-1).key, hover = null;
+    const idxAt = i => L - ranges.find(r => r.key === rk).points.length + 1 + i;           // a month range's point → months[]
+    // The donut's window: the range, or the point under the pointer.
+    const windowOf = () => {
+      if (rk === "1M") {
+        const ds = hover === null ? days.map((_, i) => i) : [hover];
+        const cats = {};
+        for (const i of ds) for (const [k, v] of Object.entries(dayKeys?.[i] ?? {})) cats[k] = (cats[k] ?? 0) + v;
+        return { cats, from: days[ds[0]], to: days[ds.at(-1)], label: hover === null ? "the last 30 days" : shortDate(days[hover]) };
+      }
+      const n = ranges.find(r => r.key === rk).points.length, ms = hover === null ? Array.from({ length: n }, (_, j) => idxAt(j)) : [idxAt(hover)];
+      const cats = {};
+      for (const m of ms) for (const [k, v] of Object.entries(monthKeys[m] ?? {})) cats[k] = (cats[k] ?? 0) + v;
+      const m0 = months[ms[0]], m1 = months[ms.at(-1)], end = ms.at(-1) === L ? today : addDays(`${months[ms.at(-1) + 1] ?? today.slice(0, 7)}-01`, -1);
+      const label = ms.length === 1 ? `${monName(m0, { month: "long", year: "numeric" })}${ms[0] === L ? " so far" : ""}` : `${monName(m0)} – ${monName(m1)}`;
+      return { cats, from: `${m0}-01`, to: end, label, ms };
+    };
+    let restKeys = [], win = null;
+    const donutFor = () => {
+      win = windowOf();
+      const all = Object.entries(win.cats).filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]);
+      const top = all.slice(0, 7), rest = all.slice(7);
+      restKeys = rest.map(([k]) => k);
+      const segs = [...top.map(([k, v], i) => ({ key: k, label: name(k), value: v / 100, color: C.PALETTE[i] })),
+                    ...(rest.length ? [{ key: "_rest", label: "Everything else", value: rest.reduce((t, [, c]) => t + c, 0) / 100, color: C.PALETTE[7] }] : [])];
+      box.querySelector(".tr-donut h3").textContent = `${who} · ${left ? "left out, by what" : "by category"}, ${win.label}`;
+      trendDonut.update(segs, left ? "Left out" : "Spent");
+      const o = box.querySelector(".tr-other");
+      const back = Object.values(win.cats).filter(c => c < 0).reduce((t, c) => t + c, 0);
+      if (!left && back < 0) {                  // the ring draws what was spent; refunds and credits are in the chart's net
+        o.hidden = false; o.textContent = `Less ${money0(-back)} in refunds and card credits, which the ring doesn't show (the chart's figure is after them).`;
+      } else if (left && otherM) {
+        const tot = {};
+        const recs = rk === "1M" ? Object.entries(otherD ?? {}).filter(([d]) => d >= win.from && d <= win.to) : Object.entries(otherM).filter(([m]) => (win.ms ?? []).some(i => months[i] === m));
+        for (const [, rec] of recs) for (const [b, v] of Object.entries(rec)) tot[b] = (tot[b] ?? 0) + v;
+        const bits = [["income", "money in"], ["transfer", "transfers"], ["saving", "saving"], ["debt", "debt payments"]].filter(([b]) => tot[b]).map(([b, l]) => `${money0(Math.abs(tot[b]))} ${l}`);
+        o.hidden = !bits.length; o.textContent = bits.length ? `Also left out: ${bits.join(", ")}.` : "";
+      } else o.hidden = true;
+    };
+    // A slice picked: its transactions in the donut's window (cfa.js lists them).
+    const list = box.querySelector(".tr-list");
+    const onSelect = key => {
+      if (!key || !window.MintyCategory || !win) { list.hidden = true; return; }
+      const title = `${who} · ${name(key)}, ${win.label}`;
+      if (left) {
+        if (key === "_rest") { list.hidden = true; return; }
+        window.MintyCategory.show(list, { url: `/audit/left-out${q({ item: key, from: win.from, to: win.to })}`, from: win.from, to: win.to, label: labelOf, title });
+      } else {
+        window.MintyCategory.show(list, { categories: key === "_rest" ? restKeys : [key], from: win.from, to: win.to, owner, label: labelOf, title });
+      }
+    };
+    list.addEventListener("click", e => { if (e.target.closest("[data-ct-close]")) list.hidden = true; });
+    trendDonut = C.donut(box.querySelector(".tr-dn"), { fmt: v => fmt0.format(v), title: left ? "Left out" : "Spent", size: 176, onSelect });
+    const chartEl = box.querySelector(".tr-chart");
+    if (avail < 1) { chartEl.innerHTML = `<p class="tr-empty">${left ? "Nothing left out has been spent in the last two years." : "The chart starts once there's a month of history."}</p>`; donutFor(); return; }
+    chartEl.innerHTML = "";
+    trendChart = C.area(chartEl, {
+      title: `${who} · ${left ? "left-out spending" : "spending"}`, ranges, range: rk, fmt: v => fmt0.format(v),
       fmtAxis: v => (Math.abs(v) >= 1000 ? `$${Math.round(v / 100) / 10}k` : `$${Math.round(v)}`),
-      head: (i, rk) => {
-        const r = ranges.find(x => x.key === rk), pts = r.points;
+      head: (i, key) => {
+        const pts = ranges.find(x => x.key === key).points;
+        if (key === "1M") {
+          if (i === null) return { value: pts.reduce((t, p) => t + p.value, 0), caption: "in the last 30 days" };
+          return { value: pts[i].value, caption: pts[i].label };
+        }
         if (i === null) {
           const full = pts.slice(0, -1);
           const avg = full.length ? full.reduce((t, p) => t + p.value, 0) / full.length : pts[0].value;
           return { value: avg, caption: full.length ? `a month on average over the last ${full.length} full month${full.length === 1 ? "" : "s"}` : "this month so far" };
         }
         const p = pts[i], before = pts[i - 1];
-        return { value: p.value, delta: before && before.value > 0 && i < pts.length - 1 ? p.value / before.value - 1 : null, good: before && p.value < before.value, caption: `${p.label}${before && i < pts.length - 1 ? ` · against ${monName(summary.months[monthAt(i - 1, rk)], { month: "short" })}` : ""}` };
+        return { value: p.value, delta: before && before.value > 0 && i < pts.length - 1 ? p.value / before.value - 1 : null, good: before && p.value < before.value,
+                 caption: `${p.label}${before && i < pts.length - 1 ? ` · against ${monName(months[idxAt(i - 1)], { month: "short" })}` : ""}` };
       },
-      onPoint: (i, rk) => { const m = monthAt(i, rk); if (m !== shownMonth) { shownMonth = m; donutFor(m); } },
+      onPoint: i => { if (i !== hover) { hover = i; donutFor(); } },
+      onRange: key => { rk = keepRange = key; hover = null; donutFor(); trendDonut.selected() && onSelect(trendDonut.selected()); },
+    });
+    donutFor();
+  };
+
+  // Counted: the months are here; the days come with GET /audit/daily. Left out: both are fetched.
+  const days30 = { from: from30, to: today };
+  if (!left) {
+    draw();
+    trendFetch(`/audit/daily${q(days30)}`).then(d => {
+      if (!d || seq !== trendSeq) return;
+      dayKeys = days.map(day => d.days[day] ?? {});
+      draw();
+    });
+  } else {
+    Promise.all([trendFetch(`/audit/left-out${q({ from: `${months[0]}-01`, to: today })}`), trendFetch(`/audit/left-out${q({ ...days30, by: "day" })}`)]).then(([m, d]) => {
+      if (seq !== trendSeq) return;
+      if (!m) { box.querySelector(".tr-chart").innerHTML = `<p class="tr-empty">Couldn't load what's left out.</p>`; return; }
+      monthKeys = months.map(mo => m.spend[mo] ?? {});
+      otherM = m.other; otherD = d?.other ?? {};
+      dayKeys = days.map(day => d?.spend?.[day] ?? {});
+      draw();
     });
   }
 }

@@ -1,7 +1,7 @@
 import type { Env } from "../env";
 import type { Config } from "../config";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
-import { CATEGORY_ROWS, OTHER_ROWS, accountMaps, markAuditDirty, markLeftOutChanged } from "../audit/totals";
+import { CATEGORY_ROWS, LEFT_OUT_ACCOUNTS, LEFT_OUT_TAGGED, OTHER_ROWS, RANGE_ROWS, accountMaps, leftOutIndex, markAuditDirty, markLeftOutChanged } from "../audit/totals";
 import { ACCOUNT_NAME } from "../accounts";
 
 /** CFA, the Complete financial audit (docs/cfa.md), phase C2: what the audit's charts show. Reads
@@ -168,6 +168,74 @@ export async function categoryTransactions(env: Env, config: Config, url: URL): 
     count: rows.length, total_cents: rows.reduce((s, r) => s + r.amount_cents, 0),
     transactions: rows.slice(0, MAX_ROWS), more: rows.length > MAX_ROWS,
   });
+}
+
+interface Classified { id: number; owner: string; date: string; month: string; label: string; amount_cents: number; category: string; bucket: string }
+const rangeOf = (url: URL, maxDays = 800) => {
+  const from = url.searchParams.get("from") ?? "", to = url.searchParams.get("to") ?? "";
+  if (!DAY_RE.test(from) || !DAY_RE.test(to) || from > to) throw unprocessable("from and to must be dates (YYYY-MM-DD), from on or before to");
+  if ((Date.parse(to) - Date.parse(from)) / 864e5 > maxDays) throw unprocessable(`at most ${maxDays} days at a time`);
+  return { from, to };
+};
+const ownerOf = (config: Config, url: URL) => {
+  const owner = url.searchParams.get("owner");
+  if (owner !== null && !config.users.has(owner)) throw unprocessable("owner must be one of the people in MINTY_USERS");
+  return owner;
+};
+const add = (o: Record<string, number>, k: string, v: number) => { o[k] = (o[k] ?? 0) + v; };
+
+/** GET /audit/daily?from=&to=&owner=: spending by day and by category, for the dashboard's 1M
+ * range (the stored totals are by month). The range's rows only, by the date index. */
+export async function daily(env: Env, config: Config, url: URL): Promise<Response> {
+  const { from, to } = rangeOf(url, 62), owner = ownerOf(config, url);
+  const maps = await accountMaps(env);
+  const { results } = await env.DB.prepare(RANGE_ROWS).bind("0000-01-01", ...maps, from, to).all<Classified>();
+  const days: Record<string, Record<string, number>> = {};
+  for (const r of results) if (r.bucket === "spend" && (owner === null || r.owner === owner)) add((days[r.date] ??= {}), r.category, r.amount_cents);
+  return json({ from, to, owner, days });
+}
+
+/** GET /audit/left-out?from=&to=&owner=[&by=day][&item=kind:value]: the left-out transactions
+ * themselves, bucketed as the audit would (the dashboard's "Left out" view). Without item: by month
+ * (or day): spending by what left each out (a transaction left out twice counts once, under its
+ * account or bank first), and the rest by bucket. With item: that item's spending, listed. */
+export async function leftOutView(env: Env, config: Config, url: URL): Promise<Response> {
+  const { from, to } = rangeOf(url), owner = ownerOf(config, url), byDay = url.searchParams.get("by") === "day";
+  const item = url.searchParams.get("item");
+  const idx = await leftOutIndex(env);
+  if (item !== null && !idx.keys.includes(item)) throw unprocessable("item must be one of what's left out (kind:value)");
+  const maps = await accountMaps(env);
+  const tagIds = Object.keys(idx.tagged).map(Number), accIds = Object.keys(idx.accounts).map(Number);
+  const q = (sql: string, ids: number[]) => env.DB.prepare(sql).bind("0000-01-01", ...maps, from, to, JSON.stringify(ids));
+  const queries = [...(accIds.length ? [q(LEFT_OUT_ACCOUNTS, accIds)] : []), ...(tagIds.length ? [q(LEFT_OUT_TAGGED, tagIds)] : [])];
+  const res = queries.length ? await env.DB.batch(queries) : [];                     // D1 refuses an empty batch
+  const seen = new Set<number>(), rows: (Classified & { by: string })[] = [];
+  const accountOf = new Map<number, number>();
+  if (accIds.length) {
+    const { results } = await env.DB.prepare("SELECT id, account_id FROM transactions WHERE id IN (SELECT value FROM json_each(?))")
+      .bind(JSON.stringify((res[0].results as Classified[]).map((r) => r.id))).all<{ id: number; account_id: number }>();
+    for (const r of results) accountOf.set(r.id, r.account_id);
+  }
+  for (const [i, r] of res.entries()) {
+    const viaAccount = accIds.length > 0 && i === 0;
+    for (const t of r.results as Classified[]) {
+      if (seen.has(t.id) || (owner !== null && t.owner !== owner)) continue;
+      seen.add(t.id);
+      rows.push({ ...t, by: viaAccount ? idx.accounts[accountOf.get(t.id) ?? -1] ?? "" : idx.tagged[t.id] ?? "" });
+    }
+  }
+  if (item !== null) {
+    const list = rows.filter((r) => r.by === item && r.bucket === "spend").sort((a, b) => (a.date === b.date ? b.id - a.id : a.date < b.date ? 1 : -1));
+    const ids = list.slice(0, MAX_ROWS).map((r) => r.id);
+    const names = ids.length ? (await env.DB.prepare(`SELECT t.id, ${ACCOUNT_NAME("a")} AS account_name, a.mask AS account_mask, i.institution_name FROM transactions t
+        JOIN accounts a ON a.id = t.account_id JOIN items i ON i.id = a.item_id WHERE t.id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify(ids)).all<Record<string, unknown>>()).results : [];
+    const byId = new Map(names.map((n) => [n.id, n]));
+    return json({ item, from, to, owner, count: list.length, total_cents: list.reduce((s, r) => s + r.amount_cents, 0), more: list.length > MAX_ROWS,
+      transactions: list.slice(0, MAX_ROWS).map((r) => ({ id: r.id, date: r.date, name: r.label, amount_cents: r.amount_cents, owner: r.owner, category: r.category, ...byId.get(r.id) })) });
+  }
+  const spend: Record<string, Record<string, number>> = {}, other: Record<string, Record<string, number>> = {};
+  for (const r of rows) add(((r.bucket === "spend" ? spend : other)[byDay ? r.date : r.month] ??= {}), r.bucket === "spend" ? r.by : r.bucket, r.amount_cents);
+  return json({ from, to, owner, by: byDay ? "day" : "month", left_out: idx.keys, spend, other });
 }
 
 const merchantKey = (merchant: unknown) => {

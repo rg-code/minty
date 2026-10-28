@@ -33,7 +33,7 @@
 
   /** A category's transactions, listed under what was tapped (CFA's categories, statements and
    * findings, the dashboard's donut): GET /audit/transactions, sorted as the audit sorts them, so
-   * they add up to the figure. o: { categories, from, to, owner, title, label(owner) }. */
+   * they add up to the figure. o: { categories, from, to, owner, title, label(owner), url (another list, same shape) }. */
   async function showCategory(el, o) {
     const fmt = c => (c < 0 ? "−" : "") + "$" + (Math.abs(c) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const many = o.from.slice(0, 4) !== o.to.slice(0, 4);
@@ -41,8 +41,8 @@
     el.hidden = false;
     el.innerHTML = `<div class="ct-head"><b>${esc(o.title)}</b><span class="ct-sub">Loading…</span><button type="button" class="ct-x" data-ct-close aria-label="Close the list">×</button></div>`;
     try {
-      const q = new URLSearchParams({ category: o.categories.join(","), from: o.from, to: o.to, ...(o.owner ? { owner: o.owner } : {}) });
-      const r = await fetch(`/audit/transactions?${q}`);
+      const q = new URLSearchParams({ category: (o.categories ?? []).join(","), from: o.from, to: o.to, ...(o.owner ? { owner: o.owner } : {}) });
+      const r = await fetch(o.url ?? `/audit/transactions?${q}`);          // o.url: the dashboard's left-out items
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
       const d = await r.json();
       const who = o.label ?? (k => users.find(u => u.key === k)?.label ?? k);
@@ -50,7 +50,7 @@
       el.querySelector(".ct-sub").textContent = d.count ? `${d.count.toLocaleString()} transaction${d.count === 1 ? "" : "s"} · ${d.total_cents < 0 ? `${fmt(-d.total_cents)} back` : `${fmt(d.total_cents)} spent`}${d.more ? " · the newest 500 shown" : ""}` : "None in this time.";
       if (!d.count) return;
       el.insertAdjacentHTML("beforeend", `<div class="ct-scroll"><table class="ct-table"><tbody>${d.transactions.map(t => `<tr>
-        <td class="ct-d">${esc(day(t.date))}</td><td class="ct-n">${esc(t.name || "—")}<small>${esc([t.institution_name, t.account_name].filter(Boolean).join(" · "))}${t.account_mask ? ` ••${esc(t.account_mask)}` : ""}${people ? ` · ${esc(who(t.owner))}` : ""}${o.categories.length > 1 ? ` · ${esc(catName(t.category))}` : ""}</small></td>
+        <td class="ct-d">${esc(day(t.date))}</td><td class="ct-n">${esc(t.name || "—")}<small>${esc([t.institution_name, t.account_name].filter(Boolean).join(" · "))}${t.account_mask ? ` ••${esc(t.account_mask)}` : ""}${people ? ` · ${esc(who(t.owner))}` : ""}${(o.categories?.length ?? 2) > 1 ? ` · ${esc(catName(t.category))}` : ""}</small></td>
         <td class="ct-a num${t.amount_cents < 0 ? " in" : ""}">${fmt(t.amount_cents)}</td></tr>`).join("")}</tbody></table></div>`);
     } catch (e) {
       el.querySelector(".ct-sub").textContent = `Couldn't load them: ${e.message}`;
