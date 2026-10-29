@@ -253,6 +253,13 @@ describe("static pages", () => {
     expect(await fetchText("/reconcile.js")).toContain("function breakdown(rows, by, split");
   });
 
+  it("the Tags menu lists Plaid's categories too, and filters by them", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<div class="tagopts" id="catOpts" role="group" aria-label="Categories"></div>');
+    expect(html).toContain('for (const c of state.categories) p.append("category", c);');
+    expect(html).toContain('const PLAID_CATEGORIES = ["INCOME", "TRANSFER_IN"');
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');

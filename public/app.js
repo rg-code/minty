@@ -4,7 +4,7 @@ let USERS = [{ key: "me", label: "Alex" }, { key: "sam", label: "Sam" }];   // o
 const colorOf = k => { const i = USERS.findIndex(u => u.key === k); return i < 0 ? "var(--muted)" : `var(--u${i % 6})`; };
 const labelOf = k => USERS.find(u => u.key === k)?.label ?? k;
 // cards: card members picked on multi-card accounts, as "<account_id>:<member>" ("" member = none)
-let state = { owner: "all", q: "", start: "", end: "", tags: [], tagMode: "any", banks: [], accounts: [], cards: [] };
+let state = { owner: "all", q: "", start: "", end: "", tags: [], tagMode: "any", categories: [], banks: [], accounts: [], cards: [] };
 let ITEMS = null;                  // linked bank logins from /items (null until loaded)
 let ACCOUNTS = null;               // their accounts and cards from /accounts (null until loaded)
 let openRows = new Set();          // plaid_txn_id of expanded rows (survives re-render)
@@ -58,6 +58,7 @@ async function load(more = false) {
   if (state.start) p.set("start", state.start);
   if (state.end) p.set("end", state.end);
   for (const t of state.tags) p.append("tag", t);
+  for (const c of state.categories) p.append("category", c);
   if (state.tags.length > 1 && state.tagMode === "all") p.set("tag_mode", "all");
   for (const id of state.banks) p.append("item_id", id);
   for (const id of state.accounts) p.append("account_id", id);
@@ -89,7 +90,7 @@ async function load(more = false) {
     offline = true; banner(true); hasMore = false;
     txns = SAMPLE.filter(t =>
       (state.owner === "all" || t.owner === state.owner) &&
-      matchesTags(t.tags || []));
+      matchesTags(t.tags || []) && (!state.categories.length || state.categories.includes(t.category || "OTHER")));
     allTags = [...new Set(SAMPLE.flatMap(t => t.tags || []))].sort();
     populateTagFilter();
   }
@@ -108,6 +109,14 @@ function matchesTags(tags) {
   return state.tagMode === "all" ? state.tags.every(t => tags.includes(t)) : state.tags.some(t => tags.includes(t));
 }
 
+// Plaid's primary categories (personal_finance_category.primary): a fixed list, so the menu needn't
+// read every transaction to find which are in use; any other seen on the page is added. OTHER is
+// a transaction without one.
+const PLAID_CATEGORIES = ["INCOME", "TRANSFER_IN", "TRANSFER_OUT", "LOAN_PAYMENTS", "BANK_FEES", "ENTERTAINMENT", "FOOD_AND_DRINK", "GENERAL_MERCHANDISE",
+  "HOME_IMPROVEMENT", "MEDICAL", "PERSONAL_CARE", "GENERAL_SERVICES", "GOVERNMENT_AND_NON_PROFIT", "TRANSPORTATION", "TRAVEL", "RENT_AND_UTILITIES"];
+const CATEGORY_NAMES = { INCOME: "Income", TRANSFER_IN: "Transfers in", TRANSFER_OUT: "Transfers out", LOAN_PAYMENTS: "Loan & card payments", BANK_FEES: "Fees & credits",
+  OTHER: "No category" };
+const categoryName = c => CATEGORY_NAMES[c] ?? catName(c);
 function populateTagFilter() {
   // Keep selected tags listed even if no transaction carries them any more, so they can be unticked.
   const names = [...new Set([...allTags, ...state.tags])].sort((a, b) => a.localeCompare(b));
@@ -116,17 +125,24 @@ function populateTagFilter() {
     : `<div class="none">No tags yet — use “+ tag” on a transaction.</div>`;
   const opts = document.getElementById("tagOpts");
   if (opts.dataset.html !== html) { opts.innerHTML = html; opts.dataset.html = html; }   // don't steal focus mid-menu
+  const seen = loaded.map(t => t.category).filter(c => c && !PLAID_CATEGORIES.includes(c));
+  const cats = [...new Set([...PLAID_CATEGORIES, ...seen, ...state.categories.filter(c => c !== "OTHER")])].sort((a, b) => categoryName(a).localeCompare(categoryName(b)));
+  const chtml = [...cats, "OTHER"].map(c => `<label><input type="checkbox" value="${escapeAttr(c)}" ${state.categories.includes(c) ? "checked" : ""} />${escapeHtml(categoryName(c))}</label>`).join("");
+  const copts = document.getElementById("catOpts");
+  if (copts.dataset.html !== chtml) { copts.innerHTML = chtml; copts.dataset.html = chtml; }
   renderTagControls();
 }
 
 function renderTagControls() {
-  const n = state.tags.length;
+  const n = state.tags.length, c = state.categories.length;
   const btn = document.getElementById("tagBtn");
-  btn.textContent = !n ? "All tags" : n === 1 ? state.tags[0] : `${n} tags · ${state.tagMode}`;
-  btn.title = n ? `Tags (${state.tagMode}): ${state.tags.join(", ")}` : "";
-  btn.classList.toggle("active", n > 0);
+  const tagPart = !n ? "" : n === 1 ? state.tags[0] : `${n} tags · ${state.tagMode}`;
+  const catPart = !c ? "" : c === 1 ? categoryName(state.categories[0]) : `${c} categories`;
+  btn.textContent = [tagPart, catPart].filter(Boolean).join(" + ") || "All tags";
+  btn.title = [n ? `Tags (${state.tagMode}): ${state.tags.join(", ")}` : "", c ? `Categories: ${state.categories.map(categoryName).join(", ")}` : ""].filter(Boolean).join(" · ");
+  btn.classList.toggle("active", n + c > 0);
   for (const b of document.querySelectorAll("#tagMode button")) b.setAttribute("aria-pressed", b.dataset.mode === state.tagMode);
-  document.getElementById("tagClear").disabled = !n;
+  document.getElementById("tagClear").disabled = !(n + c);
 }
 
 // --- bank filter: linked bank logins (Plaid Items), grouped by person -------------------------
@@ -500,7 +516,7 @@ const CAT = { FOOD_AND_DRINK: "Food & drink", GENERAL_MERCHANDISE: "Shopping", R
               LOAN_PAYMENTS: "Loan payments", TRANSFER_OUT: "Transfers out (not matched)", OTHER: "Other" };
 const catName = c => CAT[c] ?? titleCase(c);
 const monName = (m, opts = { month: "short", year: "numeric" }) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString(undefined, { ...opts, timeZone: "UTC" });
-const filtersOn = () => !!(state.q || state.start || state.end || state.tags.length || state.banks.length || state.accounts.length || state.cards.length);
+const filtersOn = () => !!(state.q || state.start || state.end || state.tags.length || state.categories.length || state.banks.length || state.accounts.length || state.cards.length);
 
 async function loadSummary() {
   if (offline) return;
@@ -1116,7 +1132,11 @@ document.getElementById("tagMode").addEventListener("click", e => {
   state.tagMode = b.dataset.mode; renderTagControls();
   if (state.tags.length > 1) load();
 });
-document.getElementById("tagClear").addEventListener("click", () => setTags([]));
+document.getElementById("tagClear").addEventListener("click", () => { state.categories = []; setTags([]); });
+document.getElementById("catOpts").addEventListener("change", () => {
+  state.categories = [...document.querySelectorAll("#catOpts input:checked")].map(b => b.value);
+  renderTagControls(); load();
+});
 // bank filter
 document.getElementById("bankOpts").addEventListener("change", () => {
   state.banks = [...document.querySelectorAll("#bankOpts input:checked")].map(b => Number(b.value));

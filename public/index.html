@@ -430,6 +430,8 @@
   .tagclear { border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 12.5px; cursor: pointer; padding: 4px; }
   .tagclear:disabled { color: var(--muted); cursor: default; }
   .tagopts { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; }
+  #tagMenu .tagopts { max-height: 210px; }                 /* tags and categories share the menu */
+  #tagMenu .tagsec { padding: 8px 6px 2px; }
   .tagopts label { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 6px; cursor: pointer; font-size: 14px; }
   .tagopts label:hover { background: var(--row-hover); }
   .tagopts input { accent-color: var(--accent); margin: 0; }
@@ -671,7 +673,10 @@
           </div>
           <button type="button" class="tagclear" id="tagClear">Clear</button>
         </div>
+        <div class="menutitle tagsec">Tags</div>
         <div class="tagopts" id="tagOpts" role="group" aria-label="Tags"></div>
+        <div class="menutitle tagsec" title="Plaid's category for each transaction (CFA's corrections don't change it)">Categories</div>
+        <div class="tagopts" id="catOpts" role="group" aria-label="Categories"></div>
       </div>
     </div>
     <div class="tagpick" id="bankPick">
