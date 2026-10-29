@@ -65,3 +65,36 @@ describe("merchantKey and csv", () => {
     expect(lines[2]).toContain(",-12.50,,a; b");
   });
 });
+
+describe("breakdown", () => {
+  const rows = [
+    tx(10, "2026-09-03", "A", { tags: ["sync"], account_id: 1 }),
+    tx(20, "2026-09-20", "B", { owner: "sam", account_id: 2, account_name: "Amex", institution_name: "American Express", item_id: 9 }),
+    tx(5, "2026-10-02", "C", { tags: ["sync", "Travel"], account_id: 1 }),
+    tx(-7, "2026-10-05", "Refund", { account_id: 1 }),
+  ];
+  it("by month in order, split by person; out and in", () => {
+    const b = R.breakdown(rows, "month", "person", "out");
+    expect(b.groups.map((g: any) => [g.label, g.total])).toEqual([["Sep 2026", 3000], ["Oct 2026", 500]]);
+    expect(b.series.map((s: any) => s.key)).toEqual(["p:sam", "p:me"]);                   // largest first
+    expect(b.value["2026-09"]).toEqual({ "p:me": 1000, "p:sam": 2000 });
+    expect(R.breakdown(rows, "month", "none", "in").value["2026-10"]).toEqual({ all: 700 });
+  });
+
+  it("by card and by bank; by tag, a transaction counts under each of its tags, or No tag", () => {
+    expect(R.breakdown(rows, "card").groups.map((g: any) => g.label)).toEqual(["American Express · Amex", "Bank · Visa"]);
+    const t = R.breakdown(rows, "tag");
+    expect(t.groups.map((g: any) => [g.label, g.total])).toEqual([["No tag", 2000], ["sync", 1500], ["Travel", 500]]);
+    expect(t.overlaps).toBe(true);
+    expect(R.spread(rows)).toMatchObject({ month: 2, year: 1, person: 2, card: 2, tag: 3 });
+  });
+
+  it("beyond 12 groups, the rest are Other", () => {
+    const many = Array.from({ length: 15 }, (_, i) => tx(100 + i, "2026-09-01", `M${i}`, { account_id: 100 + i, account_name: `Card ${i}` }));
+    const b = R.breakdown(many, "card");
+    expect(b.groups).toHaveLength(12);
+    expect(b.groups.at(-1)).toMatchObject({ key: "_other", label: "Other (4)", count: 4 });
+    expect(b.groups.reduce((t: number, g: any) => t + g.total, 0)).toBe(many.reduce((t, r) => t + r.amount * 100, 0));
+  });
+});
+

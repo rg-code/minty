@@ -243,6 +243,16 @@ describe("static pages", () => {
     expect(html).toContain(".ministrip #ownerSeg:not(.open)");                            // the strip's picker rules leave the Tags menu's Any/All alone
   });
 
+  it("the Select Summary breaks the selection down in a bar chart: by month, year, bank, card, person or tag, split by another", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('const BREAK = [["month", "Month"], ["year", "Year"], ["bank", "Bank"], ["card", "Card"], ["person", "Person"], ["tag", "Tag"]];');
+    expect(html).toContain("C.barchart(chart, {");
+    expect(html).toContain('n.person > 1 && by !== "person" ? "person" : n.tag > 1 && by !== "tag" ? "tag" : "none"');   // split by people, else tags
+    const charts = await fetchText("/charts.js");
+    expect(charts).toContain("function barchart(el, o)");
+    expect(await fetchText("/reconcile.js")).toContain("function breakdown(rows, by, split");
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');

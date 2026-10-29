@@ -1341,7 +1341,35 @@ const selPanel = document.getElementById("selPanel"), selSumBtn = document.getEl
 let sumGroups = {};
 const cents = c => fmt.format(Math.abs(c) / 100);
 const outIn = c => `${c < 0 ? "−" : "+"}${cents(c)}`;
-function setSumOpen(open) { selPanel.hidden = !open; selSumBtn.setAttribute("aria-expanded", open); if (open) renderSelSummary(); }
+function setSumOpen(open) { selPanel.hidden = !open; selSumBtn.setAttribute("aria-expanded", open); if (open) { sumGrow = true; renderSelSummary(); } }
+// The Summary's breakdown chart: by one thing and split by another (reconcile.js breakdown, charts.js
+// barchart). Unset: by month when the selection spans months (else card, bank…), split by person when
+// it spans people, else by tag when it spans tags.
+const sumBreak = { by: null, split: null, metric: "out", variant: null };
+let sumGrow = false;
+const BREAK = [["month", "Month"], ["year", "Year"], ["bank", "Bank"], ["card", "Card"], ["person", "Person"], ["tag", "Tag"]];
+function breakdownHtml(rows) {
+  const R = window.MintyReconcile, n = R.spread(rows);
+  const byOpts = BREAK.filter(([k]) => n[k] > 1 || k === sumBreak.by);
+  if (!byOpts.length) return "";
+  let by = sumBreak.by && byOpts.some(([k]) => k === sumBreak.by) ? sumBreak.by : (["month", "card", "bank", "tag", "person", "year"].find(k => n[k] > 1) ?? byOpts[0][0]);
+  const splitOpts = [["none", "None"], ...BREAK.filter(([k]) => k !== by && n[k] > 1 && !(k === "year" && by === "month"))];
+  let split = sumBreak.split && splitOpts.some(([k]) => k === sumBreak.split) ? sumBreak.split : (n.person > 1 && by !== "person" ? "person" : n.tag > 1 && by !== "tag" ? "tag" : "none");
+  const seg = (ctl, opts, cur) => `<div class="segpill sp-seg" role="group" data-ctl="${ctl}">${opts.map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${k === cur}">${l}</button>`).join("")}</div>`;
+  const b = R.breakdown(rows, by, split, sumBreak.metric, { label: (kind, key, l) => (kind === "person" ? labelOf(l) : l) });
+  // side by side unless that makes the bars a few pixels wide (many months, each split several ways)
+  const variant = sumBreak.variant ?? (b.groups.length * b.series.length > 36 ? "stacked" : "grouped");
+  breakdownData = { b, by, split, variant };
+  const all = b.groups.reduce((t, g) => t + g.total, 0);
+  return `<section class="sp-sec sp-break"><h4>Breakdown</h4>
+    <div class="sp-ctls"><span class="sp-ctl"><em>By</em>${seg("by", byOpts, by)}</span>${splitOpts.length > 1 ? `<span class="sp-ctl"><em>Split by</em>${seg("split", splitOpts, split)}</span>` : ""}
+      <span class="sp-ctl">${seg("metric", [["out", "Out"], ["in", "In"]], sumBreak.metric)}${split !== "none" ? seg("variant", [["grouped", "Side by side"], ["stacked", "Stacked"]], variant) : ""}</span></div>
+    ${b.groups.length ? `<div class="sp-chart"></div>
+    <table class="sp-btable"><tbody>${b.groups.map(g => `<tr><td>${escapeHtml(g.label)}</td><td class="num">${g.count.toLocaleString()}</td><td class="num">${cents(g.total)}</td><td class="num">${all ? Math.round((g.total / all) * 100) : 0}%</td></tr>`).join("")}</tbody></table>
+    ${b.overlaps ? `<p class="sp-more">A transaction with two tags counts under both, so the tags add up to more than the total.</p>` : ""}` : `<p>No money ${sumBreak.metric === "in" ? "in" : "out"} in the selection.</p>`}
+  </section>`;
+}
+let breakdownData = null;
 selSumBtn.addEventListener("click", () => setSumOpen(selPanel.hidden));
 function renderSelSummary() {
   const rows = loaded.filter(t => selected.has(t.id)), R = window.MintyReconcile;
@@ -1362,8 +1390,6 @@ function renderSelSummary() {
   };
   const only = (k, n) => n && sumGroups[k].length < rows.length ? `<button type="button" class="sellink" data-only="${k}">Select only these</button>` : "";
   const sec = (title, note, k, n, body, sub = "") => `<section class="sp-sec"><h4>${title}${note ? ` <em>${note}</em>` : ""}${only(k, n)}</h4>${sub ? `<p>${sub}</p>` : ""}${n ? body : `<p>None.</p>`}</section>`;
-  const split = list => list.length > 1 ? `<div class="sp-split">${list.map(g => `<div><span>${escapeHtml(g.name)}</span><span class="num">out ${cents(g.out)}</span><span class="num">in ${cents(g.in)}</span></div>`).join("")}</div>` : "";
-  const people = s.people.map(g => ({ ...g, name: labelOf(g.key) }));
   let html = `<div class="sp-head"><h3>${T.n.toLocaleString()} selected</h3><span class="d">${T.from === T.to ? day(T.from) : `${day(T.from)} – ${day(T.to)}`}</span>
       <button type="button" class="sellink" data-csv>Copy as CSV</button></div>
     <div class="sp-tiles">
@@ -1374,7 +1400,7 @@ function renderSelSummary() {
       ${T.outN > 1 ? `<div class="sp-tile"><span>Average charge</span><b>${cents(T.average)}</b><small>over ${T.outN.toLocaleString()}</small></div>` : ""}
       <div class="sp-tile"><span>Not balanced</span><b>${outIn(s.openIn - s.openOut)}</b><small>${(s.openCharges.length + s.openCredits.length).toLocaleString()} open, ${s.partial.length} part-refunded</small></div>
     </div>`;
-  if (people.length > 1 || s.accounts.length > 1) html += `<section class="sp-sec"><h4>By person and account</h4>${split(people)}${split(s.accounts)}</section>`;
+  html += breakdownHtml(rows);
   html += sec("Refunded, exactly", s.refunds.length ? `${s.refunds.length} pair${s.refunds.length === 1 ? "" : "s"} · ${cents(s.refunds.reduce((t, p) => t + p.cents, 0))}` : "", "refunds", s.refunds.length,
     `<ul class="sp-list">${s.refunds.slice(0, MAX).map(p => `<li><span class="m">${name(p.charge)}</span>${amt(p.charge)}<span class="d">${day(p.charge.date)}</span>→${amt(p.refund)}<span class="d">${day(p.refund.date)}</span><span class="r">${p.days} day${p.days === 1 ? "" : "s"} later</span></li>`).join("")}</ul>${more(s.refunds.length)}`,
     "A charge and a refund of the same amount from the same merchant, up to 120 days later.");
@@ -1392,9 +1418,22 @@ function renderSelSummary() {
   if (sumGroups.open.length && sumGroups.open.length < rows.length) html += `<p class="sp-more"><button type="button" class="sellink" data-only="open">Select only what's not balanced</button> (${sumGroups.open.length.toLocaleString()}), then tag it with the bar.</p>`;
   const top = selPanel.scrollTop;
   selPanel.innerHTML = html;
+  // the breakdown's chart, and its switches' sliding thumbs
+  const C = window.MintyCharts, chart = selPanel.querySelector(".sp-chart");
+  selPanel.querySelectorAll(".sp-seg").forEach(g => C?.segpill(g));
+  if (C && chart && breakdownData) {
+    const { b } = breakdownData;
+    C.barchart(chart, { groups: b.groups, series: b.series.map((x, i) => ({ ...x, color: C.PALETTE[i % C.PALETTE.length] })),
+      value: (g, sk) => (b.value[g]?.[sk] ?? 0) / 100, fmt: v => fmt.format(v),
+      fmtAxis: v => (Math.abs(v) >= 1000 ? `$${Math.round(v / 100) / 10}k` : `$${Math.round(v)}`),
+      variant: breakdownData.variant, height: 200, animate: sumGrow, title: "Breakdown of the selected transactions" });
+    sumGrow = false;
+  }
   selPanel.scrollTop = top;
 }
 selPanel.addEventListener("click", async e => {
+  const ctl = e.target.closest(".sp-seg [data-v]");
+  if (ctl) { sumBreak[ctl.closest("[data-ctl]").dataset.ctl] = ctl.dataset.v; sumGrow = true; renderSelSummary(); return; }
   const only = e.target.closest("[data-only]");
   if (only) { selected = new Set(sumGroups[only.dataset.only] ?? []); selPanel.scrollTop = 0; render(loaded); return; }
   if (e.target.closest("[data-csv]")) {

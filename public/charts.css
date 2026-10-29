@@ -143,7 +143,34 @@
 @keyframes c2-in-l { from { transform: translateX(-24px); opacity: 0; } }
 @media (max-width: 640px) { .c2-day { height: 42px; } .c2-day span { width: 40px; height: 40px; } }
 
+/* bar chart (charts.js barchart) */
+.bc { position: relative; }
+.bc-plot { position: relative; }
+.bc-svg { display: block; overflow: visible; }
+.bc-gl { stroke: var(--hairline); } .bc-gl.zero { stroke: color-mix(in srgb, var(--muted) 40%, transparent); }
+.bc .ch-axis { fill: var(--muted); font-size: 11px; }
+.bc-band { fill: color-mix(in srgb, var(--muted) 10%, transparent); transition: x .25s cubic-bezier(.23, 1, .32, 1), opacity .15s; }
+.bc-g { transition: opacity .2s; } .bc-g.dim { opacity: .38; }
+.bc-svg.grow .bc-bar { transform-box: fill-box; transform-origin: 50% 100%; animation: bc-grow .8s cubic-bezier(.23, 1, .32, 1) both; animation-delay: var(--d, 0ms); }
+@keyframes bc-grow { from { transform: scaleY(0); opacity: 0; } }
+.bc-hit { cursor: crosshair; touch-action: pan-y; }
+.bc-tip { position: absolute; top: 0; left: 0; min-width: 140px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--hairline); background: var(--surface);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, .1); pointer-events: none; font-size: 12px; z-index: 2; }
+.bc-tip[hidden] { display: none; }
+.bc-tip b { display: block; margin-bottom: 4px; font-size: 12.5px; }
+.bc-tip span { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.bc-tip span i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.bc-tip em { margin-left: auto; padding-left: 12px; font-style: normal; color: var(--ink); font-weight: 600; }
+.bc-tip .bc-total { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--hairline); color: var(--ink); }
+.bc-legend { display: flex; flex-wrap: wrap; gap: 2px 4px; margin-top: 8px; }
+.bc-key { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border: 0; border-radius: 999px; background: none; font: inherit; font-size: 12px;
+          color: var(--ink); cursor: pointer; }
+.bc-key:hover { background: color-mix(in srgb, var(--muted) 10%, transparent); }
+.bc-key i { width: 9px; height: 9px; border-radius: 3px; }
+.bc-key.off { opacity: .5; text-decoration: line-through; }
+
 @media (prefers-reduced-motion: reduce) {
+  .bc-svg.grow .bc-bar { animation: none; }
   .c2-grid, .c2-m { animation: none !important; }
   .sc-spark svg, .sc-area, .ia-grid.in, .ia-tip { animation: none; }
   .sc-last::after { animation: none; opacity: 0; }

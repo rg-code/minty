@@ -102,5 +102,63 @@
     ].map(q).join(","))].join("\n") + "\n";
   }
 
-  globalThis.MintyReconcile = { summarize, csv, merchantKey };
+  // What a transaction falls under, for each way of breaking the selection down: [key, label] pairs
+  // (a tag each, for a transaction with several).
+  const MON = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+  const DIMS = {
+    month: t => [[t.date.slice(0, 7), MON.format(new Date(`${t.date.slice(0, 7)}-15T12:00:00Z`))]],
+    year: t => [[t.date.slice(0, 4), t.date.slice(0, 4)]],
+    bank: t => [[`b:${t.item_id ?? t.institution_name ?? ""}`, t.institution_name || "A bank"]],
+    card: t => [[`a:${t.account_id}`, `${[t.institution_name, t.account_name].filter(Boolean).join(" · ") || "An account"}${t.account_mask ? ` ••${t.account_mask}` : ""}`]],
+    person: t => [[`p:${t.owner}`, t.owner]],
+    tag: t => (t.tags?.length ? [...new Map(t.tags.map(x => [x.toLowerCase(), x])).entries()].map(([k, l]) => [`t:${k}`, l]) : [["t:", "No tag"]]),
+  };
+  const CHRONO = new Set(["month", "year"]);
+  /** How many different values each way has in these rows (which ways are worth offering). */
+  const spread = rows => Object.fromEntries(Object.keys(DIMS).map(d => [d, new Set(rows.flatMap(t => DIMS[d](t).map(([k]) => k))).size]));
+
+  /** The selection broken down by one thing and, inside it, by another (or "none"): money out (or
+   * in), in cents. Months and years run in order; the rest largest first, the top 12 (and 7 split
+   * series) with "Other" for the rest. label(kind, key, label) can rename (people's names). */
+  function breakdown(rows, by, split = "none", metric = "out", { label = (k, key, l) => l, maxGroups = 12, maxSeries = 7 } = {}) {
+    const cents = t => { const c = Math.round(Number(t.amount) * 100); return metric === "in" ? Math.max(0, -c) : Math.max(0, c); };
+    const cell = new Map(), gTot = new Map(), sTot = new Map(), gName = new Map(), sName = new Map(), gCount = new Map();
+    for (const t of rows) {
+      const v = cents(t);
+      if (!v) continue;
+      const ss = split === "none" ? [["all", "All"]] : DIMS[split](t);
+      for (const [g, gl] of DIMS[by](t)) {
+        gName.set(g, label(by, g, gl)); gCount.set(g, (gCount.get(g) ?? 0) + 1);
+        for (const [sk, sl] of ss) {
+          sName.set(sk, split === "none" ? (metric === "in" ? "In" : "Out") : label(split, sk, sl));
+          const k = `${g}\u0000${sk}`;
+          cell.set(k, (cell.get(k) ?? 0) + v);
+          gTot.set(g, (gTot.get(g) ?? 0) + v); sTot.set(sk, (sTot.get(sk) ?? 0) + v);
+        }
+      }
+    }
+    const order = (tot, chrono) => [...tot.keys()].sort((a, b) => (chrono ? (a < b ? -1 : 1) : tot.get(b) - tot.get(a)));
+    let gKeys = order(gTot, CHRONO.has(by)), sKeys = order(sTot, CHRONO.has(split));
+    const gOther = !CHRONO.has(by) && gKeys.length > maxGroups ? new Set(gKeys.slice(maxGroups - 1)) : new Set();
+    const sOther = !CHRONO.has(split) && sKeys.length > maxSeries ? new Set(sKeys.slice(maxSeries - 1)) : new Set();
+    if (gOther.size) gKeys = [...gKeys.slice(0, maxGroups - 1), "_other"];
+    if (sOther.size) sKeys = [...sKeys.slice(0, maxSeries - 1), "_other"];
+    const value = {};
+    for (const [k, v] of cell) {
+      let [g, sk] = k.split("\u0000");
+      if (gOther.has(g)) g = "_other";
+      if (sOther.has(sk)) sk = "_other";
+      (value[g] ??= {})[sk] = (value[g][sk] ?? 0) + v;
+    }
+    const sum = (keys, tot) => [...keys].reduce((t, k) => t + tot.get(k), 0);
+    return {
+      groups: gKeys.map(g => g === "_other" ? { key: g, label: `Other (${gOther.size})`, total: sum(gOther, gTot), count: [...gOther].reduce((t, k) => t + gCount.get(k), 0) }
+                                          : { key: g, label: gName.get(g), total: gTot.get(g), count: gCount.get(g) }),
+      series: sKeys.map(sk => ({ key: sk, label: sk === "_other" ? `Other (${sOther.size})` : sName.get(sk), total: sk === "_other" ? sum(sOther, sTot) : sTot.get(sk) })),
+      value,
+      overlaps: by === "tag" || split === "tag",               // a transaction with two tags counts under both
+    };
+  }
+
+  globalThis.MintyReconcile = { summarize, csv, merchantKey, breakdown, spread };
 })();
