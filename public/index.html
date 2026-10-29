@@ -168,6 +168,17 @@
   .sp-split div { display: flex; gap: 8px; padding: 3px 0; }
   .sp-split div span:first-child { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sp-split .num { white-space: nowrap; }
+  .sp-ctls { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 10px; }
+  .sp-ctl { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sp-ctl em { font-style: normal; font-size: 12px; color: var(--muted); }
+  .sp-seg button { height: 26px; padding: 0 10px; font-size: 12px; }
+  .sp-seg .seg-thumb { height: 26px; }
+  .sp-chart { margin: 4px 0 8px; }
+  .sp-btable { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .sp-btable td { padding: 4px 6px; border-top: 1px dashed var(--hairline); }
+  .sp-btable td:first-child { width: 100%; padding-left: 0; }
+  .sp-btable .num { text-align: right; white-space: nowrap; color: var(--muted); }
+  .sp-btable td:nth-child(3) { color: var(--ink); font-weight: 600; }
   @media (max-width: 640px) {   /* phones: count and Done, the totals, the buttons, then tagging; the panel above */
     .selectbar { gap: 6px 12px; padding-top: 8px; font-size: 13px; }
     .selectbar .selcount { order: 0; } .selectbar #selDone { order: 1; }

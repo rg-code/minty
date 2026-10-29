@@ -514,7 +514,79 @@
     };
   }
 
+  /** A bar chart, grouped (side by side) or stacked, after EasyUI's Bar chart (MIT): rounded tops,
+   *  a band over the group under the pointer (the others dim) with a tooltip of its bars, a legend
+   *  that turns a series off, and bars that grow in one after another.
+   *  o: { groups: [{ key, label }], series: [{ key, label, color }], value(group, series) → number,
+   *       fmt, fmtAxis, variant: "grouped" | "stacked", height, animate } */
+  function barchart(el, o) {
+    const H = o.height ?? 220, M = { t: 12, r: 8, b: 26, l: 50 }, off = new Set(o.off ?? []);
+    const fmtAxis = o.fmtAxis ?? o.fmt;
+    el.classList.add("bc");
+    let animate = o.animate !== false && !reduced();
+    function draw() {
+      const W = Math.max(260, Math.round(el.clientWidth || 600));
+      const vis = o.series.filter(s => !off.has(s.key)), k = Math.max(1, vis.length), stacked = o.variant === "stacked";
+      const top = d => (stacked ? vis.reduce((t, s) => t + Math.max(0, o.value(d.key, s.key)), 0) : Math.max(0, ...vis.map(s => o.value(d.key, s.key))));
+      const t = ticks(0, Math.max(1, ...o.groups.map(top)));
+      const hi = t.at(-1), iw = W - M.l - M.r, step = iw / Math.max(1, o.groups.length);
+      const y = v => M.t + (H - M.t - M.b) * (1 - v / hi), base = y(0);
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      const barW = stacked ? clamp(step * 0.62, 3, 46) : clamp((step * 0.74 - 3 * (k - 1)) / k, 3, 34), groupW = stacked ? barW : barW * k + 3 * (k - 1);
+      const bar = (x, y0, w, h, r) => { r = Math.min(r, w / 2, h); return `M${f1(x)},${f1(y0 + h)}V${f1(y0 + r)}Q${f1(x)},${f1(y0)} ${f1(x + r)},${f1(y0)}H${f1(x + w - r)}Q${f1(x + w)},${f1(y0)} ${f1(x + w)},${f1(y0 + r)}V${f1(y0 + h)}Z`; };
+      let g = t.map(v => `<line class="bc-gl${v === 0 ? " zero" : ""}" x1="${M.l}" x2="${W - M.r}" y1="${f1(y(v))}" y2="${f1(y(v))}"/><text class="ch-axis" x="${M.l - 8}" y="${f1(y(v) + 4)}" text-anchor="end">${esc(fmtAxis(v))}</text>`).join("");
+      const every = Math.ceil(o.groups.length / Math.max(1, Math.floor(iw / 72)));
+      const fit = Math.max(4, Math.floor((step * every) / 6.6) - 1);                 // characters that fit under a label's share
+      o.groups.forEach((d, i) => {
+        const c = M.l + step * i + step / 2;
+        let acc = 0, bars = "";
+        vis.forEach((s, si) => {
+          const v = Math.max(0, o.value(d.key, s.key));
+          if (!v) return;
+          const h = base - y(v);
+          if (stacked) { const y1 = y(acc + v); acc += v; bars += `<path class="bc-bar" d="${bar(c - barW / 2, y1, barW, h, si === vis.length - 1 || vis.slice(si + 1).every(x => !o.value(d.key, x.key)) ? 6 : 0)}" fill="${esc(s.color)}" style="--d:${i * 40 + si * 25}ms"/>`; }
+          else bars += `<path class="bc-bar" d="${bar(c - groupW / 2 + si * (barW + 3), base - h, barW, h, 6)}" fill="${esc(s.color)}" style="--d:${i * 40 + si * 25}ms"/>`;
+        });
+        g += `<g class="bc-g" data-i="${i}">${bars}</g>`;
+        if (i % every === 0) g += `<text class="ch-axis" x="${f1(c)}" y="${H - 7}" text-anchor="middle">${esc(d.label.length > fit ? `${d.label.slice(0, fit - 1)}…` : d.label)}</text>`;
+      });
+      el.innerHTML = `<div class="bc-plot"><svg class="bc-svg${animate ? " grow" : ""}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.title ?? "Bar chart")}">
+          <rect class="bc-band" y="${M.t - 4}" height="${H - M.t - M.b + 4}" width="${f1(step)}" rx="8" opacity="0"/>${g}
+          <rect class="bc-hit" x="${M.l}" y="0" width="${iw}" height="${H}" fill="transparent"/></svg><div class="bc-tip" hidden></div></div>
+        ${o.series.length > 1 ? `<div class="bc-legend" role="group" aria-label="Series">${o.series.map(s => `<button type="button" class="bc-key${off.has(s.key) ? " off" : ""}" data-s="${esc(s.key)}" aria-pressed="${!off.has(s.key)}"><i style="background:${esc(s.color)}"></i>${esc(s.label)}</button>`).join("")}</div>` : ""}`;
+      animate = false;                                                   // grow once; later draws just change
+      const svg = el.querySelector(".bc-svg"), band = el.querySelector(".bc-band"), tip = el.querySelector(".bc-tip");
+      const show = i => {
+        el.querySelectorAll(".bc-g").forEach(x => x.classList.toggle("dim", i !== null && Number(x.dataset.i) !== i));
+        if (i === null) { band.setAttribute("opacity", 0); tip.hidden = true; return; }
+        const d = o.groups[i];
+        band.setAttribute("x", f1(M.l + step * i)); band.setAttribute("opacity", 1);
+        const rows = vis.map(s => [s, o.value(d.key, s.key)]).filter(([, v]) => v);
+        const total = rows.reduce((t, [, v]) => t + v, 0);
+        tip.innerHTML = `<b>${esc(d.label)}</b>${rows.map(([s, v]) => `<span><i style="background:${esc(s.color)}"></i>${esc(s.label)}<em class="num">${esc(o.fmt(v))}</em></span>`).join("")}${rows.length > 1 ? `<span class="bc-total">Total<em class="num">${esc(o.fmt(total))}</em></span>` : ""}`;
+        tip.hidden = false;
+        const x = M.l + step * (i + 0.5), w = tip.offsetWidth;
+        tip.style.transform = `translate(${f1(Math.max(0, Math.min(W - w, x - w / 2)))}px, ${f1(Math.max(0, y(top(d)) - tip.offsetHeight - 10))}px)`;
+      };
+      const at = e => { const r = svg.getBoundingClientRect(); return Math.max(0, Math.min(o.groups.length - 1, Math.floor((e.clientX - r.left - M.l) / step))); };
+      const hit = el.querySelector(".bc-hit");
+      hit.addEventListener("pointermove", e => show(at(e)));
+      hit.addEventListener("pointerdown", e => show(at(e)));
+      hit.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") show(null); });
+      el.querySelector(".bc-legend")?.addEventListener("click", e => {
+        const b = e.target.closest("[data-s]");
+        if (!b) return;
+        if (off.has(b.dataset.s)) off.delete(b.dataset.s); else if (vis.length > 1) off.add(b.dataset.s);
+        draw();
+      });
+    }
+    draw();
+    let w0 = el.clientWidth;
+    new ResizeObserver(() => { if (Math.abs(el.clientWidth - w0) > 4) { w0 = el.clientWidth; draw(); } }).observe(el);
+    return { redraw: draw };
+  }
+
   const PALETTE = ["#6d7cff", "#34d1bf", "#ffb44c", "#ff6b8b", "#a78bfa", "#5ac8fa", "#f59f00", "#94a3b8"];
 
-  window.MintyCharts = { bars, lines, legend, ticks, area, donut, stat, wire, segpill, deltaHtml, calendar, PALETTE };
+  window.MintyCharts = { bars, lines, legend, ticks, area, donut, stat, wire, segpill, deltaHtml, calendar, barchart, PALETTE };
 })();
