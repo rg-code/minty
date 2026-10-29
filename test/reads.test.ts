@@ -114,6 +114,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/items", 100],
     ["/transactions", 2500],             // newest 500, via the date index
     ["/transactions?before=2025-06-01:3000", 2500],   // the next page, via the same index
+    ["/transactions?category=FOOD_AND_DRINK", 2500],   // a category: the newest 500 of it
     ["/accounts", 3500],                 // card members: only accounts that have some
     ["/status", 3500],
     ["/tags", 100],

@@ -9,8 +9,9 @@ import { ACCOUNT_NAME } from "../accounts";
 /** Read API for the pages in public/, plus tag editing. */
 
 const MAX_FILTER_TAGS = 20;   // D1 allows 100 bound parameters per query
+const MAX_FILTER_CATEGORIES = 30;   // bound as one JSON list
 // Banks + accounts together. Worst case: 60 ids + 20 tags + 1 tag count + owner, start, end,
-// 2 for q, and limit = 87 bound parameters, under D1's 100.
+// 2 for q, the categories (one JSON list) and limit = 88 bound parameters, under D1's 100.
 const MAX_FILTER_IDS = 60;    // a card member counts as 2 (account id + name)
 const MAX_CARD_MEMBER_LENGTH = 200;
 const MAX_TAGS_PER_TXN = 50;
@@ -185,6 +186,12 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
     throw unprocessable(`at most ${MAX_FILTER_IDS} banks, accounts and card members can be filtered on together ` +
                         "(a card member counts as 2)");
   }
+  // category (repeatable): Plaid's primary category (FOOD_AND_DRINK); OTHER is a transaction without
+  // one. Any of them matches; it ANDs with the tags and every other filter.
+  const categories = [...new Set(p.getAll("category").map((c) => c.trim()).filter(Boolean))];
+  if (categories.length > MAX_FILTER_CATEGORIES || categories.some((c) => !/^[A-Z_]{2,48}$/.test(c))) {
+    throw unprocessable(`category must be Plaid categories like FOOD_AND_DRINK (or OTHER, for none), at most ${MAX_FILTER_CATEGORIES}`);
+  }
   const limit = intParam(url, "limit", { def: 500, min: 1, max: 1000 })!;
 
   // Retirement accounts' transactions (an HSA's, say) show in EGG, not here, unless switched back.
@@ -220,6 +227,12 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
       : `(SELECT count(*) FROM transaction_tags tt WHERE tt.transaction_id = t.id AND tt.tag IN (${marks})) = ?`);
     params.push(...tags);
     if (tagMode === "all") params.push(tags.length);
+  }
+  if (categories.length) {
+    const named = categories.filter((c) => c !== "OTHER");
+    const any = [...(named.length ? ["t.category IN (SELECT value FROM json_each(?))"] : []), ...(categories.includes("OTHER") ? ["coalesce(t.category, '') IN ('', 'OTHER')"] : [])];
+    clauses.push(`(${any.join(" OR ")})`);
+    if (named.length) params.push(JSON.stringify(named));
   }
   if (q) {
     clauses.push("(t.name LIKE ? OR t.merchant_name LIKE ?)");   // LIKE is case-insensitive for ASCII

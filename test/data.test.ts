@@ -59,7 +59,8 @@ describe("GET /transactions", () => {
     expect((await getJson(`/transactions?${[...ids60(40, "item_id"), ...ids60(21, "account_id")].join("&")}`)).status).toBe(422);
     // the worst case still fits D1's 100 bound parameters: 60 ids + 20 tags (all) + every other filter
     const tags = Array.from({ length: 20 }, (_, i) => `tag=t${i}`);
-    const worst = [...ids60(30, "item_id"), ...ids60(30, "account_id"), ...tags, "tag_mode=all", "owner=me",
+    const cats = Array.from({ length: 29 }, (_, i) => `category=C_${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26))}`);
+    const worst = [...ids60(30, "item_id"), ...ids60(30, "account_id"), ...tags, ...cats, "category=OTHER", "tag_mode=all", "owner=me",
                    "start=2026-01-01", "end=2026-12-31", "q=x", "limit=10"].join("&");
     expect((await getJson(`/transactions?${worst}`)).status).toBe(200);
   });
@@ -126,6 +127,18 @@ describe("GET /transactions", () => {
     expect(ids((await getJson("/transactions?tag=travel&tag=reimbursable&tag_mode=all")).body)).toEqual([201]);
     expect(ids((await getJson("/transactions?tag=travel&tag=groceries&tag_mode=all")).body)).toEqual([]);
     expect(ids((await getJson("/transactions?tag=travel&tag=Travel&tag_mode=all")).body)).toEqual([201]);  // deduped
+  });
+
+  it("filters by Plaid category (any of several), with OTHER for none, and alongside tags", async () => {
+    expect(ids((await getJson("/transactions?category=FOOD_AND_DRINK&category=TRAVEL")).body)).toEqual([100, 201]);
+    expect(ids((await getJson("/transactions?category=TRAVEL&tag=reimbursable")).body)).toEqual([201]);
+    expect(ids((await getJson("/transactions?category=TRAVEL&tag=groceries")).body)).toEqual([]);          // both must hold
+    await env.DB.prepare("UPDATE transactions SET category = NULL WHERE id = 200").run();
+    expect(ids((await getJson("/transactions?category=OTHER")).body)).toEqual([200]);
+    expect(ids((await getJson("/transactions?category=OTHER&category=INCOME")).body)).toEqual([102, 200]);
+    for (const bad of ["food", "FOOD;DROP", Array.from({ length: 31 }, (_, i) => `C${String.fromCharCode(65 + (i % 26))}${i}`).join("&category=")]) {
+      expect((await getJson(`/transactions?category=${bad}`)).status, bad).toBe(422);
+    }
   });
 
   it("ignores blank tags", async () => {
