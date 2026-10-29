@@ -109,6 +109,14 @@ function matchesTags(tags) {
   return state.tagMode === "all" ? state.tags.every(t => tags.includes(t)) : state.tags.some(t => tags.includes(t));
 }
 
+/** A filter menu's list of tick boxes: redrawn only when the list changed (a redraw mid-menu would
+ * take the focus away); otherwise each box is set back to what the list says, so Clear unticks
+ * the boxes ticked since the last redraw. */
+function fillOpts(el, html) {
+  if (el.dataset.html !== html) { el.innerHTML = html; el.dataset.html = html; return; }
+  for (const box of el.querySelectorAll("input[type=checkbox]")) box.checked = box.defaultChecked;
+}
+
 // Plaid's primary categories (personal_finance_category.primary): a fixed list, so the menu needn't
 // read every transaction to find which are in use; any other seen on the page is added. OTHER is
 // a transaction without one.
@@ -124,12 +132,12 @@ function populateTagFilter() {
     ? names.map(t => `<label><input type="checkbox" value="${escapeAttr(t)}" ${state.tags.includes(t) ? "checked" : ""} />${escapeHtml(t)}</label>`).join("")
     : `<div class="none">No tags yet — use “+ tag” on a transaction.</div>`;
   const opts = document.getElementById("tagOpts");
-  if (opts.dataset.html !== html) { opts.innerHTML = html; opts.dataset.html = html; }   // don't steal focus mid-menu
+  fillOpts(opts, html);
   const seen = loaded.map(t => t.category).filter(c => c && !PLAID_CATEGORIES.includes(c));
   const cats = [...new Set([...PLAID_CATEGORIES, ...seen, ...state.categories.filter(c => c !== "OTHER")])].sort((a, b) => categoryName(a).localeCompare(categoryName(b)));
   const chtml = [...cats, "OTHER"].map(c => `<label><input type="checkbox" value="${escapeAttr(c)}" ${state.categories.includes(c) ? "checked" : ""} />${escapeHtml(categoryName(c))}</label>`).join("");
   const copts = document.getElementById("catOpts");
-  if (copts.dataset.html !== chtml) { copts.innerHTML = chtml; copts.dataset.html = chtml; }
+  fillOpts(copts, chtml);
   renderTagControls();
 }
 
@@ -227,7 +235,7 @@ function populateBankFilter() {
       }).join("")).join("");
   }
   const opts = document.getElementById("bankOpts");
-  if (opts.dataset.html !== html) { opts.innerHTML = html; opts.dataset.html = html; }   // don't steal focus mid-menu
+  fillOpts(opts, html);
   renderBankControls();
 }
 
@@ -301,7 +309,7 @@ function populateAccountFilter() {
     }).join("");
   }
   const opts = document.getElementById("acctOpts");
-  if (opts.dataset.html !== html) { opts.innerHTML = html; opts.dataset.html = html; }   // don't steal focus mid-menu
+  fillOpts(opts, html);
   renderAccountControls();
 }
 
