@@ -260,6 +260,12 @@ describe("static pages", () => {
     expect(html).toContain('const PLAID_CATEGORIES = ["INCOME", "TRANSFER_IN"');
   });
 
+  it("a filter menu's Clear unticks its boxes too (a list that didn't change is set back, not redrawn)", async () => {
+    const { html } = await page("/");
+    expect(html).toContain("for (const box of el.querySelectorAll(\"input[type=checkbox]\")) box.checked = box.defaultChecked;");
+    expect(html).not.toContain("opts.dataset.html !== html");                              // every list goes through fillOpts
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');
