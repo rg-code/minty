@@ -66,6 +66,9 @@ export interface BenefitOut {
   source: string;
   periods: PeriodOut[];
   current: PeriodOut | null;
+  /** The credits seen, and the period each counts in: the page's "Count in". hint: it posted in the
+   * first days of its period while the period before has nothing, so it may be that period's. */
+  credits?: { id: number; date: string; name: string | null; amount_cents: number; period_start: string; moved: boolean; hint: boolean }[];
   unlock?: { spent_cents: number; needed_cents: number };
   once?: { last_used: string | null; next_from: string | null; data_since: string | null; status: "used" | "open" };
   used_this_year_cents: number;
@@ -223,13 +226,14 @@ const capFor = (b: Benefit, start: string) => b.amountCents + (b.decemberExtraCe
 const MATCH_DAYS = 60;          // a purchase this long before a credit can be the one it pays back
 const PENDING_DAYS = 56;        // Amex: credits can take up to 8 weeks
 
-interface Ledger { net: Map<string, number>; spend: Map<string, number>; unpaid: Map<string, number>; credits: TxnRow[] }
+interface Ledger { net: Map<string, number>; spend: Map<string, number>; unpaid: Map<string, number>; credits: TxnRow[]; placed: Map<number, string> }
 
 const SPILL_DAYS = 15;
+const HINT_DAYS = 5;            // a credit this early in a period, with the one before empty, may be the one before's
 const AHEAD_DAYS = 3;           // a credit can post while its purchase is still pending (Walmart+)           // Amex sometimes credits by statement month (two credits in May, none in April)
 const REFUND_DAYS = 120;
 
-function ledger(b: Benefit, rows: Tagged[], anniversary: number, cap = (start: string) => capFor(b, start)): Ledger {
+function ledger(b: Benefit, rows: Tagged[], anniversary: number, cap = (start: string) => capFor(b, start), moved = new Map<number, string>()): Ledger {
   const creditSet = ids(b.credit), chargeSet = ids(b.charge), refundSet = ids(b.creditAsRefund?.names);
   const labelled = rows.filter((t) => (creditSet.length && creditHit(t, creditSet))
     || (refundSet.length && t.amount_cents < 0 && -t.amount_cents <= b.creditAsRefund!.maxCents && creditHit(t, refundSet)));
@@ -255,12 +259,26 @@ function ledger(b: Benefit, rows: Tagged[], anniversary: number, cap = (start: s
   const add = (m: Map<string, number>, k: string, v: number) => m.set(k, (m.get(k) ?? 0) + v);
   const net = new Map<string, number>(), spend = new Map<string, number>(), unpaid = new Map<string, number>();
   const room = (ps: string) => (net.get(ps) ?? 0) < cap(ps);
+  const placed = new Map<number, string>();
 
   for (const c of charges) if (!refunded.has(c.id)) add(spend, periodStart(c.date, b, anniversary), c.amount_cents);
   const newestFirst = [...charges].sort((a, z) => byDate(z, a));
   for (const t of credits) {
     let target = periodStart(t.date, b, anniversary);
-    if (t.amount_cents < 0) {
+    const chosen = moved.get(t.id);
+    if (chosen !== undefined) {
+      // the household said which period it's for ("Count in"): it counts there, and settles the
+      // latest purchase before it, so that purchase isn't "credit pending" (a credit is capped, so
+      // what's left of a larger purchase was never owed)
+      if (t.amount_cents < 0) {
+        for (const c of newestFirst) {
+          if (daysBetween(t.date, c.date) > AHEAD_DAYS) continue;
+          if (daysBetween(c.date, t.date) > MATCH_DAYS) break;
+          if (left.get(c.id)! > 0) { left.set(c.id, 0); break; }       // its credit came: nothing more is owed on it
+        }
+      }
+      target = chosen;
+    } else if (t.amount_cents < 0) {
       // the latest purchase before it with something left to pay back, in a period that still
       // has room (otherwise June's credit could land on a May purchase May's credit already paid)
       for (const c of newestFirst) {
@@ -281,10 +299,11 @@ function ledger(b: Benefit, rows: Tagged[], anniversary: number, cap = (start: s
       }
     }
     add(net, target, -t.amount_cents);
+    placed.set(t.id, target);
   }
   for (const { of } of refunds) left.set(of.id, 0);       // nothing to pay back on a cancelled purchase
   for (const c of charges) if (left.get(c.id)! > 0) add(unpaid, periodStart(c.date, b, anniversary), left.get(c.id)!);
-  return { net, spend, unpaid, credits };
+  return { net, spend, unpaid, credits, placed };
 }
 
 export interface Input {
@@ -295,6 +314,7 @@ export interface Input {
   firstFee: Map<number, string>;    // account_id -> date of its earliest annual fee
   dataSince: Map<number, string>;   // account_id -> its oldest transaction
   marks: Set<string>;               // `${account_id}|${benefit_id}|${period_start}`
+  moves?: Map<string, string>;      // `${account_id}|${benefit_id}|${transaction_id}` → the period it counts in ("Count in")
 }
 
 export function computeCard(card: CardRow, input: Input, cardRows = input.rows.filter((t) => t.account_id === card.id)): CardOut {
@@ -323,9 +343,11 @@ export function computeCard(card: CardRow, input: Input, cardRows = input.rows.f
       const bl = ledgers.get(base.id)!;
       const net = new Map([...bl.net].map(([k, v]) => [k, Math.max(0, v - capFor(base, k))]));
       const own = ledger({ ...b, credit: [] }, rows, anniversary);
-      L = { net, spend: own.spend, unpaid: new Map(), credits: [] };
+      L = { net, spend: own.spend, unpaid: new Map(), credits: [], placed: new Map() };
     } else {
-      L = ledger(b, rows, anniversary);
+      const moved = new Map<number, string>();
+      for (const t of rows) { const p = input.moves?.get(`${card.id}|${b.id}|${t.id}`); if (p) moved.set(t.id, p); }
+      L = ledger(b, rows, anniversary, undefined, moved);
     }
     ledgers.set(b.id, L);
 
@@ -379,6 +401,18 @@ export function computeCard(card: CardRow, input: Input, cardRows = input.rows.f
       if (ended && !recent) t.missed_cents += left;
       else if (ended) { t.pending_cents += pending; t.missed_cents += left - pending; }
       else { t.open_now_cents += left - pending; t.pending_cents += pending; }
+    }
+    // The credits seen in the periods shown, and where each counts, for "Count in".
+    if (b.how === "on_card" && !b.after) {
+      const shown = new Set(bo.periods.map((p) => p.start));
+      bo.credits = L.credits.filter((t) => shown.has(L.placed.get(t.id) ?? "")).map((t) => {
+        const ps = L.placed.get(t.id)!, moved = input.moves?.has(`${card.id}|${b.id}|${t.id}`) ?? false;
+        const [y, m] = addMonths(Number(ps.slice(0, 4)), Number(ps.slice(5, 7)), -1);
+        const prev = b.period === "annual" ? null : periodStart(ymd(y, m, 1), b, anniversary);
+        const hint = !moved && t.amount_cents < 0 && ps === periodStart(t.date, b, anniversary) && daysBetween(ps, t.date) <= HINT_DAYS
+          && prev !== null && shown.has(prev) && !(L.net.get(prev) ?? 0);
+        return { id: t.id, date: t.date, name: t.merchant_name || t.name, amount_cents: t.amount_cents, period_start: ps, moved, hint };
+      }).sort((a, z) => cmp(z.date, a.date));
     }
     out.benefits.push(bo);
   }

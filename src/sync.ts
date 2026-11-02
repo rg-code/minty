@@ -85,11 +85,11 @@ const UPSERT_ACCOUNTS = `
 // a later page's accounts[] backfills them. 'tags' live elsewhere and are never written here.
 // account_owner is Plaid's card member on multi-card accounts (e.g. Amex authorized users).
 const UPSERT_TRANSACTIONS = `
-  INSERT INTO transactions (owner, account_id, plaid_txn_id, amount_cents, currency, date, datetime,
+  INSERT INTO transactions (owner, account_id, plaid_txn_id, amount_cents, currency, date, datetime, authorized_date,
                             name, merchant_name, category, pending, pending_txn_id, account_owner)
   SELECT ?2, acc.id, t.value ->> 'transaction_id',
          CAST(round((t.value ->> 'amount') * 100) AS INTEGER),
-         t.value ->> 'iso_currency_code', t.value ->> 'date', t.value ->> 'datetime',
+         t.value ->> 'iso_currency_code', t.value ->> 'date', t.value ->> 'datetime', t.value ->> 'authorized_date',
          t.value ->> 'name', t.value ->> 'merchant_name',
          t.value -> 'personal_finance_category' ->> 'primary',
          CASE WHEN t.value ->> 'pending' THEN 1 ELSE 0 END,
@@ -99,7 +99,7 @@ const UPSERT_TRANSACTIONS = `
   JOIN accounts acc ON acc.plaid_account_id = t.value ->> 'account_id'
   WHERE true
   ON CONFLICT (plaid_txn_id) DO UPDATE SET
-    amount_cents = excluded.amount_cents, date = excluded.date, datetime = excluded.datetime,
+    amount_cents = excluded.amount_cents, date = excluded.date, datetime = excluded.datetime, authorized_date = excluded.authorized_date,
     name = excluded.name, merchant_name = excluded.merchant_name, category = excluded.category,
     pending = excluded.pending, pending_txn_id = excluded.pending_txn_id,
     account_owner = excluded.account_owner`;

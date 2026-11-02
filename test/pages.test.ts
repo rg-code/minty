@@ -266,6 +266,12 @@ describe("static pages", () => {
     expect(html).not.toContain("opts.dataset.html !== html");                              // every list goes through fillOpts
   });
 
+  it("ABC lists each benefit's credits with Count in, to put one in another period", async () => {
+    const abc = await fetchText("/abc.js");
+    expect(abc).toContain("function creditsHTML(c, b)");
+    expect(abc).toContain('put("/benefits/credits", {');
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');

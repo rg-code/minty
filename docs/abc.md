@@ -34,7 +34,14 @@ open. It's checked against the statement credits in the transactions. Built 2026
 - **Which period:** a credit counts in the period of the purchase it paid back (at the benefit's
   `charge` merchants, within 60 days, in a period with room). Otherwise it counts in the period
   it posted, or the previous one if it posted in the first 15 days of a full period (Amex
-  sometimes credits by statement month).
+  sometimes credits by statement month). A purchase is dated by the day it was made when Plaid sends it
+  (`authorized_date`, migration 0021: new and changed transactions only), else the day it
+  posted, since a purchase on a quarter's last day can post on the next quarter's first.
+- **Count in:** under a benefit, "Credits seen" lists its credits and the period each counts in,
+  and the household can put one in another period (`benefit_credit_periods`, migration 0022; sync
+  never writes it). A moved credit settles the purchase it paid back, so that isn't "credit
+  pending". A credit that posted in the first 5 days of a period while the one before is still
+  empty is flagged, never moved by itself (a purchase on a period's first day looks the same).
 - **Status per period:** used, partly used, charged with the credit pending (within 8 weeks),
   not unlocked yet (spend thresholds), open, missed (with "charged, no credit came" when there
   was a purchase), not started. Outside-the-card credits (Uber Cash, Citi's hotel discount) are
