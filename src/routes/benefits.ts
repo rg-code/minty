@@ -23,14 +23,17 @@ const balanced = (parts: string[], op: string): string =>
 const FEE = `(t.amount_cents >= 0 AND t.name NOT LIKE '%REFUND%' AND (t.name LIKE '%MEMBERSHIP FEE%' OR t.name LIKE '%ANNUAL FEE%'))`;
 
 /** The rows ABC needs from these cards: credits, qualifying purchases and evidence (hits), and
- * annual fees (fee = 1, for card years). One pass over each card's transactions. */
+ * annual fees (fee = 1, for card years). One pass over each card's transactions. A row's date is
+ * the day it was made when Plaid sent that (authorized_date), else the day it posted: issuers file
+ * a purchase's credit by the day of the purchase, and a quarter's last-day purchase can post the
+ * next day. */
 export function taggedRowsSql(accountCount: number, patterns: number[]): string {
   const all = allPatterns();
   const hits = patterns.length
     ? balanced(patterns.map((i) => `(CASE WHEN t.name LIKE ${lit(all[i])} THEN '${i},' WHEN t.merchant_name LIKE ${lit(all[i])} THEN '${MERCHANT_HIT + i},' ELSE '' END)`), "||")
     : "''";
   return `SELECT * FROM (
-      SELECT t.id, t.account_id, t.date, t.amount_cents, t.name, t.merchant_name, ${hits} AS hits, ${FEE} AS fee
+      SELECT t.id, t.account_id, coalesce(t.authorized_date, t.date) AS date, t.amount_cents, t.name, t.merchant_name, ${hits} AS hits, ${FEE} AS fee
       FROM transactions t WHERE t.account_id IN (${Array(accountCount).fill("?").join(", ")}) AND t.pending = 0
     ) WHERE hits <> '' OR fee = 1`;
 }
@@ -48,9 +51,10 @@ export async function benefits(env: Env, url: URL): Promise<Response> {
   const thisYear = Number(now.slice(0, 4));
   const year = intParam(url, "year", { def: thisYear, min: 2000, max: thisYear + 1 })!;
 
-  const [cardsRes, marksRes] = await env.DB.batch([
+  const [cardsRes, marksRes, movesRes] = await env.DB.batch([
     env.DB.prepare(`${CARDS} ORDER BY a.owner, i.id, a.name, a.id`),
     env.DB.prepare("SELECT account_id, benefit_id, period_start FROM benefit_marks"),
+    env.DB.prepare("SELECT account_id, benefit_id, transaction_id, period_start FROM benefit_credit_periods"),
   ]);
   const cards = cardsRes.results as unknown as CardRow[];
   const { accountIds, patterns } = scope(cards);
@@ -75,6 +79,8 @@ export async function benefits(env: Env, url: URL): Promise<Response> {
     dataSince: new Map(since.filter((x) => x.date).map((x) => [x.account_id, x.date!])),
     marks: new Set((marksRes.results as { account_id: number; benefit_id: string; period_start: string }[])
       .map((m) => `${m.account_id}|${m.benefit_id}|${m.period_start}`)),
+    moves: new Map((movesRes.results as { account_id: number; benefit_id: string; transaction_id: number; period_start: string }[])
+      .map((m) => [`${m.account_id}|${m.benefit_id}|${m.transaction_id}`, m.period_start])),
   });
   return json({
     year, today: now, checked: CHECKED, not_tracked: NOT_TRACKED,
@@ -127,6 +133,40 @@ export async function setCard(env: Env, request: Request, accountId: number): Pr
        hidden = excluded.hidden, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
   ).bind(accountId, product, month, hidden ? 1 : 0).run();
   return json({ account_id: accountId, product_id: product, anniversary_month: month, hidden });
+}
+
+/** PUT /benefits/credits {account_id, benefit_id, transaction_id, period_start | null}: the period a
+ * credit counts in ("Count in"), for one that paid back a purchase in another period than Minty
+ * could tell; null goes back to Minty's own choice. */
+export async function setCreditPeriod(env: Env, request: Request): Promise<Response> {
+  const b = await body(request);
+  if (!Number.isInteger(b.account_id)) throw unprocessable("account_id must be an integer");
+  if (!Number.isInteger(b.transaction_id)) throw unprocessable("transaction_id must be an integer");
+  if (typeof b.benefit_id !== "string") throw unprocessable("benefit_id must be a string");
+  const clear = b.period_start === null;
+  if (!clear && (typeof b.period_start !== "string" || !/^\d{4}-\d{2}-01$/.test(b.period_start) || Number.isNaN(Date.parse(b.period_start)))) {
+    throw unprocessable("period_start must be a period's first day (YYYY-MM-01), or null");
+  }
+  const card = await creditCard(env, b.account_id as number);
+  const { patterns } = scope([{ ...card, hidden: 0 }]);
+  const all = (await env.DB.prepare(taggedRowsSql(1, patterns)).bind(card.id).all<TxnRow & { fee: number }>()).results;
+  const rows = all.filter((t) => t.hits);
+  const { product } = productFor(card, rows.map(tag));
+  const benefit = product?.benefits.find((x) => x.id === b.benefit_id);
+  if (!benefit) throw new HttpError(404, "this card has no such credit");
+  if (benefit.how !== "on_card" || benefit.after) throw unprocessable("only a credit Minty sees on the card can be moved");
+  if (!rows.some((t) => t.id === b.transaction_id)) throw new HttpError(404, "no such credit on this card");
+  if (!clear) {
+    const fee = all.filter((t) => t.fee).map((t) => t.date).sort()[0];
+    const anniversary = card.anniversary_month ?? (fee ? Number(fee.slice(5, 7)) : 1);
+    if (periodStart(b.period_start as string, benefit, anniversary) !== b.period_start) throw unprocessable(`${b.period_start} doesn't start a period of this credit`);
+  }
+  await (clear
+    ? env.DB.prepare("DELETE FROM benefit_credit_periods WHERE account_id = ? AND benefit_id = ? AND transaction_id = ?").bind(card.id, benefit.id, b.transaction_id)
+    : env.DB.prepare(`INSERT INTO benefit_credit_periods (account_id, benefit_id, transaction_id, period_start) VALUES (?, ?, ?, ?)
+                      ON CONFLICT (account_id, benefit_id, transaction_id) DO UPDATE SET period_start = excluded.period_start`)
+        .bind(card.id, benefit.id, b.transaction_id, b.period_start)).run();
+  return json({ account_id: card.id, benefit_id: benefit.id, transaction_id: b.transaction_id, period_start: clear ? null : b.period_start });
 }
 
 /** PUT /benefits/marks {account_id, benefit_id, period_start, used}: tick (or untick) a credit

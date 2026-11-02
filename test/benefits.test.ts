@@ -208,6 +208,14 @@ describe("matching credits", () => {
     expect(period(benefit(run([card(1, "Business Platinum Card®")], rows), 1, "dell"), "2026").status).toBe("open");
   });
 
+  it("a credit the household moved counts where they put it, and still pays back its purchase", () => {
+    const buy = txn(11, "2026-07-01", 98, "LULULEMON ATHLETICA"), cr = txn(11, "2026-07-02", -75, "Platinum Lululemon Credit");
+    const moved = run([card(11, "Platinum Card®")], [buy, cr], { moves: new Map([[`11|lululemon|${cr.id}`, "2026-04-01"]]) });
+    const l = benefit(moved, 11, "lululemon");
+    expect(l.periods.find((p) => p.start === "2026-04-01")!.used_cents).toBe(7500);
+    expect(l.periods.find((p) => p.start === "2026-07-01")).toMatchObject({ used_cents: 0, unpaid_cents: 0 });
+  });
+
   it("tracks Global Entry over 4 years, outside the yearly totals", () => {
     const g = benefit(run([card(1, "Business Platinum Card®")], [txn(1, "2024-03-01", -120, "Global Entry Fee Credit")],
       { dataSince: new Map([[1, "2023-01-01"]]) }), 1, "global_entry");
@@ -326,6 +334,46 @@ describe("PUT /benefits/cards/:id", () => {
     expect((await put("/benefits/cards/21", { hidden: true })).status).toBe(404);          // a checking account
     expect((await put("/benefits/cards/999", { hidden: true })).status).toBe(404);
     expect((await call("/benefits/cards/12", { method: "PUT", body: "nope" })).status).toBe(422);
+  });
+});
+
+describe("a credit for a purchase at the end of a period (ABC's Count in)", () => {
+  beforeEach(seed);
+  const lulu = async () => (await getJson("/benefits?year=2026")).body.cards.find((c: any) => c.account_id === 11).benefits.find((b: any) => b.id === "lululemon");
+  const add = (id: number, dollars: number, date: string, name: string, authorized: string | null = null) => env.DB.prepare(
+    `INSERT INTO transactions (id, owner, account_id, plaid_txn_id, amount_cents, date, authorized_date, name, pending) VALUES (?, 'me', 11, ?, ?, ?, ?, ?, 0)`)
+    .bind(id, `lulu-${id}`, Math.round(dollars * 100), date, authorized, name).run();
+
+  it("files a purchase by the day it was made (authorized_date), so its credit counts in that quarter", async () => {
+    await add(9001, 98, "2026-04-01", "LULULEMON ATHLETICA", "2026-03-31");        // bought on Q1's last day, posted on Q2's first
+    await add(9002, -75, "2026-04-03", "Platinum Lululemon Credit");
+    const b = await lulu();
+    expect(b.periods.find((p: any) => p.start === "2026-01-01")).toMatchObject({ used_cents: 7500, status: "used" });
+    expect(b.periods.find((p: any) => p.start === "2026-04-01").used_cents).toBe(0);
+  });
+
+  it("without it, a credit early in a quarter with the last one empty is flagged; Count in moves it, and back", async () => {
+    await add(9003, 98, "2026-07-01", "LULULEMON ATHLETICA");                         // no authorized_date (an older row)
+    await add(9004, -75, "2026-07-02", "Platinum Lululemon Credit");
+    let b = await lulu();
+    expect(b.credits).toEqual([expect.objectContaining({ id: 9004, period_start: "2026-07-01", moved: false, hint: true })]);
+    const move = { account_id: 11, benefit_id: "lululemon", transaction_id: 9004, period_start: "2026-04-01" };
+    expect((await put("/benefits/credits", move)).status).toBe(200);
+    b = await lulu();
+    expect(b.periods.find((p: any) => p.start === "2026-04-01")).toMatchObject({ used_cents: 7500, status: "used" });
+    expect(b.periods.find((p: any) => p.start === "2026-07-01")).toMatchObject({ used_cents: 0, unpaid_cents: 0 });   // its purchase is paid back, not "pending"
+    expect(b.credits[0]).toMatchObject({ period_start: "2026-04-01", moved: true, hint: false });
+    expect((await put("/benefits/credits", { ...move, period_start: null })).status).toBe(200);
+    expect((await lulu()).credits[0]).toMatchObject({ period_start: "2026-07-01", moved: false });
+  });
+
+  it("refuses a date that doesn't start a period, a transaction not on the card, a credit Minty can't see", async () => {
+    await add(9005, -75, "2026-07-02", "Platinum Lululemon Credit");
+    const base = { account_id: 11, benefit_id: "lululemon", transaction_id: 9005, period_start: "2026-04-01" };
+    expect((await put("/benefits/credits", { ...base, period_start: "2026-05-01" })).status).toBe(422);
+    expect((await put("/benefits/credits", { ...base, transaction_id: 1 })).status).toBe(404);
+    expect((await put("/benefits/credits", { ...base, benefit_id: "uber_cash" })).status).toBe(422);
+    expect((await put("/benefits/credits", { ...base, period_start: "April" })).status).toBe(422);
   });
 });
 

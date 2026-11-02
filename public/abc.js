@@ -84,7 +84,7 @@
     }
 
     html += `<div class="abc-foot">Benefit details checked ${esc(d.checked)} (Frequent Miler, Doctor of Credit, issuers' pages); each credit links to its source.
-      Credits count in the period of the purchase they paid back. For credits marked <span class="abc-guess" aria-hidden="true">*</span>, no statement credit
+      Credits count in the period of the purchase they paid back (the day it was made, when the bank says; else the day it posted). Under a credit, “Credits seen” lets you put one in another period. For credits marked <span class="abc-guess" aria-hidden="true">*</span>, no statement credit
       has posted yet, so Minty matches it by a best guess at its wording. Not tracked:<ul>${d.not_tracked.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>`;
     main.innerHTML = html;
   }
@@ -154,7 +154,24 @@
     }).join("");
     // one period this year: the bar says it all, unless it's ticked by hand
     const showSquares = b.periods.length > 1 || b.how === "outside";
-    return `<div class="ben">${left}<div><div class="now">${now}</div>${showSquares ? `<div class="squares" aria-label="${esc(b.name)} by period">${squares}</div>` : ""}</div></div>`;
+    return `<div class="ben">${left}<div><div class="now">${now}</div>${showSquares ? `<div class="squares" aria-label="${esc(b.name)} by period">${squares}</div>` : ""}${creditsHTML(c, b)}</div></div>`;
+  }
+
+  /** The credits a benefit saw, each with "Count in": the period it counts in, which the household
+   * can change for a credit that paid back a purchase in another period (bought on a quarter's last
+   * day, posted the next). A credit early in a period with the one before empty is flagged. */
+  function creditsHTML(c, b) {
+    const list = b.credits ?? [];
+    if (!list.length || b.periods.length < 2) return "";
+    const hinted = list.some(x => x.hint);
+    const opts = x => b.periods.filter(p => p.status !== "upcoming" || p.start === x.period_start)
+      .map(p => `<option value="${p.start}"${p.start === x.period_start ? " selected" : ""}>${esc(p.label)}</option>`).join("");
+    return `<details class="abc-credits"${hinted ? " open" : ""}><summary>Credits seen (${list.length})${hinted ? ` · <span class="abc-hint">one may belong to the period before</span>` : ""}</summary>
+      <ul>${list.map(x => `<li${x.hint ? ' class="hint"' : ""}><span class="d">${esc(day(x.date))}</span><span class="n">${money(-x.amount_cents)}</span>
+        <label>Count in <select data-credit="${c.account_id}|${esc(b.id)}|${x.id}" data-was="${x.period_start}" aria-label="Which period this credit counts in">${opts(x)}</select></label>
+        ${x.moved ? `<button type="button" class="abc-link" data-credit-reset="${c.account_id}|${esc(b.id)}|${x.id}">Minty's choice</button>` : ""}
+        ${x.hint ? `<small>Posted early in ${esc(b.periods.find(p => p.start === x.period_start)?.label ?? "this period")} with the period before unused: for a purchase made before it ended? Count it there.</small>` : ""}</li>`).join("")}</ul>
+    </details>`;
   }
 
   async function put(path, body) {
@@ -171,12 +188,20 @@
       if (await put(`/benefits/cards/${s.dataset.product}`, { product_id: v === "auto" || v === "" ? null : v })) load();
     } else if (s.dataset.month) {
       if (await put(`/benefits/cards/${s.dataset.month}`, { anniversary_month: Number(s.value) })) load();
+    } else if (s.dataset.credit) {
+      const [account_id, benefit_id, transaction_id] = s.dataset.credit.split("|");
+      s.disabled = true;
+      if (await put("/benefits/credits", { account_id: Number(account_id), benefit_id, transaction_id: Number(transaction_id), period_start: s.value })) load();
+      else { s.value = s.dataset.was; s.disabled = false; }
     }
   });
   main.addEventListener("click", async e => {
-    const b = e.target.closest("[data-mark],[data-hide],[data-unhide]");
+    const b = e.target.closest("[data-mark],[data-hide],[data-unhide],[data-credit-reset]");
     if (!b) return;
-    if (b.dataset.mark) {
+    if (b.dataset.creditReset) {
+      const [account_id, benefit_id, transaction_id] = b.dataset.creditReset.split("|");
+      if (await put("/benefits/credits", { account_id: Number(account_id), benefit_id, transaction_id: Number(transaction_id), period_start: null })) load();
+    } else if (b.dataset.mark) {
       const [account_id, benefit_id, period_start, used] = b.dataset.mark.split("|");
       b.disabled = true;
       if (await put("/benefits/marks", { account_id: Number(account_id), benefit_id, period_start, used: used === "1" })) load();

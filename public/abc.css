@@ -105,3 +105,16 @@ dialog.abc:focus { outline: none; }
   .abc .abc-top { padding-top: 14px; padding-bottom: 10px; }
   .abc header .sub { display: none; }               /* keep the pinned header to one line on a phone */
 }
+
+/* Credits seen, and Count in (abc.js creditsHTML) */
+.abc .abc-credits { margin-top: 6px; font-size: 12.5px; }
+.abc .abc-credits summary { cursor: pointer; color: var(--muted); }
+.abc .abc-credits .abc-hint { color: var(--pending-ink); }
+.abc .abc-credits ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.abc .abc-credits li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 4px 0; border-top: 1px dashed var(--hairline); }
+.abc .abc-credits li.hint { background: color-mix(in srgb, var(--pending-bg) 70%, transparent); border-radius: 6px; padding: 4px 6px; }
+.abc .abc-credits .d { color: var(--muted); min-width: 52px; }
+.abc .abc-credits .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+.abc .abc-credits label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.abc .abc-credits select { font: inherit; font-size: 12.5px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--hairline); background: var(--surface); color: var(--ink); }
+.abc .abc-credits small { flex-basis: 100%; color: var(--pending-ink); font-size: 12px; }
