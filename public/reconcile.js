@@ -17,7 +17,7 @@
   const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / DAY);
 
   /** rows: the selected transactions. Returns totals, by person and account, and the groups. */
-  function summarize(rows, { refundDays = 120, transferDays = 5 } = {}) {
+  function summarize(rows, { refundDays = 120, transferDays = 5, offBy = 0 } = {}) {
     const all = rows.map(t => ({ t, cents: Math.round(Number(t.amount) * 100), key: merchantKey(t) })).filter(x => x.cents !== 0);
     const out = all.filter(x => x.cents > 0), inn = all.filter(x => x.cents < 0);
     const sum = xs => xs.reduce((s, x) => s + Math.abs(x.cents), 0);
@@ -58,6 +58,17 @@
       const c = closest(r, byAmount.get(-r.cents) ?? [], c => c.key === r.key && days(c.t.date, r.t.date) >= 0 && days(c.t.date, r.t.date) <= refundDays);
       if (c) { used.add(c); used.add(r); refunds.push({ charge: c.t, refund: r.t, cents: c.cents, days: days(c.t.date, r.t.date) }); }
     }
+    // 1b. Refunded less a set amount (offBy, in cents: a cancellation or restocking fee the
+    //     household typed in): a refund from the same merchant, up to refundDays after a charge,
+    //     exactly that much short of it.
+    const lessFee = [];
+    if (offBy > 0) {
+      for (const r of [...inn].sort((a, b) => (a.t.date < b.t.date ? -1 : 1))) {
+        if (used.has(r) || !r.key) continue;
+        const c = closest(r, byAmount.get(-r.cents + offBy) ?? [], c => c.key === r.key && days(c.t.date, r.t.date) >= 0 && days(c.t.date, r.t.date) <= refundDays);
+        if (c) { used.add(c); used.add(r); lessFee.push({ charge: c.t, refund: r.t, cents: c.cents, refunded: -r.cents, fee: offBy, days: days(c.t.date, r.t.date) }); }
+      }
+    }
     // 2. A move between two of the household's accounts: the same amount out of one and into another,
     //    within transferDays, where both sides read like a payment or transfer (never pay).
     const transfers = [];
@@ -86,7 +97,7 @@
       totals,
       people: by(t => t.owner, t => t.owner),
       accounts: by(t => t.account_id, t => [t.institution_name, t.account_name].filter(Boolean).join(" · ") || "An account"),
-      refunds, transfers, partial, openCharges, openCredits,
+      refunds, lessFee, transfers, partial, openCharges, openCredits,
       openOut: openCharges.reduce((s, t) => s + Math.round(t.amount * 100), 0),
       openIn: -openCredits.reduce((s, t) => s + Math.round(t.amount * 100), 0),
     };
