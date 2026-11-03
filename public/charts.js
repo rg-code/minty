@@ -354,14 +354,24 @@
   /** A stat card's HTML: label, a change pill, the number, a caption and a sparkline. wire() then
    *  makes the number count up and the sparkline scrub (pointer, or the arrow keys).
    *  o: { label, value, fmt, delta, goodWhen: "up" | "down", deltaText, caption, trend: [numbers],
-   *       labels: [strings], dot (a colour), tag, attrs, cls, countUp, touch (scrub by touch too) } */
+   *       labels: [strings], dot (a colour), tag, attrs, cls, countUp, touch (scrub by touch too),
+   *       bars (a bar per point from 0, with trendTitle and fmtAxis for its scale; lastPartial: the last one is still filling) } */
   const STATS = new Map();
   function stat(o) {
     const id = `sc${++uid}`, tag = o.tag ?? "div";
     STATS.set(id, o);
     let spark = "";
     const v = o.trend ?? [];
-    if (v.length >= 2) {
+    if (v.length >= 2 && o.bars) {
+      // a bar per point from $0, with a title and the scale's top and bottom: amounts, not just a shape
+      const Hs = 44, top = ticks(0, Math.max(1, ...v)).at(-1), slot = 100 / v.length, ax = o.fmtAxis ?? o.fmt;
+      const rects = v.map((x, i) => { const h = Math.max(x > 0 ? 1.5 : 0, (Math.max(0, x) / top) * Hs);
+        return `<rect class="sc-bar${i === v.length - 1 && o.lastPartial ? " now" : ""}" x="${f1(i * slot + slot * 0.16)}" y="${f1(Hs - h)}" width="${f1(slot * 0.68)}" height="${f1(h)}"/>`; }).join("");
+      spark = `<div class="sc-spark sc-bars">${o.trendTitle ? `<span class="sc-tt">${esc(o.trendTitle)}</span>` : ""}
+        <div class="sc-plot"><span class="sc-ax top">${esc(ax(top))}</span><span class="sc-ax bot">${esc(ax(0))}</span>
+        <svg viewBox="0 0 100 ${Hs}" preserveAspectRatio="none" aria-hidden="true">${rects}</svg></div></div>`;
+      o._bars = true;
+    } else if (v.length >= 2) {
       const lo = Math.min(...v), hi = Math.max(...v), Hs = 44;
       const pts = v.map((x, i) => [(i / (v.length - 1)) * 100, 6 + (1 - (x - lo) / (hi - lo || 1)) * (Hs - 12)]);
       const d = monotone(pts), last = pts.at(-1);
@@ -386,20 +396,29 @@
       if (o.countUp !== false && Number.isFinite(o.value)) tween(1100, k => { valEl.textContent = o.fmt(o.value * k); });
       const sp = card.querySelector(".sc-spark");
       if (!sp) continue;
-      const cur = sp.querySelector(".sc-cur"), pt = sp.querySelector(".sc-pt"), n = o.trend.length;
+      const cur = sp.querySelector(".sc-cur"), pt = sp.querySelector(".sc-pt"), n = o.trend.length, bars = [...sp.querySelectorAll(".sc-bar")];
       let at = null;
       const show = i => {
-        if (i === null) { at = null; cur.hidden = pt.hidden = true; valEl.textContent = o.fmt(o.value); capEl.textContent = o.caption ?? ""; card.classList.remove("scrub"); return; }
+        if (i === null) {
+          at = null; if (cur) cur.hidden = pt.hidden = true; bars.forEach(r => r.classList.remove("on"));
+          valEl.textContent = o.fmt(o.value); capEl.textContent = o.caption ?? ""; card.classList.remove("scrub"); return;
+        }
         at = i = Math.max(0, Math.min(n - 1, i));
-        const [x, y] = o._pts[i];
-        cur.hidden = pt.hidden = false;
-        cur.style.left = pt.style.left = `${f1(x)}%`;
-        pt.style.top = `${f1(y)}%`;
+        if (o._bars) bars.forEach((r, j) => r.classList.toggle("on", j === i));
+        else {
+          const [x, y] = o._pts[i];
+          cur.hidden = pt.hidden = false;
+          cur.style.left = pt.style.left = `${f1(x)}%`;
+          pt.style.top = `${f1(y)}%`;
+        }
         valEl.textContent = o.fmt(o.trend[i]);
         capEl.textContent = o.labels?.[i] ?? "";
         card.classList.add("scrub");
       };
-      const idx = e => { const b = sp.getBoundingClientRect(); return Math.round(((e.clientX - b.left) / b.width) * (n - 1)); };
+      const idx = e => {
+        if (o._bars) { const b = sp.querySelector("svg").getBoundingClientRect(); return Math.floor(((e.clientX - b.left) / b.width) * n); }
+        const b = sp.getBoundingClientRect(); return Math.round(((e.clientX - b.left) / b.width) * (n - 1));
+      };
       card.addEventListener("pointermove", e => { if (e.pointerType !== "touch" || o.touch) show(idx(e)); });
       card.addEventListener("pointerleave", e => { if (e.pointerType !== "touch") show(null); });
       if (o.touch) { sp.style.touchAction = "pan-y"; card.addEventListener("pointerdown", e => { if (e.pointerType === "touch") show(idx(e)); }); }

@@ -615,6 +615,9 @@ function renderTotals(txns) {
       delta: pace !== null && prev > 0 && L - 1 > s.first ? pace / prev - 1 : null, goodWhen: "down",
       caption: `${pace !== null ? `On pace for ${money0(pace)}` : `${lastMonth}: ${money0(prev)}`} · in ${money0(s.income[L])}`,
       trend: s.spend.slice(from).map(c => c / 100), labels: summary.months.slice(from).map((m, i, a) => `Spent in ${monName(m)}${i === a.length - 1 ? " so far" : ""}`),
+      // a bar a month from $0 with its scale, so the card shows amounts and not only a shape
+      bars: true, lastPartial: true, trendTitle: `Last ${L - from + 1} months`,
+      fmtAxis: v => (v >= 1000 ? `$${Math.round(v / 100) / 10}k` : `$${Math.round(v)}`),
       tag: "button", attrs: `type="button" data-trend="${escapeAttr(k)}" aria-expanded="${trendKey === k}" title="${pace !== null && prev > 0 && L - 1 > s.first ? `On pace for ${money0(pace)} this month, against ${money0(prev)} in ${lastMonth}. ` : ""}Tap for the months and the categories"`,
       countUp: fresh,
     });

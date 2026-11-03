@@ -278,6 +278,14 @@ describe("static pages", () => {
     expect(await fetchText("/charts.js")).toContain('<div class="ia-label"></div>');
   });
 
+  it("the dashboard cards show a bar a month from $0, with a title and their scale", async () => {
+    const { html } = await page("/");
+    expect(html).toContain("bars: true, lastPartial: true, trendTitle: `Last ${L - from + 1} months`,");
+    const charts = await fetchText("/charts.js");
+    expect(charts).toContain('<span class="sc-ax top">');
+    expect(charts).toContain('<span class="sc-ax bot">');
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');

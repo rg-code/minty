@@ -43,6 +43,16 @@
 .sc-pt { width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; box-shadow: 0 0 0 2px var(--surface); }
 .sc-cur { position: absolute; top: 0; bottom: 0; border-left: 1px dashed color-mix(in srgb, var(--muted) 55%, transparent); }
 .sc-cur[hidden], .sc-pt[hidden] { display: none; }
+/* bars instead of a line (o.bars): a title, the scale's top and $0, a bar per month */
+.sc-spark.sc-bars { display: flex; flex-direction: column; gap: 3px; height: auto; margin: 10px 0 0; padding-bottom: 12px; }
+.sc-tt { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sc-plot { position: relative; flex: 1; min-height: 38px; }
+.sc-spark.sc-bars .sc-plot svg { position: absolute; top: 0; bottom: 0; left: 30px; width: calc(100% - 30px); height: 100%; }
+.sc-ax { position: absolute; left: 0; font-size: 9.5px; line-height: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sc-ax.top { top: 0; } .sc-ax.bot { bottom: 0; }
+.sc-bar { fill: currentColor; opacity: .85; transition: opacity .15s; }
+.sc-bar.now { opacity: .4; }
+.sc.scrub .sc-bar:not(.on) { opacity: .3; }
 .sc.spend { --sc-color: var(--c-spend); } .sc.income { --sc-color: var(--in); } .sc.rate { --sc-color: var(--accent); }
 
 /* segmented control with a sliding thumb */
