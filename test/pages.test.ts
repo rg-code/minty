@@ -272,6 +272,12 @@ describe("static pages", () => {
     expect(abc).toContain('put("/benefits/credits", {');
   });
 
+  it("the dashboard's area chart says what it shows, for the range picked", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('`${what} each day · last 30 days` : `${what} each month');
+    expect(await fetchText("/charts.js")).toContain('<div class="ia-label"></div>');
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');

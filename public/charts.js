@@ -128,13 +128,14 @@
 
   /** An interactive area chart: range buttons that morph the line, and a scrubbing tooltip.
    *  o: { title, ranges: [{ key, label, points: [{ label, axis, value }] }], range, fmt, fmtAxis,
-   *       head(i | null, range) → { value, delta, good, deltaText, caption }, onPoint(i | null, range), onRange(range), height } */
+   *       head(i | null, range) → { value, delta, good, deltaText, caption }, onPoint(i | null, range), onRange(range),
+   *       plotLabel(range) → what the plot shows, height } */
   function area(el, o) {
     const id = `ia${++uid}`, H = o.height ?? 230, P = { t: 14, r: 10, b: 24, l: 46 }, N = 72;
     const fmtAxis = o.fmtAxis ?? o.fmt;
     el.classList.add("ia");
     el.innerHTML = `<div class="ia-head"><div class="ia-title">${esc(o.title)}</div><div class="ia-value num"></div><div class="ia-sub"></div></div>
-      <div class="ia-plot"><svg class="ia-svg" height="${H}" tabindex="0" role="img" aria-label="${esc(o.title)}: use the arrow keys to read each point">
+      <div class="ia-plot"><div class="ia-label"></div><svg class="ia-svg" height="${H}" tabindex="0" role="img" aria-label="${esc(o.title)}: use the arrow keys to read each point">
         <defs><linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".2"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient>
         <clipPath id="${id}c"><rect x="0" y="0" height="${H}" width="0"/></clipPath></defs>
         <g class="ia-grid"></g><g clip-path="url(#${id}c)"><path class="ia-area" fill="url(#${id}g)"/><path class="ia-line"/></g>
@@ -168,6 +169,8 @@
       gEl.innerHTML = g;
       gEl.classList.remove("in"); void gEl.getBoundingClientRect(); gEl.classList.add("in");
     }
+    // a small label over the plot saying what it shows ("Spent each month · last 12 months")
+    const label = () => { const t = o.plotLabel?.(cur) ?? ""; const l = $(".ia-label"); l.textContent = t; l.hidden = !t; };
     function head(i) {
       const h = o.head(i, cur) ?? {};
       $(".ia-value").textContent = h.value === undefined ? "" : o.fmt(h.value);
@@ -208,12 +211,12 @@
       const from = drawn.slice(), to = R[key].ny;
       stop();
       stop = tween(550, t => { for (let k = 0; k < N; k++) drawn[k] = from[k] + (to[k] - from[k]) * t; paths(); }, easeInOut);
-      grid(); show(null);
+      grid(); show(null); label();
       o.onRange?.(key);
     }
     size();
     if (!W) { W = 320; svg.setAttribute("width", W); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); $(".ia-hit").setAttribute("width", W); }
-    drawn = R[cur].ny.slice(); paths(); grid(); head(null);
+    drawn = R[cur].ny.slice(); paths(); grid(); head(null); label();
     const placeThumb = segpill($(".ia-ranges"));
     tween(1100, t => clip.setAttribute("width", f1(t * W)), easeInOut);
     el.querySelector(".ia-ranges").addEventListener("click", e => { const b = e.target.closest("[data-r]"); if (b) setRange(b.dataset.r); });
