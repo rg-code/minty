@@ -184,15 +184,22 @@ const ownerOf = (config: Config, url: URL) => {
 };
 const add = (o: Record<string, number>, k: string, v: number) => { o[k] = (o[k] ?? 0) + v; };
 
-/** GET /audit/daily?from=&to=&owner=: spending by day and by category, for the dashboard's 1M
- * range (the stored totals are by month). The range's rows only, by the date index. */
+/** GET /audit/daily?from=&to=&owner=[&split=owner]: spending by day and by category, for the
+ * dashboard's 1M range and its cards' running totals (the stored totals are by month). The range's
+ * rows only, by the date index. */
 export async function daily(env: Env, config: Config, url: URL): Promise<Response> {
   const { from, to } = rangeOf(url, 62), owner = ownerOf(config, url);
   const maps = await accountMaps(env);
   const { results } = await env.DB.prepare(RANGE_ROWS).bind("0000-01-01", ...maps, from, to).all<Classified>();
   const days: Record<string, Record<string, number>> = {};
-  for (const r of results) if (r.bucket === "spend" && (owner === null || r.owner === owner)) add((days[r.date] ??= {}), r.category, r.amount_cents);
-  return json({ from, to, owner, days });
+  // split=owner: each person's spending by day too (the dashboard's cards, one request for all)
+  const people: Record<string, Record<string, number>> | undefined = url.searchParams.get("split") === "owner" ? {} : undefined;
+  for (const r of results) {
+    if (r.bucket !== "spend") continue;
+    if (people) add((people[r.owner] ??= {}), r.date, r.amount_cents);
+    if (owner === null || r.owner === owner) add((days[r.date] ??= {}), r.category, r.amount_cents);
+  }
+  return json({ from, to, owner, days, ...(people ? { people } : {}) });
 }
 
 /** GET /audit/left-out?from=&to=&owner=[&by=day][&item=kind:value]: the left-out transactions

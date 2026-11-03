@@ -278,12 +278,12 @@ describe("static pages", () => {
     expect(await fetchText("/charts.js")).toContain('<div class="ia-label"></div>');
   });
 
-  it("the dashboard cards show a bar a month from $0, with a title and their scale", async () => {
+  it("the dashboard cards show this month's running total against this year's average month", async () => {
     const { html } = await page("/");
-    expect(html).toContain("bars: true, lastPartial: true, trendTitle: `Last ${L - from + 1} months`,");
+    expect(html).toContain("pace: cardDays ? paceOf(k, s, L, day, dim) : null,");
+    expect(html).toMatch(/split: "owner"/);                                               // one request for every card's days
     const charts = await fetchText("/charts.js");
-    expect(charts).toContain('<span class="sc-ax top">');
-    expect(charts).toContain('<span class="sc-ax bot">');
+    expect(charts).toContain('<path class="sc-avgline"');
   });
 
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {

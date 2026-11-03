@@ -61,5 +61,8 @@ describe("GET /audit/daily", () => {
     const { body } = await getJson<any>("/audit/daily?from=2026-09-01&to=2026-09-30");
     expect(body.days).toEqual({ "2026-09-13": { FOOD_AND_DRINK: 1200 } });
     expect((await getJson<any>("/audit/daily?from=2026-01-01&to=2026-09-30")).status).toBe(422);     // at most about two months
+    await txn("card", "2026-09-14", 800, "TRAVEL", "Bus", [], "sam");
+    expect((await getJson<any>("/audit/daily?from=2026-09-01&to=2026-09-30&split=owner")).body.people)
+      .toEqual({ me: { "2026-09-13": 1200 }, sam: { "2026-09-14": 800 } });                         // each person by day, one request
   });
 });
