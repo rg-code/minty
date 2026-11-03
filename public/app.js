@@ -733,6 +733,10 @@ function renderTrends(fresh) {
     chartEl.innerHTML = "";
     trendChart = C.area(chartEl, {
       title: `${who} · ${left ? "left-out spending" : "spending"}`, ranges, range: rk, fmt: v => fmt0.format(v),
+      plotLabel: key => {
+        const n = ranges.find(x => x.key === key).points.length, what = left ? "Left-out spending" : "Spent";
+        return key === "1M" ? `${what} each day · last 30 days` : `${what} each month · ${n === 1 ? "this month" : `last ${n} months`}`;
+      },
       fmtAxis: v => (Math.abs(v) >= 1000 ? `$${Math.round(v / 100) / 10}k` : `$${Math.round(v)}`),
       head: (i, key) => {
         const pts = ranges.find(x => x.key === key).points;
