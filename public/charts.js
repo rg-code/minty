@@ -355,14 +355,34 @@
    *  makes the number count up and the sparkline scrub (pointer, or the arrow keys).
    *  o: { label, value, fmt, delta, goodWhen: "up" | "down", deltaText, caption, trend: [numbers],
    *       labels: [strings], dot (a colour), tag, attrs, cls, countUp, touch (scrub by touch too),
-   *       bars (a bar per point from 0, with trendTitle and fmtAxis for its scale; lastPartial: the last one is still filling) } */
+   *       bars (a bar per point from 0, with trendTitle and fmtAxis for its scale; lastPartial: the last one is still filling),
+   *       pace: { days: [running total by day, to today], dim (days in the month), avg, avgLabel, title, labels } } */
   const STATS = new Map();
   function stat(o) {
     const id = `sc${++uid}`, tag = o.tag ?? "div";
     STATS.set(id, o);
     let spark = "";
     const v = o.trend ?? [];
-    if (v.length >= 2 && o.bars) {
+    if (o.pace) {
+      // this month's running total by day (solid, to today) against an average month spent evenly
+      // (dashed, from $0 to the average by the month's end): ahead of it or behind, at a glance
+      const P = o.pace, Hs = 44, dim = P.dim, n = P.days.length;
+      const hi = Math.max(1, P.avg ?? 0, ...P.days) * 1.1;
+      const x = i => (dim <= 1 ? 0 : (i / (dim - 1)) * 100), y = val => Hs - 2 - (val / hi) * (Hs - 6);
+      const pts = P.days.map((val, i) => [x(i), y(val)]);
+      const line = pts.length > 1 ? monotone(pts) : "";
+      const avgY = P.avg ? y(P.avg) : null, last = pts.at(-1) ?? [0, y(0)];
+      spark = `<div class="sc-spark sc-pace">${P.title ? `<span class="sc-tt">${esc(P.title)}</span>` : ""}
+        <div class="sc-plot"><svg viewBox="0 0 100 ${Hs}" preserveAspectRatio="none" aria-hidden="true">
+          ${avgY !== null ? `<path class="sc-avgline" d="M0,${f1(y(0))}L100,${f1(avgY)}" vector-effect="non-scaling-stroke"/>` : ""}
+          ${line ? `<path class="sc-area" d="${line}L${f1(last[0])},${Hs}L0,${Hs}Z" fill="currentColor" fill-opacity=".14"/><path class="sc-line" d="${line}" vector-effect="non-scaling-stroke"/>` : ""}</svg>
+          <i class="sc-last" style="left:${f1(last[0])}%;top:${f1((last[1] / Hs) * 100)}%"></i><i class="sc-cur" hidden></i><i class="sc-pt" hidden></i>
+          ${avgY !== null && P.avgLabel ? `<span class="sc-avg" style="top:${f1((avgY / Hs) * 100)}%">${esc(P.avgLabel)}</span>` : ""}</div>
+        <div class="sc-days"><span>1</span>${n > 1 && n < dim && x(n - 1) > 18 && x(n - 1) < 82 ? `<span style="left:${f1(x(n - 1))}%">today</span>` : ""}<span class="end">${dim}</span></div></div>`;
+      o._pts = pts.map(([px, py]) => [px, (py / Hs) * 100]);
+      o._pace = dim;
+      o.trend = P.days; o.labels = P.labels;
+    } else if (v.length >= 2 && o.bars) {
       // a bar per point from $0, with a title and the scale's top and bottom: amounts, not just a shape
       const Hs = 44, top = ticks(0, Math.max(1, ...v)).at(-1), slot = 100 / v.length, ax = o.fmtAxis ?? o.fmt;
       const rects = v.map((x, i) => { const h = Math.max(x > 0 ? 1.5 : 0, (Math.max(0, x) / top) * Hs);
@@ -382,7 +402,7 @@
       o._pts = pts.map(([x, y]) => [x, (y / Hs) * 100]);
     }
     const good = o.delta !== null && o.delta !== undefined && isGood(o.delta, o.goodWhen ?? "up");
-    return `<${tag} class="sc${o.cls ? ` ${esc(o.cls)}` : ""}" data-sc="${id}"${o.attrs ? ` ${o.attrs}` : ""}${tag === "div" && v.length >= 2 ? ' tabindex="0"' : ""}>
+    return `<${tag} class="sc${o.cls ? ` ${esc(o.cls)}` : ""}" data-sc="${id}"${o.attrs ? ` ${o.attrs}` : ""}${tag === "div" && (v.length >= 2 || o.pace) ? ' tabindex="0"' : ""}>
       <span class="sc-top"><span class="sc-label">${o.dot ? `<i class="sc-dot" style="background:${esc(o.dot)}"></i>` : ""}${esc(o.label)}</span>${deltaHtml(o.delta, good, o.deltaText)}</span>
       <span class="sc-value num">${esc(o.fmt(o.value))}</span>
       <span class="sc-cap">${esc(o.caption ?? "")}</span>${spark}</${tag}>`;
@@ -417,6 +437,7 @@
       };
       const idx = e => {
         if (o._bars) { const b = sp.querySelector("svg").getBoundingClientRect(); return Math.floor(((e.clientX - b.left) / b.width) * n); }
+        if (o._pace) { const b = sp.querySelector("svg").getBoundingClientRect(); return Math.min(n - 1, Math.round(((e.clientX - b.left) / b.width) * (o._pace - 1))); }
         const b = sp.getBoundingClientRect(); return Math.round(((e.clientX - b.left) / b.width) * (n - 1));
       };
       card.addEventListener("pointermove", e => { if (e.pointerType !== "touch" || o.touch) show(idx(e)); });

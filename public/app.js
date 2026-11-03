@@ -526,11 +526,15 @@ const catName = c => CAT[c] ?? titleCase(c);
 const monName = (m, opts = { month: "short", year: "numeric" }) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString(undefined, { ...opts, timeZone: "UTC" });
 const filtersOn = () => !!(state.q || state.start || state.end || state.tags.length || state.categories.length || state.banks.length || state.accounts.length || state.cards.length);
 
+let cardDays = null;                   // this month's spending by day, per person (GET /audit/daily split=owner): the cards' running totals
 async function loadSummary() {
   if (offline) return;
   try { const r = await fetch("/audit/summary"); summary = r.ok ? await r.json() : null; } catch { summary = null; }
-  trendSig = "";
+  trendSig = ""; cardDays = null;
   renderTotals(loaded);
+  if (!summary) return;
+  const d = await trendFetch(`/audit/daily?${new URLSearchParams({ from: `${summary.today.slice(0, 7)}-01`, to: summary.today, split: "owner" })}`);
+  if (d?.people) { cardDays = d.people; renderTotals(loaded); }
 }
 
 /** One person's (or, for "", everyone's) money in, spending and spending by category, by month. */
@@ -614,10 +618,8 @@ function renderTotals(txns) {
       // against last month only when it's a whole one (not the month the history starts in, usually partial)
       delta: pace !== null && prev > 0 && L - 1 > s.first ? pace / prev - 1 : null, goodWhen: "down",
       caption: `${pace !== null ? `On pace for ${money0(pace)}` : `${lastMonth}: ${money0(prev)}`} · in ${money0(s.income[L])}`,
-      trend: s.spend.slice(from).map(c => c / 100), labels: summary.months.slice(from).map((m, i, a) => `Spent in ${monName(m)}${i === a.length - 1 ? " so far" : ""}`),
-      // a bar a month from $0 with its scale, so the card shows amounts and not only a shape
-      bars: true, lastPartial: true, trendTitle: `Last ${L - from + 1} months`,
-      fmtAxis: v => (v >= 1000 ? `$${Math.round(v / 100) / 10}k` : `$${Math.round(v)}`),
+      // this month's running total by day against an average month this year (spent evenly), dashed
+      pace: cardDays ? paceOf(k, s, L, day, dim) : null,
       tag: "button", attrs: `type="button" data-trend="${escapeAttr(k)}" aria-expanded="${trendKey === k}" title="${pace !== null && prev > 0 && L - 1 > s.first ? `On pace for ${money0(pace)} this month, against ${money0(prev)} in ${lastMonth}. ` : ""}Tap for the months and the categories"`,
       countUp: fresh,
     });
@@ -627,6 +629,23 @@ function renderTotals(txns) {
   trendSig = sig;
 }
 const shortDate = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+const kDollars = v => (v >= 1000 ? `$${Math.round(v / 100) / 10}k` : `$${Math.round(v)}`);
+/** A card's running total this month, day by day to today, and the average month to hold it
+ * against: this year's full months (in January, the last 12), from the stored monthly totals. */
+function paceOf(k, s, L, day, dim) {
+  const month = summary.today.slice(0, 7), year = month.slice(0, 4);
+  const byDay = {};
+  for (const [owner, days] of Object.entries(cardDays)) if (!k || owner === k) for (const [d, c] of Object.entries(days)) byDay[d] = (byDay[d] ?? 0) + c;
+  let run = 0;
+  const days = Array.from({ length: day }, (_, i) => (run += byDay[`${month}-${String(i + 1).padStart(2, "0")}`] ?? 0) / 100);
+  const first = Math.max(0, s.first), full = [...Array(L).keys()].filter(i => i >= first);
+  const ytd = full.filter(i => summary.months[i].startsWith(year)), use = ytd.length ? ytd : full.slice(-12);
+  const avg = use.length ? use.reduce((t, i) => t + s.spend[i], 0) / use.length / 100 : null;
+  const mon = monName(month, { month: "short" });
+  return { days, dim, avg, avgLabel: avg !== null ? `avg ${kDollars(avg)}` : "",
+           title: avg !== null ? `${mon} vs ${ytd.length ? year : "12-mo"} avg` : `${mon} so far`,
+           labels: days.map((_, i) => `Spent by ${mon} ${i + 1}`) };
+}
 
 /** The open card's chart and donut. Counted: spending by month from the stored totals (6M, 1Y,
  * 2Y) or by day for the last 30 days (1M, GET /audit/daily), and by category. Left out (when

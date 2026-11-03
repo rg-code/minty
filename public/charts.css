@@ -43,6 +43,16 @@
 .sc-pt { width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; box-shadow: 0 0 0 2px var(--surface); }
 .sc-cur { position: absolute; top: 0; bottom: 0; border-left: 1px dashed color-mix(in srgb, var(--muted) 55%, transparent); }
 .sc-cur[hidden], .sc-pt[hidden] { display: none; }
+/* this month against an average month (o.pace): running total, dashed average, the days under it */
+.sc-spark.sc-pace { display: flex; flex-direction: column; gap: 3px; height: auto; margin: 10px 0 0; padding-bottom: 2px; }
+.sc-spark.sc-pace .sc-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; animation: none; }
+.sc-avgline { fill: none; stroke: color-mix(in srgb, var(--muted) 65%, transparent); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.sc-avg { position: absolute; right: 0; transform: translateY(-115%); font-size: 9.5px; color: var(--muted); white-space: nowrap; pointer-events: none; }
+.sc-days { position: relative; height: 11px; font-size: 9.5px; color: var(--muted); }
+.sc-days span { position: absolute; top: 0; left: 0; transform: translateX(-50%); }
+.sc-days span:first-child { transform: none; }
+.sc-days span.end { left: auto; right: 0; transform: none; }
+.sc-pace .sc-last { margin-left: -3.5px; }
 /* bars instead of a line (o.bars): a title, the scale's top and $0, a bar per month */
 .sc-spark.sc-bars { display: flex; flex-direction: column; gap: 3px; height: auto; margin: 10px 0 0; padding-bottom: 12px; }
 .sc-tt { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
