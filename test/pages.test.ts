@@ -286,6 +286,13 @@ describe("static pages", () => {
     expect(charts).toContain('<path class="sc-avgline"');
   });
 
+  it("the Select Summary has an Off by box: refunds short by a set amount, like a cancellation fee", async () => {
+    const { html } = await page("/");
+    expect(html).toContain('<input id="spOffBy" type="text" inputmode="decimal"');
+    expect(html).toContain("R.summarize(rows, { offBy: sumOffBy })");
+    expect(await fetchText("/reconcile.js")).toContain("const lessFee = [];");
+  });
+
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {
     const js = await fetchText("/swipe.js");
     expect(js).toContain('new CustomEvent("minty:pullrefresh"');

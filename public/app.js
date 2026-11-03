@@ -1424,12 +1424,19 @@ function breakdownHtml(rows) {
   </section>`;
 }
 let breakdownData = null;
+let sumOffBy = 0, offByTimer;                  // the Summary's "Off by", in cents
+document.getElementById("selPanel").addEventListener("input", e => {
+  if (e.target.id !== "spOffBy") return;
+  const v = Number(String(e.target.value).replace(/[$,\s]/g, ""));
+  clearTimeout(offByTimer);
+  offByTimer = setTimeout(() => { sumOffBy = Number.isFinite(v) && v > 0 ? Math.round(v * 100) : 0; renderSelSummary(); }, 300);
+});
 selSumBtn.addEventListener("click", () => setSumOpen(selPanel.hidden));
 function renderSelSummary() {
   const rows = loaded.filter(t => selected.has(t.id)), R = window.MintyReconcile;
   const sumEl = document.getElementById("selSum");
   if (!R || !rows.length) { sumEl.textContent = ""; selPanel.innerHTML = rows.length ? "" : `<p class="sp-more">Select some transactions to see their totals.</p>`; return; }
-  const s = R.summarize(rows), T = s.totals;
+  const s = R.summarize(rows, { offBy: sumOffBy }), T = s.totals;
   sumEl.innerHTML = `Out <b>${cents(T.out)}</b> (${T.outN}) · In <b>${cents(T.in)}</b> (${T.inN}) · Net <b>${outIn(T.net)}</b>`;
   if (selPanel.hidden) return;
   const name = t => escapeHtml(t.merchant_name || t.name || "—");
@@ -1438,7 +1445,7 @@ function renderSelSummary() {
   const where = t => escapeHtml([t.institution_name, t.account_name].filter(Boolean).join(" · "));
   const MAX = 40, more = n => (n > MAX ? `<div class="sp-more">and ${(n - MAX).toLocaleString()} more</div>` : "");
   sumGroups = {
-    refunds: s.refunds.flatMap(p => [p.charge.id, p.refund.id]), transfers: s.transfers.flatMap(p => [p.from.id, p.to.id]),
+    refunds: s.refunds.flatMap(p => [p.charge.id, p.refund.id]), lessFee: s.lessFee.flatMap(p => [p.charge.id, p.refund.id]), transfers: s.transfers.flatMap(p => [p.from.id, p.to.id]),
     partial: s.partial.flatMap(g => g.rows.map(t => t.id)), openCharges: s.openCharges.map(t => t.id), openCredits: s.openCredits.map(t => t.id),
     open: [...s.openCharges, ...s.openCredits, ...s.partial.flatMap(g => g.rows)].map(t => t.id),
   };
@@ -1458,6 +1465,14 @@ function renderSelSummary() {
   html += sec("Refunded, exactly", s.refunds.length ? `${s.refunds.length} pair${s.refunds.length === 1 ? "" : "s"} · ${cents(s.refunds.reduce((t, p) => t + p.cents, 0))}` : "", "refunds", s.refunds.length,
     `<ul class="sp-list">${s.refunds.slice(0, MAX).map(p => `<li><span class="m">${name(p.charge)}</span>${amt(p.charge)}<span class="d">${day(p.charge.date)}</span>→${amt(p.refund)}<span class="d">${day(p.refund.date)}</span><span class="r">${p.days} day${p.days === 1 ? "" : "s"} later</span></li>`).join("")}</ul>${more(s.refunds.length)}`,
     "A charge and a refund of the same amount from the same merchant, up to 120 days later.");
+  // Refunded less a fee: the household says how much (a cancellation or restocking fee), and a
+  // refund from the same merchant that came back exactly that much short pairs with its charge.
+  const offVal = sumOffBy ? (sumOffBy / 100).toFixed(2) : "";
+  html += `<section class="sp-sec"><h4>Refunded less a fee${s.lessFee.length ? ` <em>${s.lessFee.length} pair${s.lessFee.length === 1 ? "" : "s"} · ${cents(s.lessFee.reduce((t, p) => t + p.fee, 0))} kept</em>` : ""}${only("lessFee", s.lessFee.length)}</h4>
+    <p>A refund that came back short by a set amount, like a cancellation fee. <label class="sp-off">Off by $ <input id="spOffBy" type="text" inputmode="decimal" autocomplete="off" value="${escapeAttr(offVal)}" placeholder="25.00" maxlength="10" aria-label="How much the refund was short by"></label></p>
+    ${s.lessFee.length ? `<ul class="sp-list">${s.lessFee.slice(0, MAX).map(p => `<li><span class="m">${name(p.charge)}</span>${amt(p.charge)}<span class="d">${day(p.charge.date)}</span>→${amt(p.refund)}<span class="d">${day(p.refund.date)}</span><span class="r">${cents(p.fee)} kept · ${p.days} day${p.days === 1 ? "" : "s"} later</span></li>`).join("")}</ul>${more(s.lessFee.length)}`
+      : sumOffBy ? `<p>No refund in the selection is exactly ${cents(sumOffBy)} short of a charge from the same merchant.</p>` : ""}
+  </section>`;
   html += sec("Moved between your accounts", s.transfers.length ? `${s.transfers.length} · ${cents(s.transfers.reduce((t, p) => t + p.cents, 0))}` : "", "transfers", s.transfers.length,
     `<ul class="sp-list">${s.transfers.slice(0, MAX).map(p => `<li><span class="m">${where(p.from)}</span>${amt(p.from)}<span class="d">${day(p.from.date)}</span>→<span class="m">${where(p.to)}</span>${amt(p.to)}<span class="r">${day(p.to.date)}</span></li>`).join("")}</ul>${more(s.transfers.length)}`,
     "The same amount out of one account and into another within 5 days, like a card payment. Both sides balance.");
@@ -1470,8 +1485,9 @@ function renderSelSummary() {
     `<ul class="sp-list">${s.openCredits.slice(0, MAX).map(t => `<li><span class="m">${name(t)}</span>${amt(t)}<span class="r">${day(t.date)} · ${where(t)}</span></li>`).join("")}</ul>${more(s.openCredits.length)}`,
     "Pay, interest, or a refund whose charge isn't selected (it may be older, or on another page).");
   if (sumGroups.open.length && sumGroups.open.length < rows.length) html += `<p class="sp-more"><button type="button" class="sellink" data-only="open">Select only what's not balanced</button> (${sumGroups.open.length.toLocaleString()}), then tag it with the bar.</p>`;
-  const top = selPanel.scrollTop;
+  const top = selPanel.scrollTop, typing = document.activeElement?.id === "spOffBy" ? document.activeElement.selectionStart : null;
   selPanel.innerHTML = html;
+  if (typing !== null) { const box = document.getElementById("spOffBy"); box.focus(); box.setSelectionRange(typing, typing); }   // keep typing
   // the breakdown's chart, and its switches' sliding thumbs
   const C = window.MintyCharts, chart = selPanel.querySelector(".sp-chart");
   selPanel.querySelectorAll(".sp-seg").forEach(g => C?.segpill(g));

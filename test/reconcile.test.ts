@@ -66,6 +66,27 @@ describe("merchantKey and csv", () => {
   });
 });
 
+describe("refunded less a fee (Off by)", () => {
+  it("pairs a charge with a refund from the same merchant exactly that much short, and takes them out of the rest", () => {
+    const stay = tx(200, "2026-10-01", "Marriott Downtown"), back = tx(-175, "2026-10-05", "MARRIOTT DOWNTOWN");
+    const other = tx(90, "2026-10-02", "Hilton"), otherBack = tx(-40, "2026-10-09", "Hilton");       // $50 short: a different fee
+    const none = R.summarize([stay, back, other, otherBack]);
+    expect(none.lessFee).toEqual([]);
+    expect(none.partial).toHaveLength(2);                                   // without Off by: both refunded in part
+    const s = R.summarize([stay, back, other, otherBack], { offBy: 2500 });
+    expect(s.lessFee).toEqual([expect.objectContaining({ charge: stay, refund: back, cents: 20000, refunded: 17500, fee: 2500, days: 4 })]);
+    expect(s.partial.map((g: any) => g.name)).toEqual(["Hilton"]);          // the $25 pair isn't partial or open any more
+    expect(s.openCharges).toEqual([]);
+  });
+
+  it("never pairs a refund before its charge, another merchant's, or one past 120 days", () => {
+    const early = [tx(-75, "2026-10-01", "Delta"), tx(100, "2026-10-03", "Delta")];
+    const elsewhere = [tx(100, "2026-10-01", "Delta"), tx(-75, "2026-10-03", "United")];
+    const late = [tx(100, "2026-01-01", "Delta"), tx(-75, "2026-06-01", "Delta")];
+    for (const rows of [early, elsewhere, late]) expect(R.summarize(rows, { offBy: 2500 }).lessFee).toEqual([]);
+  });
+});
+
 describe("breakdown", () => {
   const rows = [
     tx(10, "2026-09-03", "A", { tags: ["sync"], account_id: 1 }),
