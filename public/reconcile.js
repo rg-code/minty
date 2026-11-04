@@ -69,6 +69,37 @@
         if (c) { used.add(c); used.add(r); lessFee.push({ charge: c.t, refund: r.t, cents: c.cents, refunded: -r.cents, fee: offBy, days: days(c.t.date, r.t.date) }); }
       }
     }
+    // 1c. Changed, then refunded: an original charge, then a change at the same merchant (an
+    //     upgrade, another charge; or a downgrade, a partial refund), then a refund of the rest,
+    //     all within refundDays of the original, adding up to nothing (or, with offBy, to that fee
+    //     kept): $200 + $50 upgrade − $250, or $200 − $50 downgrade − $150.
+    const chains = [];
+    const byKey = new Map();
+    for (const x of all) if (!used.has(x) && x.key) (byKey.get(x.key) ?? byKey.set(x.key, []).get(x.key)).push(x);
+    for (const xs of byKey.values()) {
+      if (xs.length < 3 || xs.length > 80) continue;                         // a merchant's few rows (a big one isn't a booking)
+      xs.sort((a, b) => (a.t.date === b.t.date ? a.t.id - b.t.id : a.t.date < b.t.date ? -1 : 1));
+      for (let k = 2; k < xs.length; k++) {                                    // the final refund
+        const r = xs[k];
+        if (r.cents >= 0 || used.has(r)) continue;
+        let found = null;
+        for (let i = 0; i < k - 1 && !found; i++) {                            // the original charge
+          const a = xs[i];
+          if (a.cents <= 0 || used.has(a) || days(a.t.date, r.t.date) > refundDays) continue;
+          for (let j = i + 1; j < k; j++) {                                    // the change between them
+            const m = xs[j];
+            if (used.has(m) || a.cents + m.cents + r.cents !== offBy) continue;
+            if (m.cents < 0 && -m.cents >= a.cents) continue;                  // a downgrade refunds part, not all
+            found = { a, m, r }; break;
+          }
+        }
+        if (found) {
+          const { a, m, r: z } = found;
+          used.add(a); used.add(m); used.add(z);
+          chains.push({ charge: a.t, change: m.t, refund: z.t, kind: m.cents > 0 ? "upgrade" : "downgrade", fee: offBy, days: days(a.t.date, z.t.date) });
+        }
+      }
+    }
     // 2. A move between two of the household's accounts: the same amount out of one and into another,
     //    within transferDays, where both sides read like a payment or transfer (never pay).
     const transfers = [];
@@ -97,7 +128,7 @@
       totals,
       people: by(t => t.owner, t => t.owner),
       accounts: by(t => t.account_id, t => [t.institution_name, t.account_name].filter(Boolean).join(" · ") || "An account"),
-      refunds, lessFee, transfers, partial, openCharges, openCredits,
+      refunds, lessFee, chains, transfers, partial, openCharges, openCredits,
       openOut: openCharges.reduce((s, t) => s + Math.round(t.amount * 100), 0),
       openIn: -openCredits.reduce((s, t) => s + Math.round(t.amount * 100), 0),
     };

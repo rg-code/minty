@@ -177,7 +177,7 @@ describe("D1 rows read by the audit's cron step (docs/cfa.md, C1)", () => {
     expect(await refreshTotals({ ...E, DB: quiet.db })).toEqual({ from: null, full: false });
     expect(quiet.tally.rows).toBeLessThanOrEqual(12);
     const snap = counting(env.DB);
-    await snapshotBalances({ ...E, DB: snap.db });
+    await snapshotBalances({ ...E, DB: snap.db }, new Date("2026-10-15T12:00:00Z"));   // midday: the first run after midnight also thins old snapshots
     expect(snap.tally.rows).toBeLessThanOrEqual(200);              // one row per account, plus each one's snapshot by its key
   });
 
