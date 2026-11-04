@@ -291,6 +291,8 @@ describe("static pages", () => {
     expect(html).toContain('<input id="spOffBy" type="text" inputmode="decimal"');
     expect(html).toContain("R.summarize(rows, { offBy: sumOffBy })");
     expect(await fetchText("/reconcile.js")).toContain("const lessFee = [];");
+    expect(await fetchText("/reconcile.js")).toContain("const chains = [];");               // changed (up or down), then refunded
+    expect(html).toContain("chains: s.chains.flatMap(c => [c.charge.id, c.change.id, c.refund.id])");
   });
 
   it("pull to refresh asks for a sync like the logo, and never syncs itself", async () => {

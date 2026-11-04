@@ -1445,7 +1445,8 @@ function renderSelSummary() {
   const where = t => escapeHtml([t.institution_name, t.account_name].filter(Boolean).join(" · "));
   const MAX = 40, more = n => (n > MAX ? `<div class="sp-more">and ${(n - MAX).toLocaleString()} more</div>` : "");
   sumGroups = {
-    refunds: s.refunds.flatMap(p => [p.charge.id, p.refund.id]), lessFee: s.lessFee.flatMap(p => [p.charge.id, p.refund.id]), transfers: s.transfers.flatMap(p => [p.from.id, p.to.id]),
+    refunds: s.refunds.flatMap(p => [p.charge.id, p.refund.id]), lessFee: s.lessFee.flatMap(p => [p.charge.id, p.refund.id]),
+    chains: s.chains.flatMap(c => [c.charge.id, c.change.id, c.refund.id]), transfers: s.transfers.flatMap(p => [p.from.id, p.to.id]),
     partial: s.partial.flatMap(g => g.rows.map(t => t.id)), openCharges: s.openCharges.map(t => t.id), openCredits: s.openCredits.map(t => t.id),
     open: [...s.openCharges, ...s.openCredits, ...s.partial.flatMap(g => g.rows)].map(t => t.id),
   };
@@ -1473,6 +1474,13 @@ function renderSelSummary() {
     ${s.lessFee.length ? `<ul class="sp-list">${s.lessFee.slice(0, MAX).map(p => `<li><span class="m">${name(p.charge)}</span>${amt(p.charge)}<span class="d">${day(p.charge.date)}</span>→${amt(p.refund)}<span class="d">${day(p.refund.date)}</span><span class="r">${cents(p.fee)} kept · ${p.days} day${p.days === 1 ? "" : "s"} later</span></li>`).join("")}</ul>${more(s.lessFee.length)}`
       : sumOffBy ? `<p>No refund in the selection is exactly ${cents(sumOffBy)} short of a charge from the same merchant.</p>` : ""}
   </section>`;
+  // Changed, then refunded: an upgrade (another charge) or a downgrade (a partial refund), then a
+  // refund of the rest; with Off by, less that fee.
+  html += sec(`Changed, then refunded${sumOffBy ? ` less ${cents(sumOffBy)}` : ""}`, s.chains.length ? `${s.chains.length}` : "", "chains", s.chains.length,
+    `<ul class="sp-list">${s.chains.slice(0, MAX).map(c => `<li><span class="m">${name(c.charge)}</span>${amt(c.charge)}<span class="d">${day(c.charge.date)}</span>→
+      <span class="d">${c.kind === "upgrade" ? "upgrade" : "downgrade"}</span>${amt(c.change)}<span class="d">${day(c.change.date)}</span>→${amt(c.refund)}<span class="d">${day(c.refund.date)}</span>
+      <span class="r">${c.fee ? `${cents(c.fee)} kept` : "all back"} · ${c.days} day${c.days === 1 ? "" : "s"}</span></li>`).join("")}</ul>${more(s.chains.length)}`,
+    `A charge, then an upgrade (another charge) or a downgrade (part refunded), then a refund of the rest: all three add up to ${sumOffBy ? `the ${cents(sumOffBy)} kept (Off by)` : "nothing"}.`);
   html += sec("Moved between your accounts", s.transfers.length ? `${s.transfers.length} · ${cents(s.transfers.reduce((t, p) => t + p.cents, 0))}` : "", "transfers", s.transfers.length,
     `<ul class="sp-list">${s.transfers.slice(0, MAX).map(p => `<li><span class="m">${where(p.from)}</span>${amt(p.from)}<span class="d">${day(p.from.date)}</span>→<span class="m">${where(p.to)}</span>${amt(p.to)}<span class="r">${day(p.to.date)}</span></li>`).join("")}</ul>${more(s.transfers.length)}`,
     "The same amount out of one account and into another within 5 days, like a card payment. Both sides balance.");

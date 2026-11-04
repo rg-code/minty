@@ -87,6 +87,30 @@ describe("refunded less a fee (Off by)", () => {
   });
 });
 
+describe("changed, then refunded", () => {
+  it("an upgrade then a refund of both, and a downgrade then a refund of the rest, balance", () => {
+    const up = [tx(200, "2026-10-01", "Marriott"), tx(50, "2026-10-03", "MARRIOTT"), tx(-250, "2026-10-09", "Marriott")];
+    const down = [tx(300, "2026-10-01", "Delta"), tx(-80, "2026-10-04", "DELTA"), tx(-220, "2026-10-20", "Delta")];
+    const s = R.summarize([...up, ...down]);
+    expect(s.chains.map((c: any) => [c.kind, c.charge.id, c.change.id, c.refund.id, c.fee])).toEqual([
+      ["upgrade", up[0].id, up[1].id, up[2].id, 0], ["downgrade", down[0].id, down[1].id, down[2].id, 0]]);
+    expect([s.partial, s.openCharges, s.openCredits]).toEqual([[], [], []]);
+  });
+
+  it("with Off by, the three add up to the fee kept", () => {
+    const rows = [tx(200, "2026-10-01", "Marriott"), tx(50, "2026-10-03", "Marriott"), tx(-225, "2026-10-09", "Marriott")];
+    expect(R.summarize(rows).chains).toEqual([]);                               // $25 short: not balanced without it
+    expect(R.summarize(rows, { offBy: 2500 }).chains).toEqual([expect.objectContaining({ kind: "upgrade", fee: 2500 })]);
+  });
+
+  it("an exact pair goes first, and a 'downgrade' that refunds it all isn't one", () => {
+    const pair = [tx(100, "2026-10-01", "Hilton"), tx(-100, "2026-10-02", "Hilton"), tx(-1, "2026-10-03", "Hilton")];
+    expect(R.summarize(pair).refunds).toHaveLength(1);
+    const odd = [tx(100, "2026-10-01", "Hyatt"), tx(-100, "2026-10-02", "Hyatt", { name: "Hyatt adj" }), tx(0.01, "2026-10-03", "Hyatt")];
+    expect(R.summarize(odd).chains).toEqual([]);
+  });
+});
+
 describe("breakdown", () => {
   const rows = [
     tx(10, "2026-09-03", "A", { tags: ["sync"], account_id: 1 }),
