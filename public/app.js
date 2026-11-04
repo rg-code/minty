@@ -508,7 +508,7 @@ function detailHTML(t) {
 // --- The cards above the feed --------------------------------------------------------------
 // Unfiltered: each person's spending this month, from CFA's monthly totals (GET /audit/summary,
 // which the hourly cron keeps: transfers and card payments aren't spending), with a sparkline and
-// the pace against last month. A tap opens a chart by month and a donut by category. With a search
+// the pace against an average month this year. A tap opens a chart by month and a donut by category. With a search
 // or a filter on, they add up what's shown instead, and say so. charts.js draws them.
 let summary = null;                    // GET /audit/summary (null: not loaded, or no totals yet)
 let trendKey = null;                   // whose chart is open: a person's key, "" for everyone; null when closed
@@ -527,14 +527,19 @@ const monName = (m, opts = { month: "short", year: "numeric" }) => new Date(`${m
 const filtersOn = () => !!(state.q || state.start || state.end || state.tags.length || state.categories.length || state.banks.length || state.accounts.length || state.cards.length);
 
 let cardDays = null;                   // this month's spending by day, per person (GET /audit/daily split=owner): the cards' running totals
+let cardLastYear = null;               // the same month last year, the same way: the grey area behind them
+const lastYearOf = m => `${Number(m.slice(0, 4)) - 1}${m.slice(4, 7)}`;
 async function loadSummary() {
   if (offline) return;
   try { const r = await fetch("/audit/summary"); summary = r.ok ? await r.json() : null; } catch { summary = null; }
-  trendSig = ""; cardDays = null;
+  trendSig = ""; cardDays = cardLastYear = null;
   renderTotals(loaded);
   if (!summary) return;
-  const d = await trendFetch(`/audit/daily?${new URLSearchParams({ from: `${summary.today.slice(0, 7)}-01`, to: summary.today, split: "owner" })}`);
-  if (d?.people) { cardDays = d.people; renderTotals(loaded); }
+  const ly = lastYearOf(summary.today.slice(0, 7)), lyEnd = new Date(Date.UTC(+ly.slice(0, 4), +ly.slice(5, 7), 0)).toISOString().slice(0, 10);
+  const daily = (from, to) => trendFetch(`/audit/daily?${new URLSearchParams({ from, to, split: "owner" })}`);
+  const [d, l] = await Promise.all([daily(`${summary.today.slice(0, 7)}-01`, summary.today),
+                                    summary.months.includes(ly) ? daily(`${ly}-01`, lyEnd) : null]);
+  if (d?.people) { cardDays = d.people; cardLastYear = l?.people ?? null; renderTotals(loaded); }
 }
 
 /** One person's (or, for "", everyone's) money in, spending and spending by category, by month. */
@@ -611,16 +616,17 @@ function renderTotals(txns) {
   const lastMonth = monName(summary.months.at(-2), { month: "long" });
   el.innerHTML = keys.map(k => {
     const s = monthsOf(k), L = s.spend.length - 1, spent = s.spend[L], prev = s.spend[L - 1];
-    const pace = day >= 5 ? (spent / day) * dim : null;
-    const from = Math.max(s.first < 0 ? L : s.first, L - 11);
+    const pace = day >= 5 ? (spent / day) * dim : null, A = averageMonth(s, L);
+    const vs = pace !== null && A.avg > 0;
     return C.stat({
       label: `${k ? labelOf(k) : "Everyone"} · ${monName(cur, { month: "short" })}`, dot: k ? colorOf(k) : null, value: spent / 100, fmt: v => fmt0.format(v), cls: "spend",
-      // against last month only when it's a whole one (not the month the history starts in, usually partial)
-      delta: pace !== null && prev > 0 && L - 1 > s.first ? pace / prev - 1 : null, goodWhen: "down",
+      // the pace against an average month this year (only whole months: not the month the history starts in)
+      delta: vs ? pace / A.avg - 1 : null, goodWhen: "down",
       caption: `${pace !== null ? `On pace for ${money0(pace)}` : `${lastMonth}: ${money0(prev)}`} · in ${money0(s.income[L])}`,
-      // this month's running total by day against an average month this year (spent evenly), dashed
-      pace: cardDays ? paceOf(k, s, L, day, dim) : null,
-      tag: "button", attrs: `type="button" data-trend="${escapeAttr(k)}" aria-expanded="${trendKey === k}" title="${pace !== null && prev > 0 && L - 1 > s.first ? `On pace for ${money0(pace)} this month, against ${money0(prev)} in ${lastMonth}. ` : ""}Tap for the months and the categories"`,
+      // this month's running total by day against an average month this year (spent evenly), dashed,
+      // over the same month last year (grey)
+      pace: cardDays ? paceOf(k, s, L, day, dim, A) : null,
+      tag: "button", attrs: `type="button" data-trend="${escapeAttr(k)}" aria-expanded="${trendKey === k}" title="${vs ? `On pace for ${money0(pace)} this month, against an average month of ${money0(A.avg)} (${A.over}). ` : ""}Tap for the months and the categories"`,
       countUp: fresh,
     });
   }).join("");
@@ -630,21 +636,34 @@ function renderTotals(txns) {
 }
 const shortDate = d => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 const kDollars = v => (v >= 1000 ? `$${Math.round(v / 100) / 10}k` : `$${Math.round(v)}`);
-/** A card's running total this month, day by day to today, and the average month to hold it
- * against: this year's full months (in January, the last 12), from the stored monthly totals. */
-function paceOf(k, s, L, day, dim) {
-  const month = summary.today.slice(0, 7), year = month.slice(0, 4);
-  const byDay = {};
-  for (const [owner, days] of Object.entries(cardDays)) if (!k || owner === k) for (const [d, c] of Object.entries(days)) byDay[d] = (byDay[d] ?? 0) + c;
-  let run = 0;
-  const days = Array.from({ length: day }, (_, i) => (run += byDay[`${month}-${String(i + 1).padStart(2, "0")}`] ?? 0) / 100);
-  const first = Math.max(0, s.first), full = [...Array(L).keys()].filter(i => i >= first);
+/** The average month to hold this one against (cents, or null): this year's full months (in
+ * January, the last 12), from the stored monthly totals, and which months those were. */
+function averageMonth(s, L) {
+  const year = summary.today.slice(0, 4), first = Math.max(0, s.first), full = [...Array(L).keys()].filter(i => i >= first);
   const ytd = full.filter(i => summary.months[i].startsWith(year)), use = ytd.length ? ytd : full.slice(-12);
-  const avg = use.length ? use.reduce((t, i) => t + s.spend[i], 0) / use.length / 100 : null;
-  const mon = monName(month, { month: "short" });
-  return { days, dim, avg, avgLabel: avg !== null ? `avg ${kDollars(avg)}` : "",
-           title: avg !== null ? `${mon} vs ${ytd.length ? year : "12-mo"} avg` : `${mon} so far`,
-           labels: days.map((_, i) => `Spent by ${mon} ${i + 1}`) };
+  const avg = use.length ? use.reduce((t, i) => t + s.spend[i], 0) / use.length : null;
+  const span = use.length ? (use.length === 1 ? monName(summary.months[use[0]]) : `${monName(summary.months[use[0]], { month: "short" })} – ${monName(summary.months[use.at(-1)])}`) : "";
+  return { avg, ytd: ytd.length > 0, over: span };
+}
+/** A card's running total this month, day by day to today, against the average month (A) and the
+ * same month last year, day by day (when the history covers it). */
+function paceOf(k, s, L, day, dim, A) {
+  const month = summary.today.slice(0, 7), year = month.slice(0, 4), ly = lastYearOf(month);
+  const running = (people, m, n) => {
+    const byDay = {};
+    for (const [owner, days] of Object.entries(people)) if (!k || owner === k) for (const [d, c] of Object.entries(days)) byDay[d] = (byDay[d] ?? 0) + c;
+    let run = 0;
+    return Array.from({ length: n }, (_, i) => (run += byDay[`${m}-${String(i + 1).padStart(2, "0")}`] ?? 0) / 100);
+  };
+  const days = running(cardDays, month, day);
+  const lyAt = summary.months.indexOf(ly), lyDim = new Date(Date.UTC(+ly.slice(0, 4), +ly.slice(5, 7), 0)).getUTCDate();
+  let last = cardLastYear && lyAt >= Math.max(0, s.first) && s.spend[lyAt] > 0 ? running(cardLastYear, ly, lyDim) : null;
+  if (last && last.length > dim) last = [...last.slice(0, dim - 1), last.at(-1)];    // a leap February against a short one
+  const avg = A.avg !== null ? A.avg / 100 : null;
+  const mon = monName(month, { month: "short" }), lyName = monName(ly);
+  return { days, dim, avg, avgLabel: avg !== null ? `avg ${kDollars(avg)}` : "", last, lastLabel: last ? `${mon} '${ly.slice(2, 4)}` : "",
+           title: avg !== null ? `${mon} vs ${A.ytd ? year : "12-mo"} avg` : `${mon} so far`,
+           labels: days.map((_, i) => `Spent by ${mon} ${i + 1}${last ? ` · ${lyName}: ${money0(last[Math.min(i, last.length - 1)] * 100)}` : ""}`) };
 }
 
 /** The open card's chart and donut. Counted: spending by month from the stored totals (6M, 1Y,

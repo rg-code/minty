@@ -280,7 +280,10 @@ describe("static pages", () => {
 
   it("the dashboard cards show this month's running total against this year's average month", async () => {
     const { html } = await page("/");
-    expect(html).toContain("pace: cardDays ? paceOf(k, s, L, day, dim) : null,");
+    expect(html).toContain("pace: cardDays ? paceOf(k, s, L, day, dim, A) : null,");
+    // the % is the pace against an average month this year; last year's month is the grey area
+    expect(html).toContain("delta: vs ? pace / A.avg - 1 : null,");
+    expect(html).toContain("cardLastYear = l?.people ?? null;");
     expect(html).toMatch(/split: "owner"/);                                               // one request for every card's days
     const charts = await fetchText("/charts.js");
     expect(charts).toContain('<path class="sc-avgline"');

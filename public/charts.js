@@ -356,7 +356,8 @@
    *  o: { label, value, fmt, delta, goodWhen: "up" | "down", deltaText, caption, trend: [numbers],
    *       labels: [strings], dot (a colour), tag, attrs, cls, countUp, touch (scrub by touch too),
    *       bars (a bar per point from 0, with trendTitle and fmtAxis for its scale; lastPartial: the last one is still filling),
-   *       pace: { days: [running total by day, to today], dim (days in the month), avg, avgLabel, title, labels } } */
+   *       pace: { days: [running total by day, to today], dim (days in the month), avg, avgLabel, title, labels,
+   *               last: [the same month last year, running, by day] (a grey area behind), lastLabel } } */
   const STATS = new Map();
   function stat(o) {
     const id = `sc${++uid}`, tag = o.tag ?? "div";
@@ -365,15 +366,20 @@
     const v = o.trend ?? [];
     if (o.pace) {
       // this month's running total by day (solid, to today) against an average month spent evenly
-      // (dashed, from $0 to the average by the month's end): ahead of it or behind, at a glance
+      // (dashed, from $0 to the average by the month's end): ahead of it or behind, at a glance. Behind
+      // them, light grey, the same month last year.
       const P = o.pace, Hs = 44, dim = P.dim, n = P.days.length;
-      const hi = Math.max(1, P.avg ?? 0, ...P.days) * 1.1;
+      const hi = Math.max(1, P.avg ?? 0, ...P.days, ...(P.last ?? [])) * 1.1;
       const x = i => (dim <= 1 ? 0 : (i / (dim - 1)) * 100), y = val => Hs - 2 - (val / hi) * (Hs - 6);
       const pts = P.days.map((val, i) => [x(i), y(val)]);
       const line = pts.length > 1 ? monotone(pts) : "";
       const avgY = P.avg ? y(P.avg) : null, last = pts.at(-1) ?? [0, y(0)];
-      spark = `<div class="sc-spark sc-pace">${P.title ? `<span class="sc-tt">${esc(P.title)}</span>` : ""}
+      const ly = P.last?.length > 1 ? monotone(P.last.map((val, i) => [x(i), y(val)])) : "";
+      const key = ly && P.lastLabel ? `<span class="sc-lykey"><i></i>${esc(P.lastLabel)}</span>` : "";
+      const tt = key ? `<span class="sc-tt sc-tt2"><span>${esc(P.title ?? "")}</span>${key}</span>` : P.title ? `<span class="sc-tt">${esc(P.title)}</span>` : "";
+      spark = `<div class="sc-spark sc-pace">${tt}
         <div class="sc-plot"><svg viewBox="0 0 100 ${Hs}" preserveAspectRatio="none" aria-hidden="true">
+          ${ly ? `<path class="sc-ly" d="${ly}L${f1(x(P.last.length - 1))},${Hs}L0,${Hs}Z"/>` : ""}
           ${avgY !== null ? `<path class="sc-avgline" d="M0,${f1(y(0))}L100,${f1(avgY)}" vector-effect="non-scaling-stroke"/>` : ""}
           ${line ? `<path class="sc-area" d="${line}L${f1(last[0])},${Hs}L0,${Hs}Z" fill="currentColor" fill-opacity=".14"/><path class="sc-line" d="${line}" vector-effect="non-scaling-stroke"/>` : ""}</svg>
           <i class="sc-last" style="left:${f1(last[0])}%;top:${f1((last[1] / Hs) * 100)}%"></i><i class="sc-cur" hidden></i><i class="sc-pt" hidden></i>
