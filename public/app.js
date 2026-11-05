@@ -1417,16 +1417,17 @@ const outIn = c => `${c < 0 ? "−" : "+"}${cents(c)}`;
 function setSumOpen(open) { selPanel.hidden = !open; selSumBtn.setAttribute("aria-expanded", open); if (open) { sumGrow = true; renderSelSummary(); } }
 // The Summary's breakdown chart: by one thing and split by another (reconcile.js breakdown, charts.js
 // barchart). Unset: by month when the selection spans months (else card, bank…), split by person when
-// it spans people, else by tag when it spans tags.
+// it spans people, else by tag when it spans tags. Card member only when some row has one (else it's Card).
 const sumBreak = { by: null, split: null, metric: "out", variant: null };
 let sumGrow = false;
-const BREAK = [["month", "Month"], ["year", "Year"], ["bank", "Bank"], ["card", "Card"], ["person", "Person"], ["tag", "Tag"]];
+const BREAK = [["month", "Month"], ["year", "Year"], ["bank", "Bank"], ["card", "Card"], ["member", "Card member"], ["person", "Person"], ["tag", "Tag"]];
 function breakdownHtml(rows) {
   const R = window.MintyReconcile, n = R.spread(rows);
+  if (!rows.some(t => t.account_owner)) n.member = 0;
   const byOpts = BREAK.filter(([k]) => n[k] > 1 || k === sumBreak.by);
   if (!byOpts.length) return "";
   let by = sumBreak.by && byOpts.some(([k]) => k === sumBreak.by) ? sumBreak.by : (["month", "card", "bank", "tag", "person", "year"].find(k => n[k] > 1) ?? byOpts[0][0]);
-  const splitOpts = [["none", "None"], ...BREAK.filter(([k]) => k !== by && n[k] > 1 && !(k === "year" && by === "month"))];
+  const splitOpts = [["none", "None"], ...BREAK.filter(([k]) => k !== by && n[k] > 1 && !(k === "year" && by === "month") && !(k === "card" && by === "member"))];
   let split = sumBreak.split && splitOpts.some(([k]) => k === sumBreak.split) ? sumBreak.split : (n.person > 1 && by !== "person" ? "person" : n.tag > 1 && by !== "tag" ? "tag" : "none");
   const seg = (ctl, opts, cur) => `<div class="segpill sp-seg" role="group" data-ctl="${ctl}">${opts.map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${k === cur}">${l}</button>`).join("")}</div>`;
   const b = R.breakdown(rows, by, split, sumBreak.metric, { label: (kind, key, l) => (kind === "person" ? labelOf(l) : l) });
