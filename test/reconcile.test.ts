@@ -134,6 +134,20 @@ describe("breakdown", () => {
     expect(R.spread(rows)).toMatchObject({ month: 2, year: 1, person: 2, card: 2, tag: 3 });
   });
 
+  it("by card member: each member of each card, and a row without one under its account (the main card)", () => {
+    const cards = [
+      tx(10, "2026-09-03", "A", { account_id: 2, account_name: "Amex", institution_name: "American Express" }),
+      tx(20, "2026-09-04", "B", { account_id: 2, account_name: "Amex", institution_name: "American Express", account_owner: "JANE DOE" }),
+      tx(30, "2026-09-05", "C", { account_id: 3, account_name: "Amex Gold", institution_name: "American Express", account_owner: "Jane Doe " }),
+      tx(5, "2026-09-06", "D", { account_id: 2, account_name: "Amex", institution_name: "American Express", account_owner: "SAM ROE" }),
+      tx(7, "2026-09-07", "E", { account_id: 2, account_name: "Amex", institution_name: "American Express", account_owner: "jane doe" }),
+    ];
+    expect(R.breakdown(cards, "member").groups.map((g: any) => [g.label, g.total, g.count]))
+      .toEqual([["Jane Doe · Amex Gold", 3000, 1], ["jane doe · Amex", 2700, 2], ["American Express · Amex", 1000, 1], ["SAM ROE · Amex", 500, 1]]);
+    expect(R.spread(cards)).toMatchObject({ card: 2, member: 4 });
+    expect(R.breakdown(cards, "card", "member").value["a:2"]).toEqual({ "a:2": 1000, "m:2:jane doe": 2700, "m:2:sam roe": 500 });
+  });
+
   it("beyond 12 groups, the rest are Other", () => {
     const many = Array.from({ length: 15 }, (_, i) => tx(100 + i, "2026-09-01", `M${i}`, { account_id: 100 + i, account_name: `Card ${i}` }));
     const b = R.breakdown(many, "card");

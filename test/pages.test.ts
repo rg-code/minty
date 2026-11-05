@@ -245,7 +245,8 @@ describe("static pages", () => {
 
   it("the Select Summary breaks the selection down in a bar chart: by month, year, bank, card, person or tag, split by another", async () => {
     const { html } = await page("/");
-    expect(html).toContain('const BREAK = [["month", "Month"], ["year", "Year"], ["bank", "Bank"], ["card", "Card"], ["person", "Person"], ["tag", "Tag"]];');
+    expect(html).toContain('const BREAK = [["month", "Month"], ["year", "Year"], ["bank", "Bank"], ["card", "Card"], ["member", "Card member"], ["person", "Person"], ["tag", "Tag"]];');
+    expect(html).toContain("if (!rows.some(t => t.account_owner)) n.member = 0;");   // offered only with card members in the selection
     expect(html).toContain("C.barchart(chart, {");
     expect(html).toContain('n.person > 1 && by !== "person" ? "person" : n.tag > 1 && by !== "tag" ? "tag" : "none"');   // split by people, else tags
     const charts = await fetchText("/charts.js");

@@ -152,6 +152,10 @@
     year: t => [[t.date.slice(0, 4), t.date.slice(0, 4)]],
     bank: t => [[`b:${t.item_id ?? t.institution_name ?? ""}`, t.institution_name || "A bank"]],
     card: t => [[`a:${t.account_id}`, `${[t.institution_name, t.account_name].filter(Boolean).join(" · ") || "An account"}${t.account_mask ? ` ••${t.account_mask}` : ""}`]],
+    // as card, with a multi-card account split by card member (Plaid's account_owner: employee or
+    // authorized-user cards); a transaction without one (usually the main card) stays the account's
+    member: t => (t.account_owner ? [[`m:${t.account_id}:${t.account_owner.trim().toLowerCase()}`,
+      `${t.account_owner.trim()} · ${t.account_name || "A card"}${t.account_mask ? ` ••${t.account_mask}` : ""}`]] : DIMS.card(t)),
     person: t => [[`p:${t.owner}`, t.owner]],
     tag: t => (t.tags?.length ? [...new Map(t.tags.map(x => [x.toLowerCase(), x])).entries()].map(([k, l]) => [`t:${k}`, l]) : [["t:", "No tag"]]),
   };
