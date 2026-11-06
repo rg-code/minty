@@ -1,6 +1,6 @@
 # Plan: security hardening after the 2026-10-14 review
 
-**Status: decisions made (2026-10-14, §2); steps 1–4 done (step 4 enforced 2026-10-16); step 5 in progress (5a done). To-do list: §4.** Written 2026-10-14.
+**Status: decisions made (2026-10-14, §2); steps 1–4 done (step 4 enforced 2026-10-16); step 5 in progress (5a done). To-do list: §4. §5 (2026-11-06, proposed): the owner's MCP Worker, the first paths reachable without Access.** Written 2026-10-14.
 
 An external review of `main` at 183d15b (API, pages, encryption, migrations, workflows, tests)
 found no unauthenticated path to financial data. Its main risks were how updates reach a
@@ -226,3 +226,50 @@ where Plaid is involved.
 - **Step 4** ships CSP as report-only first. A follow-up PR enforces it once the owner sees no
   violations. New `.js` files go into `public/sw.js`'s cached list.
 - **Step 6** merges only after the owner has cut the first signed release tag.
+
+## 5. The owner's MCP Worker (proposed 2026-11-06)
+
+**Status: proposed, waiting for the owner's approval.** The design is [agent-plan.md](agent-plan.md) §12.
+
+**The decision.** Minty's goal has been "no public endpoints": everything but `/healthz` sits
+behind Access at the edge. A remote MCP server can't work that way. claude.ai connects from
+Anthropic's cloud, which can't carry the Access cookie, and allowing Anthropic's IP ranges would
+admit every Claude user's connectors. So for the **owner's deployment only**, the rule becomes
+"**no unauthenticated endpoints**": a path is either behind Access at the edge, or needs a token
+that was issued only after an Access sign-in that passed the policy. Forks keep the original rule:
+they don't get the MCP Worker (agent-plan §12.2).
+
+**What's reachable without the Access cookie** (the MCP Worker's own hostname; a test lists
+exactly these, and every other path is a 404):
+
+| Path | Without a valid token |
+|---|---|
+| `/mcp` | 401, pointing to the metadata below |
+| `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server` | public metadata, no data |
+| `/authorize` | redirects to Access to sign in |
+| `/callback` | completes the Access sign-in, else an error |
+| `/token` | needs a valid authorization code or refresh token |
+| `/register` | only if client registration is on (agent-plan §12.3); registering grants nothing by itself |
+
+The dashboard's hostname and its Access application are unchanged.
+
+**What a token can do:** read the whole household and add or remove tags. It can't link, sync,
+delete or reach secrets (agent-plan §12.4). A leaked token is a household-wide read, plus tag
+changes that can be undone, until it's revoked or it expires.
+
+**Protections:**
+- The Access policy decides who can sign in, and `ALLOWED_LOGINS` is checked again on every
+  grant and call.
+- The per-login rate limit and the shared daily read budget apply before any D1 work.
+- Short access tokens, refresh tokens that can be revoked, and grants stored hashed in KV.
+- Writes are previewed, capped at 500 transactions, approved in Claude, and logged for undo.
+
+**Builds:** a private repo and its own Workers Builds project, production branch only and
+previews off. The build token has Workers Scripts Edit only: the MCP Worker never migrates.
+Dependencies are `workers-oauth-provider` and the MCP SDK, both pinned, with `npm audit` in its CI.
+
+**If something leaks:** revoke the grant (or all grants, by rotating the provider's secret), end
+the Access sessions in Zero Trust, and check `undo_tagging`'s log for changed tags. Plaid tokens
+are never reachable from the MCP Worker: it has no `TOKEN_ENC_KEY`.
+
+**To-do:** agent-plan §12.8 (M0 holds the approvals).

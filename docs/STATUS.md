@@ -131,14 +131,17 @@ there, gitignored here). If that folder exists, read it too.
      with Bills, Amex Membership Rewards first), and M3's expiry rules and "likely earned by"
      cards.
    - **Next:** more programs' statement layouts, modelled on real PDFs (tests use made-up text).
-6. **Decide where MCP goes.** The live demo shows an "AI connector (MCP), coming soon" button, but
-   [agent-plan.md](agent-plan.md) has the MCP server as optional phase **A7**. The options:
-   - move MCP earlier, as a read-only server built on A1's query tools, so Claude Desktop and
-     similar apps can use it before the chat panel exists; or
-   - relabel the demo's button "Ask Minty (coming soon)".
-7. **The finance agent ("Ask Minty").** Its to-do is §11 of [agent-plan.md](agent-plan.md), and
-   its decisions were made 2026-10-06. **Next: A0** (§8.1). It needs the owner's go-ahead plus an
-   OpenRouter key (training off) and a Workers AI token in `.dev.vars`.
+6. **MCP: decided 2026-11-06, plan waiting for review.** A remote MCP Worker on the owner's
+   deployment only, with reading and tagging, for claude.ai, Claude Desktop and Claude Code:
+   [agent-plan.md](agent-plan.md) §12, and [security-plan.md](security-plan.md) §5 for the paths it
+   opens. Its code goes in a private repo. The tool layer (M1) is built here, so forks get the tools
+   but not the MCP Worker.
+   - **Next: M0** (the owner's approvals and Cloudflare set-up), then M1.
+   - The demo's "MCP / AI connector, coming soon" button needs relabelling, since forks won't get it (✋).
+7. **The in-app finance agent ("Ask Minty" for forks).** Its to-do is §11 of
+   [agent-plan.md](agent-plan.md), and its decisions were made 2026-10-06. It waits behind §12
+   (the owner's Ask Minty is Claude, through MCP). When picked up: **A0** (§8.1), which needs
+   the owner's go-ahead plus an OpenRouter key (training off) and a Workers AI token in `.dev.vars`.
 8. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
    page so the demo follows. A dashboard change the demo can't follow stops the build, by
    design. Other landing-page to-dos: `docs/private/STATUS.md`.
