@@ -400,6 +400,15 @@ describe("static pages", () => {
   });
 });
 
+describe("a refused sign-in on the dashboard", () => {
+  it("shows the API's reason (e.g. not in ALLOWED_LOGINS) instead of sample data, which would look like an empty Minty", async () => {
+    const html = await fetchText("/app.js");
+    expect(html).toContain("if (res.status === 401 || res.status === 403) {");
+    expect(html).toContain("notice(refusedText(refused));");
+    expect(html).toContain("can add this email to the Worker's ALLOWED_LOGINS variable");
+  });
+});
+
 describe("limits on the dashboard (docs/security-plan.md, step 2)", () => {
   it("the search box stops at D1's LIKE limit, and a refusal shows its reason instead of sample data", async () => {
     const { html } = await page("/");

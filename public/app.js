@@ -13,6 +13,7 @@ let selecting = false;             // Select mode: rows have checkboxes, and the
 let selected = new Set();          // transaction ids (numbers) selected
 let allTags = [];
 let offline = false;
+let refused = null;                    // the API refused this sign-in (403): its reason, shown instead of sample data
 
 const fmt = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" });
 // Plaid: POSITIVE amount = money OUT. Flip for display (spending negative/red, income positive/green).
@@ -76,6 +77,16 @@ async function load(more = false) {
       notice(d.detail || "Too many requests. Wait a minute and try again.");
       return;
     }
+    if (res.status === 401 || res.status === 403) {   // signed in, but refused: say why; sample data would look like an empty Minty
+      const d = await res.json().catch(() => ({}));
+      if (seq !== loadSeq) return;
+      refused = d.detail || `the API answered ${res.status}`;
+      offline = true; hasMore = false; loaded = [];
+      notice(refusedText(refused));
+      document.getElementById("ownerSeg").hidden = true;     // the preview's sample people, not this household's
+      render([]);
+      return;
+    }
     if (!res.ok) throw new Error(res.status);
     txns = await res.json();
     if (seq !== loadSeq) return;                     // filters changed meanwhile: a newer load wins
@@ -83,7 +94,7 @@ async function load(more = false) {
     if (!more) selected.clear();                     // new filters: a selection never hides off-screen
     txns = (more ? loaded : []).concat(txns.slice(0, PAGE));
     loaded = txns;
-    offline = false; banner(false);
+    offline = false; refused = null; banner(false); document.getElementById("ownerSeg").hidden = false;
     if (!more) refreshTags();
   } catch (e) {
     if (seq !== loadSeq) return;
@@ -347,6 +358,12 @@ function banner(show) {
   if (show) b.textContent = "Showing sample data — couldn't reach the API. Deploy this file behind the Minty API to see live transactions.";
 }
 
+/** Why the API refused this sign-in, in plain words (src/access.ts says which check failed). */
+function refusedText(detail) {
+  const fix = /ALLOWED_LOGINS/.test(detail) ? " The household's owner can add this email to the Worker's ALLOWED_LOGINS variable (Cloudflare: Workers & Pages → minty → Settings → Variables and Secrets)." : "";
+  return `Minty refused this sign-in: ${detail.replace(/^forbidden:\s*/, "")}${fix}`;
+}
+
 /** A message from the API in the banner (e.g. a rate limit); the next successful load clears it. */
 function notice(text) {
   const b = document.getElementById("banner");
@@ -363,7 +380,7 @@ function render(txns) {
   renderTotals(txns);
 
   const feed = document.getElementById("feed");
-  if (!txns.length) { feed.innerHTML = `<div class="empty">Nothing here yet. Link an account, or widen your filters.</div>`; return; }
+  if (!txns.length) { feed.innerHTML = `<div class="empty">${refused ? "No transactions: Minty refused this sign-in (see above)." : "Nothing here yet. Link an account, or widen your filters."}</div>`; return; }
 
   const groups = {};
   for (const t of txns) (groups[t.date] ??= []).push(t);
@@ -582,6 +599,7 @@ function renderLeftOutNote() {
 function renderTotals(txns) {
   const el = document.getElementById("totals"), C = window.MintyCharts;
   if (!C) { document.addEventListener("DOMContentLoaded", () => renderTotals(loaded), { once: true }); return; }
+  if (refused) { el.innerHTML = ""; document.getElementById("trends").hidden = true; return; }   // nothing to add up (the banner says why)
   renderLeftOutNote();
   txns = txns.filter(t => !leftOut(t));
   const present = [...new Set(txns.map(t => t.owner))];
