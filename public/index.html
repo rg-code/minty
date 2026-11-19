@@ -616,6 +616,7 @@
 <link rel="stylesheet" href="/cfa.css" />
 <link rel="stylesheet" href="/egg.css" />
 <link rel="stylesheet" href="/accounts.css" />
+<link rel="stylesheet" href="/sub.css" />
 <link rel="stylesheet" href="/charts.css" />
 <link rel="stylesheet" href="/lock.css" />
 <script src="/lock.js"></script>
@@ -647,6 +648,7 @@
           <button type="button" data-open-bills title="Card statements and your bills, by due date">Bills<small>Card statements and your bills, by due date</small></button>
           <button type="button" data-open-cfa title="Complete financial audit: cash flow, spending, recurring charges, net worth">CFA<small>Complete financial audit: cash flow, spending, recurring charges, net worth</small></button>
           <button type="button" data-open-accounts title="Every account, linked or entered by hand, with net worth">Accounts<small>Every account, linked or entered by hand, with net worth</small></button>
+          <button type="button" data-open-sub title="Sign-up bonuses: what's left to do, the payout, and how long to keep the account open">SUB<small>Sign-up bonuses: what's left to do, the payout, and how long to keep the account open</small></button>
           <a class="phoneonly" href="/connect" title="Link a bank, card or retirement account">+ Add account<small>Link a bank, card or retirement account</small></a>
           <a class="phoneonly" href="/add-user" title="People, Plaid keys and Setup checks">+ Add user<small>People, Plaid keys and Setup checks</small></a>
         </div>
@@ -778,6 +780,19 @@
   </div>
   <div id="accountsMain"></div>
 </dialog>
+<!-- SUB: sign-up bonuses, in a popup (public/sub.js, sub.css, sub-parse.js; screenshots on /sub-scan), from the ⋯ menu. /?sub opens it. -->
+<dialog id="sub" class="abc sub" aria-labelledby="subTitle" tabindex="-1">
+  <div class="abc-top">
+    <header>
+      <h2 id="subTitle">SUB</h2>
+      <span class="sub">Sign-up bonuses: what's left to do and by when, the payout, and how long to keep the account open.</span>
+    </header>
+    <form method="dialog" class="abc-close"><button aria-label="Close" title="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button></form>
+  </div>
+  <div id="subMain"></div>
+</dialog>
 <!-- CFA: the Complete financial audit, in a popup (public/cfa.js, cfa.css, charts.js), from the ⋯ menu. /?audit opens it. -->
 <dialog id="cfa" class="abc cfa" aria-labelledby="cfaTitle" tabindex="-1">
   <div class="abc-top">
@@ -847,5 +862,6 @@
 <script src="/cfa.js" defer></script>
 <script src="/egg.js" defer></script>
 <script src="/accounts.js" defer></script>
+<script src="/sub.js" defer></script>
 </body>
 </html>

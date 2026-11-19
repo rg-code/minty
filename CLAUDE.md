@@ -163,6 +163,14 @@ Design history and decisions: `docs/serverless-plan.md`.
   `balance_as_of`. Net worth: only a home among other assets, US dollars only; `net_worth` keeps
   `home_cents` / `home_debt_cents` for "Without home". `holders` and `beneficiary` are labels on any
   account (people stay in `MINTY_USERS`); sync never writes them.
+- SUB, sign-up bonuses (`docs/sub.md`): offers, requirements and payouts (`sub_*`) are the household's;
+  sync never writes them and they never change a balance, net worth or a transaction. Progress is an
+  estimate from the linked account's own transactions (`src/sub/rules.ts` `NOT_SPEND`, `CHECKED`),
+  one window per requirement by account and date, bounded at both ends; a feed that's behind says
+  "can't tell yet". A holding date comes only from an explicit rule or a date given with its reason;
+  never "safe to close". Terms come from pasted text, a PDF (pdf.js) or a screenshot read on
+  `/sub-scan` (vendored Tesseract.js, `public/vendor/tesseract/`), all on the device; only that page
+  and those files get `'wasm-unsafe-eval'` (`public/_headers`). The demo has no screenshot reader.
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

@@ -1,6 +1,6 @@
 # SUB: sign-up bonuses (plan)
 
-**Status: approved by the owner (2026-11-19); being built.** Ideas from a fork
+**Status: built (2026-11-19), after the owner approved it.** Ideas from a fork
 (Shayaeng/minty), used with its author's permission; the design here is Minty's own.
 
 SUB keeps track of account-opening bonuses: a card's "spend $4,000 in 3 months, get 60,000
@@ -82,12 +82,13 @@ twice is recognised.
 (`script-src 'self'`) blocks. Adding `'wasm-unsafe-eval'` to the dashboard's policy would loosen
 it for every page.
 - So screenshots are read on **their own small page**, `/sub-scan`, with its own policy in
-  `public/_headers` (as `/connect` has one for Plaid). It's the same as the pages' policy plus
-  `'wasm-unsafe-eval'` and `worker-src 'self' blob:`.
-- SUB opens it in a dialog frame from the same origin. It hands back only the recognised text,
-  through `postMessage`, checked for the origin.
-- The OCR files (the engine, about 3 MB, and English language data, about 2 MB, the "fast"
-  model) load **only when a screenshot is picked**. They aren't in `sw.js`'s shell, so the app
+  `public/_headers` (as `/connect` has one for Plaid), also on `public/vendor/tesseract/*` (a
+  worker's policy comes from its own file). It's the pages' policy plus `'wasm-unsafe-eval'`.
+- As built: SUB goes to `/sub-scan` (not a frame, which would have meant changing the dashboard's
+  `frame-src 'none'`) and the page comes back with the recognised text through `sessionStorage`,
+  with the form's draft and the screenshot's SHA-256.
+- The OCR files (the SIMD engine, 3.9 MB, and English language data, 2.9 MB, Tesseract's
+  `best_int` LSTM model) load **only when a screenshot is picked**. They aren't in `sw.js`'s shell, so the app
   doesn't download them up front.
 - **Phones:** iOS and Android can already copy text out of a screenshot (Live Text, Lens). SUB's
   hint says so, as a quicker path that needs no OCR.
@@ -160,19 +161,19 @@ probably not).
 
 - [x] The owner approved §5 (2026-11-19).
 - [x] The owner approved the plan, including §2a's separate OCR page and its policy (2026-11-19).
-- [ ] Its migration, added to `EXPECTED_MIGRATIONS`.
-- [ ] `src/sub/` with pure functions:
+- [x] Its migration, added to `EXPECTED_MIGRATIONS`.
+- [x] `src/sub/` with pure functions:
   - holding dates (month ends, unknowns, several offers);
   - progress from rows;
   - payout matching.
   - Unit tests like `src/audit/rules.ts`'s, with a `CHECKED` date on the spend rule.
-- [ ] The routes, the progress queries with read budgets, and a test that sync never writes
+- [x] The routes, the progress queries with read budgets, and a test that sync never writes
       `sub_*`.
-- [ ] The popup (`public/sub.js`, `sub.css`, in `sw.js`'s shell, with its cache name bumped),
+- [x] The popup (`public/sub.js`, `sub.css`, in `sw.js`'s shell, with its cache name bumped),
       light and dark, phone.
-- [ ] Terms from pasted text and PDFs, and the parser with its tests.
-- [ ] `/sub-scan` with vendored Tesseract.js (pinned version, its licence beside it like pdf.js's),
+- [x] Terms from pasted text and PDFs, and the parser with its tests.
+- [x] `/sub-scan` with vendored Tesseract.js (pinned version, its licence beside it like pdf.js's),
       its policy in `_headers`, the `postMessage` hand-back, and a test that the dashboard's policy
       didn't change.
-- [ ] The demo: two made-up offers, one open and one holding.
+- [x] The demo: two made-up offers, one open and one holding.
 - [ ] ✋ Try it on a real offer.

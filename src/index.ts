@@ -17,6 +17,7 @@ import * as egg from "./routes/retirement";
 import * as advice from "./routes/advice";
 import * as accountNames from "./accounts";
 import * as manual from "./routes/manual";
+import * as sub from "./routes/sub";
 import { runInvestmentSync } from "./investments";
 import { refreshIrsLimits } from "./retirement/irs";
 import { PlaidError } from "./plaid";
@@ -92,6 +93,17 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["GET", /^\/investments$/, ({ env }) => inv.investmentBanks(env)],
   ["POST", /^\/investments\/off$/, ({ env, request }) => inv.investmentsOff(env, request)],
   ["PUT", /^\/accounts\/(\d+)\/name$/, ({ env, request, params }) => accountNames.renameAccount(env, request, Number(params[0]))],
+  // SUB, sign-up bonuses (docs/sub.md)
+  ["GET", /^\/sub$/, ({ env, url }) => sub.list(env, url)],
+  ["POST", /^\/sub\/offers$/, ({ env, config, request }) => sub.saveOffer(env, config, request)],
+  ["PUT", /^\/sub\/offers\/(\d+)$/, ({ env, config, request, params }) => sub.saveOffer(env, config, request, Number(params[0]))],
+  ["DELETE", /^\/sub\/offers\/(\d+)$/, ({ env, params }) => sub.deleteOffer(env, Number(params[0]))],
+  ["POST", /^\/sub\/requirements$/, ({ env, request }) => sub.saveRequirement(env, request)],
+  ["PUT", /^\/sub\/requirements\/(\d+)$/, ({ env, request, params }) => sub.saveRequirement(env, request, Number(params[0]))],
+  ["DELETE", /^\/sub\/requirements\/(\d+)$/, ({ env, params }) => sub.deleteChild(env, "sub_requirements", Number(params[0]))],
+  ["POST", /^\/sub\/payouts$/, ({ env, request }) => sub.savePayout(env, request)],
+  ["PUT", /^\/sub\/payouts\/(\d+)$/, ({ env, request, params }) => sub.savePayout(env, request, Number(params[0]))],
+  ["DELETE", /^\/sub\/payouts\/(\d+)$/, ({ env, params }) => sub.deleteChild(env, "sub_payouts", Number(params[0]))],
   // Manual accounts, holders and a beneficiary (docs/accounts.md)
   ["POST", /^\/accounts\/manual$/, ({ env, config, request }) => manual.create(env, config, request)],
   ["PUT", /^\/accounts\/(\d+)\/manual$/, ({ env, config, request, params }) => manual.update(env, config, request, Number(params[0]))],

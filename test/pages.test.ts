@@ -463,6 +463,20 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
   const raw = async (path: string) => SELF.fetch(`https://minty.example.workers.dev${path}`);
   const csp = (r: Response) => r.headers.get("content-security-policy") ?? "";
 
+  it("SUB's screenshot page and its vendored reader alone get 'wasm-unsafe-eval'; the dashboard's policy doesn't", async () => {
+    for (const path of ["/sub-scan", "/vendor/tesseract/worker.min.js", "/vendor/tesseract/tesseract.min.js"]) {
+      const r = await raw(path);
+      expect(r.status, path).toBe(200);
+      expect(csp(r), path).toContain("script-src 'self' 'wasm-unsafe-eval';");
+      expect(csp(r), path).toContain("frame-ancestors 'none'");
+      expect(csp(r).match(/default-src/g), path).toHaveLength(1);                  // one policy: the pages' own is detached, not added to
+    }
+    for (const path of ["/", "/sub.js", "/sub-parse.js"]) expect(csp(await raw(path)), path).not.toContain("wasm-unsafe-eval");
+    const html = await (await raw("/sub-scan")).text();
+    expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
+    expect(html).toContain('<script src="/lock.js"></script>');
+  });
+
   it.each(["/", "/connect", "/add-user"])("%s has no inline script or inline event handler left", async (path) => {
     const html = await (await raw(path)).text();
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);                     // every script is a file
@@ -515,7 +529,7 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
   it("the headers file isn't served, and every moved script is in the service worker's shell", async () => {
     expect((await raw("/_headers")).status).toBe(404);
     const sw = await (await raw("/sw.js")).text();
-    expect(sw).toContain('const CACHE = "minty-v10";');                          // installed apps refresh their copy once (v3: Bills)
+    expect(sw).toContain('const CACHE = "minty-v11";');                          // installed apps refresh their copy once (v3: Bills)
     for (const src of MOVED_SCRIPTS) expect(sw, src).toContain(`"${src}"`);
   });
 });
