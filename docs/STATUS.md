@@ -143,10 +143,14 @@ there, gitignored here). If that folder exists, read it too.
    bonuses** ([sub.md](sub.md)): built 2026-11-19: ⋯ menu → Accounts, and ⋯ menu → SUB. Accounts
    also gets holders and a beneficiary on any account, with people still in `MINTY_USERS`. Both
    use ideas from a fork, with its author's permission.
-9. **JET, trips (a Flighty and Wanderlog hybrid)**, [trips.md](trips.md): plan merged 2026-11-19;
-   next is T0 (§11), after the owner's open decisions in §12. Bookings sent by a Gmail script (labeled by `+minty` or by hand), or forwarded
-   to the domain's address, never a mailbox connected; an itinerary and flight cards, the trip's
-   transactions, BAM's pending changes, an Immich album.
+9. **JET, trips (a Flighty and Wanderlog hybrid)**, [trips.md](trips.md): plan merged 2026-11-19.
+   - Bookings (and bills) come from a Gmail account made for Minty, by forwarding to
+     `+mintytrips` / `+mintybills` or labeling by hand, or by forwarding to the domain's address.
+     No mailbox is connected to Minty.
+   - An itinerary and flight cards, the trip's transactions, BAM's pending changes, an Immich album,
+     Minty's own map; live flight status optional.
+   - **Next: T0** (§11), after the owner's open decisions in §12: keeping a forwarded message's text
+     30 days, whose Immich key, the map and live status, and the Gmail script's security change.
 10. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
    page so the demo follows. A dashboard change the demo can't follow stops the build, by
    design. Other landing-page to-dos: `docs/private/STATUS.md`.
