@@ -34,9 +34,9 @@ export const LIMITS: Record<number, Limits> = {
 export type Kind = "workplace" | "ira" | "simple" | "hsa";
 export function kindOf(subtype: string | null): Kind | null {
   const s = (subtype ?? "").toLowerCase();
-  if (["401k", "403b", "457b", "roth 401k", "thrift savings plan"].includes(s)) return "workplace";
+  if (["401k", "403b", "457b", "roth 401k", "roth 403b", "roth 457b", "thrift savings plan", "roth thrift savings plan"].includes(s)) return "workplace";
   if (["ira", "roth"].includes(s)) return "ira";
   if (s === "simple ira") return "simple";
   if (s === "hsa") return "hsa";
-  return null;                  // SEP, pension, 401(a) and others: employer-made, or other limits
+  return null;                  // SEP, pension (Roth too), 401(a), profit sharing and others: employer-made, or other limits
 }

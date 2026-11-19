@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { call, getJson } from "./helpers";
 import { LIMITS, kindOf } from "../src/retirement/limits";
+import { IN_RETIREMENT, RETIREMENT_SUBTYPES } from "../src/investments";
 
 // EGG, phase E2 (docs/cfa.md §3): GET /retirement reads what's stored; PUT /retirement/profile
 // keeps each person's optional profile.
@@ -90,5 +91,16 @@ describe("the limits", () => {
     expect(LIMITS[2026].sources.every((u) => u.startsWith("https://www.irs.gov/"))).toBe(true);
     expect(["401k", "403b", "457b", "Roth 401k", "ira", "roth", "simple ira", "hsa", "sep ira", "brokerage"].map(kindOf))
       .toEqual(["workplace", "workplace", "workplace", "workplace", "ira", "ira", "simple", "hsa", null, null]);
+    // Plaid's Roth workplace subtypes (it writes "403B" with a capital B): the same elective-deferral limit
+    expect(["403B", "roth 403B", "roth 457b", "roth thrift savings plan", "roth pension", "roth profit sharing plan"].map(kindOf))
+      .toEqual(["workplace", "workplace", "workplace", "workplace", null, null]);
+  });
+
+  it("every Roth workplace subtype is a retirement account (kept off the dashboard), whatever Plaid's capitals", async () => {
+    expect(RETIREMENT_SUBTYPES.every((t) => t === t.toLowerCase())).toBe(true);
+    const sub = ["roth 403B", "roth 457b", "roth thrift savings plan", "roth pension", "roth profit sharing plan", "403B", "brokerage"];
+    const { results } = await db.prepare(`SELECT ${IN_RETIREMENT("a")} AS r FROM (SELECT value AS subtype, NULL AS view FROM json_each(?)) a`)
+      .bind(JSON.stringify(sub)).all<{ r: number }>();
+    expect(results.map((x) => x.r)).toEqual([1, 1, 1, 1, 1, 1, 0]);
   });
 });
