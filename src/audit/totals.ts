@@ -202,6 +202,8 @@ const setState = (env: Env, key: string, value: string | null) => env.DB.prepare
 
 /** A correction changed: the next hourly run rebuilds every month. */
 export const markAuditDirty = (env: Env) => setState(env, "audit_dirty", "1").run();
+/** A manual account was removed, or changed kind, currency or person: net worth's history is rebuilt. */
+export const markNetWorthDirty = (env: Env) => setState(env, "networth_dirty", "1");
 /** What's left out changed: every month, and net worth's history, are rebuilt at the next run. */
 export const markLeftOutChanged = (env: Env) => env.DB.batch([setState(env, "audit_dirty", "1"), setState(env, "networth_dirty", "1")]);
 
@@ -251,37 +253,65 @@ export async function refreshTotals(env: Env, now = new Date()): Promise<{ from:
 }
 
 // Each account's balance today, written only when it's new or changed (a handful of rows an hour).
+// A manual account's is dated by its balance_as_of (docs/accounts.md §3): an old valuation never
+// looks new, and a back-dated one lands on its day.
 const SNAPSHOT = `
   INSERT INTO balance_snapshots (account_id, date, current_cents, available_cents)
-  SELECT id, date('now'), balance_current_cents, balance_available_cents FROM accounts
+  SELECT id, CASE WHEN is_manual = 1 THEN coalesce(balance_as_of, date('now')) ELSE date('now') END,
+         balance_current_cents, balance_available_cents FROM accounts
   WHERE balance_current_cents IS NOT NULL OR balance_available_cents IS NOT NULL
   ON CONFLICT (account_id, date) DO UPDATE SET current_cents = excluded.current_cents, available_cents = excluded.available_cents
   WHERE balance_snapshots.current_cents IS NOT excluded.current_cents OR balance_snapshots.available_cents IS NOT excluded.available_cents`;
 
-// Net worth per person today, from the same balances: what bank and investment accounts hold,
-// and what cards and loans owe. Written only when it changed.
+// A manual balance dated before today, not yet in the snapshots: its days of net worth's history
+// change, so it's rebuilt (here, at the snapshot, so the rebuild always sees the new snapshot).
+const BACKDATED = `
+  INSERT INTO app_state (key, value) SELECT 'networth_dirty', '1'
+  WHERE EXISTS (SELECT 1 FROM accounts a WHERE a.is_manual = 1 AND a.balance_as_of < date('now') AND a.balance_current_cents IS NOT NULL
+                  AND NOT EXISTS (SELECT 1 FROM balance_snapshots s WHERE s.account_id = a.id AND s.date = a.balance_as_of
+                                    AND s.current_cents IS a.balance_current_cents))
+  ON CONFLICT (key) DO UPDATE SET value = '1'`;
+
+// What counts (docs/accounts.md §2, §3, §3a): bank and investment accounts, and among other assets
+// only a home; cards and loans as debts; US dollars only (no conversion; a missing currency is USD).
+// home and home_debt are kept apart too, for net worth without the home: the home's value, and the
+// mortgages and home equity loans against it.
+const USD = (a: string) => `upper(coalesce(${a}.currency, 'USD')) = 'USD'`;
+const IS_ASSET = (a: string) => `(${a}.type IN ('depository', 'investment') OR (${a}.type = 'other' AND ${a}.subtype = 'home'))`;
+const IS_DEBT = (a: string) => `${a}.type IN ('credit', 'loan')`;
+const IS_HOME = (a: string) => `(${a}.type = 'other' AND ${a}.subtype = 'home')`;
+const IS_HOME_DEBT = (a: string) => `(${a}.type = 'loan' AND ${a}.subtype IN ('mortgage', 'home equity'))`;
+export const IN_NET_WORTH = (a: string) => `((${IS_ASSET(a)} OR ${IS_DEBT(a)}) AND ${USD(a)})`;
+
+// Net worth per person today, from the same balances. Written only when it changed.
 const NET_WORTH = `
-  INSERT INTO net_worth (date, owner, assets_cents, debts_cents)
+  INSERT INTO net_worth (date, owner, assets_cents, debts_cents, home_cents, home_debt_cents)
   SELECT date('now'), owner,
-         sum(CASE WHEN type IN ('depository', 'investment') THEN coalesce(balance_current_cents, 0) ELSE 0 END),
-         sum(CASE WHEN type IN ('credit', 'loan') THEN coalesce(balance_current_cents, 0) ELSE 0 END)
-  FROM accounts WHERE NOT ${LEFT_OUT("accounts")} GROUP BY owner
-  ON CONFLICT (date, owner) DO UPDATE SET assets_cents = excluded.assets_cents, debts_cents = excluded.debts_cents
-  WHERE net_worth.assets_cents IS NOT excluded.assets_cents OR net_worth.debts_cents IS NOT excluded.debts_cents`;
+         sum(CASE WHEN ${IS_ASSET("accounts")} THEN coalesce(balance_current_cents, 0) ELSE 0 END),
+         sum(CASE WHEN ${IS_DEBT("accounts")} THEN coalesce(balance_current_cents, 0) ELSE 0 END),
+         sum(CASE WHEN ${IS_HOME("accounts")} THEN coalesce(balance_current_cents, 0) ELSE 0 END),
+         sum(CASE WHEN ${IS_HOME_DEBT("accounts")} THEN coalesce(balance_current_cents, 0) ELSE 0 END)
+  FROM accounts WHERE ${USD("accounts")} AND NOT ${LEFT_OUT("accounts")} GROUP BY owner
+  ON CONFLICT (date, owner) DO UPDATE SET assets_cents = excluded.assets_cents, debts_cents = excluded.debts_cents,
+    home_cents = excluded.home_cents, home_debt_cents = excluded.home_debt_cents
+  WHERE net_worth.assets_cents IS NOT excluded.assets_cents OR net_worth.debts_cents IS NOT excluded.debts_cents
+     OR net_worth.home_cents IS NOT excluded.home_cents OR net_worth.home_debt_cents IS NOT excluded.home_debt_cents`;
 
 // Net worth's history again, without what's left out: for each day there's a snapshot, each account's
 // newest balance on or before it (snapshots are written only when a balance changes). About one
 // read per day and account, once, when the list of what's left out changes.
 const NET_WORTH_REBUILD = [
   "DELETE FROM net_worth",
-  `INSERT INTO net_worth (date, owner, assets_cents, debts_cents)
+  `INSERT INTO net_worth (date, owner, assets_cents, debts_cents, home_cents, home_debt_cents)
    WITH days AS (SELECT DISTINCT date FROM balance_snapshots),
-        acc AS (SELECT id, owner, type FROM accounts WHERE type IN ('depository', 'investment', 'credit', 'loan') AND NOT ${LEFT_OUT("accounts")}),
-        v AS (SELECT d.date, a.owner, a.type,
+        acc AS (SELECT id, owner, type, subtype FROM accounts WHERE ${IN_NET_WORTH("accounts")} AND NOT ${LEFT_OUT("accounts")}),
+        v AS (SELECT d.date, a.owner, a.type, a.subtype,
                      (SELECT s.current_cents FROM balance_snapshots s WHERE s.account_id = a.id AND s.date <= d.date ORDER BY s.date DESC LIMIT 1) AS c
               FROM days d CROSS JOIN acc a)
-   SELECT date, owner, sum(CASE WHEN type IN ('depository', 'investment') THEN coalesce(c, 0) ELSE 0 END),
-          sum(CASE WHEN type IN ('credit', 'loan') THEN coalesce(c, 0) ELSE 0 END)
+   SELECT date, owner, sum(CASE WHEN ${IS_ASSET("v")} THEN coalesce(c, 0) ELSE 0 END),
+          sum(CASE WHEN ${IS_DEBT("v")} THEN coalesce(c, 0) ELSE 0 END),
+          sum(CASE WHEN ${IS_HOME("v")} THEN coalesce(c, 0) ELSE 0 END),
+          sum(CASE WHEN ${IS_HOME_DEBT("v")} THEN coalesce(c, 0) ELSE 0 END)
    FROM v GROUP BY date, owner`,
 ];
 
@@ -290,7 +320,7 @@ const THIN = "DELETE FROM balance_snapshots WHERE date < date('now', '-365 days'
 
 /** The hourly cron's step: today's balances; once a day (the first run after midnight UTC), thins old ones. */
 export async function snapshotBalances(env: Env, now = new Date()): Promise<number> {
-  const [r] = await env.DB.batch([env.DB.prepare(SNAPSHOT), env.DB.prepare(NET_WORTH)]);
+  const [, r] = await env.DB.batch([env.DB.prepare(BACKDATED), env.DB.prepare(SNAPSHOT), env.DB.prepare(NET_WORTH)]);
   if (now.getUTCHours() === 0) await env.DB.prepare(THIN).run();
   return r.meta.changes ?? 0;
 }

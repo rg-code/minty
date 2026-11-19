@@ -31,7 +31,8 @@ export async function audit(env: Env, config: Config, url: URL): Promise<Respons
   const [totals, worth, recurring, cards, corrections, state] = await env.DB.batch([
     env.DB.prepare(`SELECT month, bucket, category, sum(amount_cents) AS cents, sum(n) AS n FROM monthly_totals
                     WHERE month >= ?${by("owner")} GROUP BY month, bucket, category`).bind(months[0], ...who),
-    env.DB.prepare(`SELECT date, sum(assets_cents) AS assets, sum(debts_cents) AS debts FROM net_worth
+    env.DB.prepare(`SELECT date, sum(assets_cents) AS assets, sum(debts_cents) AS debts,
+                           sum(home_cents) AS home, sum(home_debt_cents) AS home_debt FROM net_worth
                     WHERE date >= ?${by("owner")} GROUP BY date`).bind(since, ...who),
     env.DB.prepare(`SELECT r.owner, r.merchant, r.name, r.category, r.cadence, r.n, r.avg_cents, r.last_cents, r.prev_cents,
                            r.distinct_amounts, r.first_date, r.last_date, o.bucket AS corrected

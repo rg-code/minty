@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { PLAID_ITEM } from "./accounts";
 import { type Config, credsFor, isConfigured, loadConfig } from "./config";
 import { FernetError } from "./fernet";
 import { openAccessToken } from "./token-key";
@@ -108,11 +109,11 @@ export async function runStatementSync(env: Env, config: Config = loadConfig(env
   const leased = await env.DB.prepare(
     `UPDATE statement_sync SET attempted_at = ${NOW}, next_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+10 minutes')
      WHERE item_id = (SELECT s.item_id FROM statement_sync s JOIN items i ON i.id = s.item_id
-                      WHERE s.next_attempt_at IS NOT NULL AND s.next_attempt_at <= ${NOW} AND i.status = 'good'
+                      WHERE s.next_attempt_at IS NOT NULL AND s.next_attempt_at <= ${NOW} AND i.status = 'good' AND ${PLAID_ITEM("i")}
                       ORDER BY s.next_attempt_at, s.item_id LIMIT 1)
      RETURNING item_id`).first<{ item_id: number }>();
   if (!leased) return {};
-  const item = await env.DB.prepare("SELECT * FROM items WHERE id = ?").bind(leased.item_id).first<ItemRow>();
+  const item = await env.DB.prepare(`SELECT * FROM items WHERE id = ? AND ${PLAID_ITEM("items")}`).bind(leased.item_id).first<ItemRow>();
   if (!item) return {};
   return { [item.id]: await syncStatements(env, config, item) };
 }

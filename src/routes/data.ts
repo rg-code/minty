@@ -4,7 +4,8 @@ import { type Config, isConfigured } from "../config";
 import { HttpError, dateParam, intParam, json, jsonBody, unprocessable } from "../http";
 import { bankHealth, bankRows, syncHealth } from "../health";
 import { RESERVED } from "./link";
-import { ACCOUNT_NAME } from "../accounts";
+import { ACCOUNT_NAME, LEFT_OUT, PLAID_ITEM } from "../accounts";
+import { IN_NET_WORTH } from "../audit/totals";
 
 /** Read API for the pages in public/, plus tag editing. */
 
@@ -57,15 +58,22 @@ export async function accounts(env: Env, url: URL): Promise<Response> {
   const owner = url.searchParams.get("owner");
   // Retirement accounts (EGG) are islanded: left out unless ?view=all, or switched to the dashboard.
   const island = url.searchParams.get("view") === "all" ? "1" : `NOT ${IN_RETIREMENT("accounts")}`;
-  const select = `SELECT id, owner, item_id, plaid_account_id, ${ACCOUNT_NAME("accounts")} AS name, name AS plaid_name, display_name, mask, type, subtype,
-                         balance_current_cents / 100.0 AS balance_current,
+  // Manual accounts (docs/accounts.md) have no transactions, so the dashboard's filters leave them
+  // out; the Accounts view asks for them (?manual=1), and for no card members (?members=0).
+  const manual = url.searchParams.get("manual") === "1" ? "1" : "accounts.is_manual = 0";
+  const select = `SELECT accounts.id, accounts.owner, item_id, plaid_account_id, ${ACCOUNT_NAME("accounts")} AS name, name AS plaid_name, display_name,
+                         mask, type, subtype, balance_current_cents / 100.0 AS balance_current,
                          balance_available_cents / 100.0 AS balance_available,
-                         currency, updated_at, ${IN_RETIREMENT("accounts")} AS in_retirement
-                  FROM accounts`;
+                         currency, accounts.updated_at, ${IN_RETIREMENT("accounts")} AS in_retirement,
+                         is_manual, balance_as_of, coalesce(accounts.institution, i.institution_name) AS bank, notes, holders, beneficiary,
+                         ${LEFT_OUT("accounts")} AS left_out, ${IN_NET_WORTH("accounts")} AS in_net_worth
+                  FROM accounts LEFT JOIN items i ON i.id = accounts.item_id`;
   const stmt = owner
-    ? env.DB.prepare(`${select} WHERE owner = ? AND ${island} ORDER BY name`).bind(owner)
-    : env.DB.prepare(`${select} WHERE ${island} ORDER BY owner, name`);
-  const rows = (await stmt.all<{ id: number }>()).results;
+    ? env.DB.prepare(`${select} WHERE accounts.owner = ? AND ${island} AND ${manual} ORDER BY name`).bind(owner)
+    : env.DB.prepare(`${select} WHERE ${island} AND ${manual} ORDER BY accounts.owner, name`);
+  const rows = (await stmt.all<{ id: number; holders: string; beneficiary: string | null }>()).results
+    .map((a) => ({ ...a, holders: parseList(a.holders), beneficiary: parseBeneficiary(a.beneficiary) }));
+  if (url.searchParams.get("members") === "0") return json(rows);
   // Card members (Plaid's account_owner) on multi-card accounts, e.g. Amex authorized-user cards,
   // most-used first. Only accounts that have any; their transactions without one are listed as
   // { name: null } so they can be picked too.
@@ -94,10 +102,15 @@ export async function accounts(env: Env, url: URL): Promise<Response> {
   })));
 }
 
+const parseList = (s: string | null): string[] => { try { const v = JSON.parse(s ?? "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; } catch { return []; } };
+const parseBeneficiary = (s: string | null): { key: string } | { name: string } | null => {
+  try { const v = s ? JSON.parse(s) : null; return v && (typeof v.key === "string" || typeof v.name === "string") ? v : null; } catch { return null; }
+};
+
 export async function capacity(env: Env, config: Config): Promise<Response> {
   // Per-person Trial-account usage: how many Items each credential set holds vs the cap.
   const [itemsRes, reservedRes] = await env.DB.batch([
-    env.DB.prepare("SELECT plaid_account, count(*) AS n FROM items GROUP BY plaid_account"),
+    env.DB.prepare(`SELECT plaid_account, count(*) AS n FROM items WHERE ${PLAID_ITEM("items")} GROUP BY plaid_account`),
     // Link sessions holding a slot (src/routes/link.ts): being linked right now, or interrupted
     env.DB.prepare(`SELECT plaid_account, count(*) AS n FROM link_sessions s WHERE ${RESERVED} GROUP BY plaid_account`),
   ]);

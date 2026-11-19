@@ -7,7 +7,7 @@ import { plaidPost } from "../plaid";
 import { bankHealth, bankRows } from "../health";
 import type { ItemRow } from "../sync";
 import { billStatus, listBills } from "./household-bills";
-import { ACCOUNT_NAME } from "../accounts";
+import { ACCOUNT_NAME, PLAID_ITEM } from "../accounts";
 
 /** Bills (docs/bills.md), part 1: credit cards. GET /bills lists every credit card with its balance
  * and, where statement details are on for its bank, the latest statement (amount, minimum, due
@@ -41,7 +41,7 @@ const CARDS_SQL = `
   LEFT JOIN statement_sync ss ON ss.item_id = i.id
   LEFT JOIN card_statements s ON s.account_id = a.id
        AND s.issue_date = (SELECT max(issue_date) FROM card_statements WHERE account_id = a.id)
-  WHERE a.type = 'credit'
+  WHERE a.type = 'credit' AND ${PLAID_ITEM("i")}
   ORDER BY s.due_date IS NULL, s.due_date, i.id, a.id`;
 
 // Each card's last statements, newest first, with the payments seen between that statement and the next.
@@ -161,7 +161,7 @@ export async function completeStatements(env: Env, config: Config, request: Requ
                  AND used_at IS NULL AND released_at IS NULL AND expires_at > ${NOW}`;
   const session = await env.DB.prepare(`SELECT item_id FROM link_sessions WHERE ${valid}`).bind(sessionId, email).first<{ item_id: number }>();
   if (!session) throw new HttpError(409, "This statement connection expired or was already finished. Start it again.");
-  const item = await env.DB.prepare("SELECT * FROM items WHERE id = ?").bind(session.item_id).first<ItemRow>();
+  const item = await env.DB.prepare(`SELECT * FROM items WHERE id = ? AND ${PLAID_ITEM("items")}`).bind(session.item_id).first<ItemRow>();
   if (!item) throw new HttpError(404, "bank not found");
   if (!env.TOKEN_ENC_KEY || !config.accountOwner.has(item.plaid_account) || !isConfigured(env, config, item.plaid_account)) {
     throw new HttpError(409, "This bank's Plaid keys aren't set up. Check Setup checks, then try again.");
@@ -197,7 +197,7 @@ export async function statementBanks(env: Env): Promise<Response> {
     `SELECT i.id AS item_id, i.institution_name AS bank, i.owner, coalesce(ss.status, 'off') AS statements,
             ss.synced_at, ss.last_error
      FROM items i LEFT JOIN statement_sync ss ON ss.item_id = i.id
-     WHERE EXISTS (SELECT 1 FROM accounts a WHERE a.item_id = i.id AND a.type = 'credit')
+     WHERE ${PLAID_ITEM("i")} AND EXISTS (SELECT 1 FROM accounts a WHERE a.item_id = i.id AND a.type = 'credit')
      ORDER BY i.owner, i.id`).all();
   return json(results);
 }

@@ -97,6 +97,14 @@
 
   const width = () => Math.max(260, Math.min(main.clientWidth || 640, 940) - 2);
 
+  // Net worth without the home (docs/accounts.md §3a): the home's value and the mortgages and home
+  // equity loans against it, left out. Shared with Accounts, and remembered on this device.
+  let noHome = false;
+  try { noHome = localStorage.getItem("minty.accounts.nohome") === "1"; } catch { /* not remembered */ }
+  const worthOf = r => noHome ? (r.assets - (r.home ?? 0)) - (r.debts - (r.home_debt ?? 0)) : r.assets - r.debts;
+  const hasHome = () => data.net_worth.some(r => r.home || r.home_debt);
+  const homeBtn = () => hasHome() ? `<button type="button" class="pill cfa-nohome" data-nw-home aria-pressed="${noHome}">Without home</button>` : "";
+
   function render() {
     const by = monthly();
     const thisMonth = data.today.slice(0, 7);
@@ -201,17 +209,20 @@
 
     // 5. Net worth
     const nw = data.net_worth;
+    const what = noHome ? "Net worth without home" : "Net worth";
+    const counts = noHome
+      ? "It leaves out the home and the mortgages and home equity loans against it; the rest is as usual: bank, investment and retirement accounts, less what cards and other loans owe, in US dollars."
+      : "It counts bank, investment and retirement accounts, and a home entered by hand in Accounts, less what cards and loans owe, in US dollars. Vehicles and other assets aren't in it.";
     if (nw.length >= 2) {
-      const ds = nw.map(r => r.date), series = [{ name: "Net worth", cls: "net", values: nw.map(r => r.assets - r.debts) },
-                                                { name: "Accounts hold", cls: "assets", values: nw.map(r => r.assets) },
-                                                { name: "Owed", cls: "debts", values: nw.map(r => r.debts) }];
+      const ds = nw.map(r => r.date), series = [{ name: what, cls: "net", values: nw.map(worthOf) },
+                                                { name: "Accounts hold", cls: "assets", values: nw.map(r => r.assets - (noHome ? r.home ?? 0 : 0)) },
+                                                { name: "Owed", cls: "debts", values: nw.map(r => r.debts - (noHome ? r.home_debt ?? 0 : 0)) }];
       const ch = series[0].values.at(-1) - series[0].values[0];
-      html += section("Net worth", C().legend(series) + C().lines({ labels: ds, series, width: width(), fmt: short, short: dayLabel, gap: 72 }),
-        [`Net worth is <b>${money(series[0].values.at(-1))}</b>, ${ch >= 0 ? "up" : "down"} ${money(Math.abs(ch))} since ${dayYear(ds[0])}.`,
-         "It counts bank and investment accounts Minty sees, less what cards and loans owe; homes, cars and accounts not linked aren't in it."]);
+      html += section("Net worth", homeBtn() + C().legend(series) + C().lines({ labels: ds, series, width: width(), fmt: short, short: dayLabel, gap: 72 }),
+        [`${what} is <b>${money(series[0].values.at(-1))}</b>, ${ch >= 0 ? "up" : "down"} ${money(Math.abs(ch))} since ${dayYear(ds[0])}.`, counts]);
     } else {
       const now = nw[0];
-      html += section("Net worth", `<p class="cfa-big">${now ? money(now.assets - now.debts) : "—"}</p>`,
+      html += section("Net worth", homeBtn() + `<p class="cfa-big">${now ? money(worthOf(now)) : "—"}</p>`,
         [now ? `History starts ${dayYear(now.date)}: the line fills in day by day from here.` : "It starts with the next hourly sync."]);
     }
 
@@ -249,12 +260,12 @@
     }
     const nw = data.net_worth;
     if (nw.length) {
-      const v = r => r.assets - r.debts, now = nw.at(-1);
+      const v = worthOf, now = nw.at(-1);
       const month = Date.parse(now.date) - 30 * 864e5, base = [...nw].reverse().find(r => Date.parse(r.date) <= month) ?? nw[0];
       const every = Math.max(1, Math.ceil(nw.length / 60)), pts = nw.filter((_, i) => i % every === 0 || i === nw.length - 1);
-      cards.push(C().stat({ label: "Net worth", value: v(now), fmt: money, delta: base !== now && v(base) ? (v(now) - v(base)) / Math.abs(v(base)) : null,
+      cards.push(C().stat({ label: noHome ? "Net worth without home" : "Net worth", value: v(now), fmt: money, delta: base !== now && v(base) ? (v(now) - v(base)) / Math.abs(v(base)) : null,
         caption: base !== now ? `Since ${dayYear(base.date)}` : `As of ${dayYear(now.date)}`, cls: "rate", touch: true,
-        trend: pts.map(v), labels: pts.map(r => `Net worth, ${dayYear(r.date)}`) }));
+        trend: pts.map(v), labels: pts.map(r => `${noHome ? "Net worth without home" : "Net worth"}, ${dayYear(r.date)}`) }));
     }
     return `<div class="scgrid">${cards.join("")}</div>`;
   }
@@ -341,6 +352,11 @@
   main.addEventListener("keydown", e => { const r = e.target.closest(".cfa-cat[data-cats]"); if (r && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleList(r); } });
 
   main.addEventListener("click", async e => {
+    if (e.target.closest("[data-nw-home]")) {
+      noHome = !noHome;
+      try { localStorage.setItem("minty.accounts.nohome", noHome ? "1" : "0"); } catch { /* not remembered */ }
+      render(); return;
+    }
     const closeList = e.target.closest("[data-ct-close]");
     if (closeList) { const box = closeList.closest(".cfa-ct"); box.hidden = true; main.querySelectorAll('[aria-expanded="true"][data-cats]').forEach(t => t.setAttribute("aria-expanded", "false")); return; }
     const cat = e.target.closest("[data-cats]");

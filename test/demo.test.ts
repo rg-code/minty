@@ -21,7 +21,7 @@ describe("demo data", () => {
     const text = JSON.stringify(data);
     expect(text).not.toMatch(/@/);
     expect(text).not.toMatch(/\d{3}[-. ]\d{3}[-. ]\d{4}/);                    // phone numbers
-    for (const a of data.accounts) expect(String(a.mask)).toMatch(/^\d{4}$/);
+    for (const a of data.accounts) if (!a.is_manual || a.mask !== null) expect(String(a.mask)).toMatch(/^\d{4}$/);   // a home or car has no number
     const names = data.transactions.map((t) => `${t.name} ${t.merchant_name ?? ""}`).join("\n");
     expect(names).not.toMatch(/\d{5,}/);                                       // no long numbers in descriptions
     expect(new Set(data.transactions.map((t) => t.account_owner).filter(Boolean))).toEqual(new Set(["ALEX MORGAN", "SAM MORGAN"]));

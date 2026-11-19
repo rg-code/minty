@@ -79,6 +79,29 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
                       balance_current_cents: cents(bal), balance_available_cents: type === "credit" ? null : cents(bal), currency: "USD" });
     });
   });
+  // Accounts entered by hand (docs/accounts.md): a home and its mortgage, a car (shown, not in net
+  // worth), and a 529 for a child who isn't a Minty person. Each person's under their "manual" bank row.
+  const MANUAL: [string, string, string, string, number, number, string | null, string[], string | null][] = [
+    // person, name, type, subtype, balance, as of (days ago), source, holders, beneficiary's name
+    ["alex", "Home", "other", "home", 685000, 40, "Estimate from the county assessor", ["alex", "sam"], null],
+    ["alex", "Mortgage", "loan", "mortgage", 412300, 12, "Rocket Mortgage", ["alex", "sam"], null],
+    ["sam", "Car", "other", "vehicle", 21500, 120, "Kelley Blue Book", [], null],
+    ["sam", "College 529", "investment", "529", 18240, 25, "NY 529 Direct Plan", [], "Maya"],
+  ];
+  for (const person of ["alex", "sam"]) {
+    const itemId = 90 + items.length;
+    items.push({ id: itemId, owner: who(person), plaid_account: "", plaid_item_id: `manual:${who(person)}`, access_token_enc: "",
+                 institution_name: null, status: "manual", products: "manual", updated_at: nowIso(400) });
+    MANUAL.filter((m) => m[0] === person).forEach(([, name, type, subtype, bal, ago, source, holders, ben], j) => {
+      const id = itemId * 10 + j;
+      accounts.push({ id, owner: who(person), item_id: itemId, plaid_account_id: `manual:demo-${id}`, name, mask: null, type, subtype,
+                      balance_current_cents: cents(bal), balance_available_cents: null, currency: "USD", is_manual: 1,
+                      balance_as_of: daysAgo(ago), institution: source, holders: JSON.stringify(holders.map(who)),
+                      beneficiary: ben ? JSON.stringify({ name: ben }) : null });
+    });
+  }
+  // the joint checking account, held by both
+  accounts.find((a) => a.name === "Total Checking")!.holders = JSON.stringify([who("alex"), who("sam")]);
   const ownerOf = (accountId: number) => accounts.find((a) => a.id === accountId)!.owner as string;
 
   let nextId = 1;
@@ -321,11 +344,14 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   const netWorth: DemoData["netWorth"] = [];
   for (const owner of [owners.alex, owners.sam]) {
     const mine = accounts.filter((a) => a.owner === owner);
-    const held = mine.filter((a) => a.type === "depository" || a.type === "investment").reduce((s, a) => s + Number(a.balance_current_cents ?? 0), 0);
-    const owed = mine.filter((a) => a.type === "credit" || a.type === "loan").reduce((s, a) => s + Number(a.balance_current_cents ?? 0), 0);
+    const sum = (f: (a: DemoData["accounts"][number]) => boolean) => mine.filter(f).reduce((s, a) => s + Number(a.balance_current_cents ?? 0), 0);
+    const home = sum((a) => a.type === "other" && a.subtype === "home"), homeDebt = sum((a) => a.type === "loan" && a.subtype === "mortgage");
+    const held = sum((a) => a.type === "depository" || a.type === "investment"), owed = sum((a) => (a.type === "credit" || a.type === "loan") && a.subtype !== "mortgage");
     for (let d = 150; d >= 1; d--) {
       const drift = 1 - d * 0.0011 + Math.sin(d / 9) * 0.012;
-      netWorth.push({ date: daysAgo(d), owner, assets_cents: Math.round(held * drift), debts_cents: Math.round(owed * (0.85 + 0.3 * Math.abs(Math.sin(d / 13)))) });
+      const h = Math.round(home * (1 - d * 0.0002)), hd = Math.round(homeDebt * (1 + d * 0.00025));
+      netWorth.push({ date: daysAgo(d), owner, assets_cents: Math.round(held * drift) + h, debts_cents: Math.round(owed * (0.85 + 0.3 * Math.abs(Math.sin(d / 13)))) + hd,
+                      home_cents: h, home_debt_cents: hd });
     }
   }
 

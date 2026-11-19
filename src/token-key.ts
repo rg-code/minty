@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { PLAID_ITEM } from "./accounts";
 import { FernetError, fernetDecrypt, fernetEncrypt } from "./fernet";
 
 /** Opening stored Plaid access tokens, and changing the key they're stored under (security plan
@@ -59,7 +60,7 @@ export interface TokenKeys { current: number; previous: number; neither: number 
 export async function tokenKeys(env: Env, rekey = false): Promise<TokenKeys & { rekeyed: number }> {
   const out = { current: 0, previous: 0, neither: 0, rekeyed: 0 };
   if (!env.TOKEN_ENC_KEY || !env.TOKEN_ENC_KEY_PREVIOUS) return out;
-  const { results } = await env.DB.prepare("SELECT id, access_token_enc FROM items WHERE access_token_enc <> '' ORDER BY id")
+  const { results } = await env.DB.prepare(`SELECT id, access_token_enc FROM items WHERE access_token_enc <> '' AND ${PLAID_ITEM("items")} ORDER BY id`)
     .all<{ id: number; access_token_enc: string }>();
   for (const item of results) {
     if (await opens(item.access_token_enc, env.TOKEN_ENC_KEY) !== null) { out.current++; continue; }

@@ -140,7 +140,7 @@ there, gitignored here). If that folder exists, read it too.
    its decisions were made 2026-10-06. **Next: A0** (§8.1). It needs the owner's go-ahead plus an
    OpenRouter key (training off) and a Workers AI token in `.dev.vars`.
 8. **Manual accounts and an Accounts view** ([accounts.md](accounts.md)), and **SUB, sign-up
-   bonuses** ([sub.md](sub.md)): approved 2026-11-19, being built. Accounts
+   bonuses** ([sub.md](sub.md)): Accounts built 2026-11-19 (⋯ menu → Accounts); SUB approved, being built. Accounts
    also gets holders and a beneficiary on any account, with people still in `MINTY_USERS`. Both
    use ideas from a fork, with its author's permission.
 9. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing

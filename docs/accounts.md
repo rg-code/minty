@@ -1,6 +1,6 @@
 # Plan: manual accounts and an Accounts view
 
-**Status: approved by the owner (2026-11-19), with §2, §3 and §3a confirmed; being built.** Ideas from a fork
+**Status: built (2026-11-19), after the owner approved it with §2, §3 and §3a confirmed.** Ideas from a fork
 (Shayaeng/minty), used with its author's permission; the design here is Minty's own.
 
 Two pieces that go together:
@@ -181,15 +181,15 @@ the holder), archiving people, and adding or renaming people in Minty (that stay
 ✋ = needs the owner.
 
 - [x] The owner confirmed §2, §3 and §3a (2026-11-19).
-- [ ] A migration (the next free number, 0023 today): `accounts.is_manual`, `balance_as_of`, `notes`,
+- [x] A migration (the next free number, 0023 today): `accounts.is_manual`, `balance_as_of`, `notes`,
       `holders` (default `'[]'`), `beneficiary`; `net_worth.home_cents`, `home_debt_cents`. Added to
       `EXPECTED_MIGRATIONS`.
-- [ ] `PLAID_ITEM()` in every bank-walking query, and the test that enforces it.
-- [ ] The manual routes, the snapshot dating, net worth's home rule and USD-only totals, with
+- [x] `PLAID_ITEM()` in every bank-walking query, and the test that enforces it.
+- [x] The manual routes, the snapshot dating, net worth's home rule and USD-only totals, with
       tests on local D1.
-- [ ] `net_worth.home_cents` and `home_debt_cents`, and the Without home button in Accounts and CFA.
-- [ ] `PUT /accounts/{id}/holders`, the Setup check for unknown keys, and a test that sync never
+- [x] `net_worth.home_cents` and `home_debt_cents`, and the Without home button in Accounts and CFA.
+- [x] `PUT /accounts/{id}/holders`, the Setup check for unknown keys, and a test that sync never
       writes `holders` or `beneficiary`.
-- [ ] The Accounts popup (with `sw.js`'s shell updated and its cache name bumped), light and dark, phone.
-- [ ] The demo: a manual house and car in the made-up household (`test/demo.test.ts`).
+- [x] The Accounts popup (with `sw.js`'s shell updated and its cache name bumped), light and dark, phone.
+- [x] The demo: a manual house and car in the made-up household (`test/demo.test.ts`).
 - [ ] ✋ Try it on the live deployment: add one manual account, check net worth the next hour.

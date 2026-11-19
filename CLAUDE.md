@@ -155,6 +155,14 @@ Design history and decisions: `docs/serverless-plan.md`.
   catch-up run only while a year isn't settled, at most weekly, never on a request. Every figure
   is sanity-checked against `src/retirement/limits.ts`, which stays the fallback. `IRS_LIMITS=off`
   never asks; tests run with it off.
+- Manual accounts and Accounts (`docs/accounts.md`): a manual account is an `accounts` row
+  (`is_manual = 1`) under its person's "manual" bank row (`items.products = 'manual'`, no token).
+  Every query that walks the banks for Plaid's sake uses `PLAID_ITEM()` (`src/accounts.ts`);
+  `test/manual.test.ts` fails on one that doesn't (or add it to that test's list of queries that mean
+  every row). Saving a balance writes the account only; the hourly snapshot dates it by
+  `balance_as_of`. Net worth: only a home among other assets, US dollars only; `net_worth` keeps
+  `home_cents` / `home_debt_cents` for "Without home". `holders` and `beneficiary` are labels on any
+  account (people stay in `MINTY_USERS`); sync never writes them.
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).
