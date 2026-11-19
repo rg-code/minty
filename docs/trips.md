@@ -1,7 +1,7 @@
-# Plan: trips (a Flighty and Wanderlog hybrid)
+# Plan: JET, trips (a Flighty and Wanderlog hybrid)
 
-**Status: plan, for the owner's review (2026-11-19). Nothing is built.** Its inbox (§2) also serves Bills. Working name **JET**
-(✋ the owner picks the name, §12).
+**Status: plan, merged 2026-11-19 with the owner's decisions so far (§12); nothing is built.** Its
+inbox (§2) also serves Bills. Named **JET** (owner, 2026-11-19).
 
 A trip view built from the household's bookings:
 - a day-by-day itinerary (like Wanderlog);
@@ -132,14 +132,15 @@ The same inbox serves Bills (`docs/bills.md`, own bills): forward a biller's ema
 - **The email's own text** ("Your bill of $84.12 is due Dec 3") is read with `bill-parse.js`,
   which is pure and runs in the Worker as well as in the browser. The result is a bill suggested in
   Bills, waiting for a confirm, like its PDFs today.
-- **A PDF attachment** is the open question. Bills' rule today is that PDFs are read in the browser
-  and never uploaded, only their fields and SHA-256 saved. A forwarded PDF has already gone through
-  the household's mailbox, but keeping it in D1 until a browser reads it changes that rule. ✋ The
-  options:
-  - **(a)** Keep the attachment in the inbox (up to 2 MB, D1's row limit), read by pdf.js when Bills
-    next opens, then delete it at once (or after 30 days if never read).
-  - **(b)** Ignore attachments: only the email's text is read, and a bill that's only in a PDF is
-    added from the PDF as today.
+- **A PDF attachment: kept until a browser reads it (owner's decision, 2026-11-19, option a).**
+  - The attachment waits in the inbox, up to 2 MB (D1's row limit). Bills reads it with pdf.js the
+    next time it opens, in the browser as today, and the PDF is deleted from D1 at once. One that's
+    never read is deleted after 30 days.
+  - Only the fields and SHA-256 are kept, as today.
+  - **This is an exception to Bills' rule** that PDFs never leave the device. A forwarded PDF has
+    already been through the household's mailbox, and Minty keeps it only until it's read.
+    CLAUDE.md's Bills rule gets that exception in the same PR (T2c).
+  - Set aside: (b) ignoring attachments.
 - Card statements stay with Plaid (Liabilities); this is for the household's own bills.
 
 ### 2.4 Without email, for everyone
@@ -212,7 +213,7 @@ In the ⋯ menu, as a popup like SUB.
 - **The person switch** filters by who's travelling: each booking keeps the names on it, mapped
   to `MINTY_USERS` people where they match. It's a filter, as everywhere.
 - **Optional later:** a map of the trip's places (map tiles from another host need that host in
-  the policy) and live flight status (§11, T6). ✋
+  the policy) and live flight status: §13 and §14.
 
 ## 6. The trip's transactions
 
@@ -244,29 +245,69 @@ person, and the cost per day. "Open in dashboard" sets `/?trip=<id>`.
 
 ## 8. Immich: an album of the trip
 
-The owner's Immich is behind Cloudflare Access, so Minty needs:
-- the Immich address;
-- an Immich API key, as the secret `IMMICH_API_KEY`;
-- an Access service token for Immich's application (`IMMICH_ACCESS_CLIENT_ID` /
-  `IMMICH_ACCESS_CLIENT_SECRET`), sent as Access's service-token headers.
-- All three are secrets, never returned to a page. ✋
+**Access through Immich's API (owner, 2026-11-19).** The owner's Immich is behind Cloudflare Access,
+so Minty needs two things, both set up once by the owner.
 
-**When:** from the cron, never on a request. The first run after a trip ends makes the album, and
-it's checked once a day for the next 7 days for photos uploaded late.
+**1. An Immich API key**, in Immich: Account Settings → API Keys → New API Key, named "Minty".
+- **It acts as that Immich user.** Use the account whose library holds the trip photos (usually the
+  owner's). Its permissions:
 
-**How**, to check against the household's Immich version in T0:
-1. Search the assets taken between the trip's start and end, in the trip's time zone (Immich's
-   metadata search, paged).
-2. Create an album named after the trip with them, and add new ones on the later checks.
-3. Keep the album id on the trip.
+  | Permission | For |
+  |---|---|
+  | `asset.read` | finding the photos taken during the trip |
+  | `album.read` | checking the album Minty made is still there |
+  | `album.create` | making the album |
+  | `albumAsset.create` | adding photos to it, including ones uploaded later |
 
-The trip shows **"Photos: N in Immich ↗"**, a link to the album in Immich, which opens behind
-Access for the household. No public shared link is made.
+  Nothing that deletes, edits, downloads or shares.
+- **Version caveat:** before Immich 1.138, a key needed the `all` permission. Since Immich 3.0, routes
+  without a permission of their own need `all` too. T0 checks the household's version: Minty reads
+  the key's own permissions (`GET /api/api-keys/me`, which needs none) and Setup shows any that are
+  missing. If the version needs `all`, the household decides whether to give it.
+- Stored as the Worker secret `IMMICH_API_KEY`. The address (`IMMICH_URL`) is a variable.
 
-**Whose photos:** an API key belongs to one Immich user. With partner sharing in Immich, that
-user's search covers the partner's shared photos too. ✋ Decide which user's key.
+**2. A Cloudflare Access service token for Immich's own Access application:**
+- Zero Trust → Access → Service credentials → create "minty-immich".
+- On **Immich's** Access application (not Minty's), add a **Service Auth** policy for it.
+- Stored as `IMMICH_ACCESS_CLIENT_ID` and `IMMICH_ACCESS_CLIENT_SECRET` (secrets), sent as Access's
+  service-token headers with each call.
+- This is a different token from the Gmail script's (§2.1): that one only gets into Minty, this
+  one only gets into Immich.
 
-**Budget:** each run stays well inside the 50 subrequests (search pages plus one album call).
+None of these is ever returned to a page. **Setup checks:** the key works, its permissions, and the
+token gets through.
+
+**Whose photos.** An album belongs to the key's user, and the search covers that user's library.
+- With Immich's **partner sharing**, the partner's photos may show in that user's timeline. Whether
+  the search includes them, and whether a partner's photo can go into the album, is checked in T0.
+- If not, a second key per person (`IMMICH_API_KEY_<PERSON>`) gives each person their own album of
+  the trip. ✋ Only if T0 shows it's needed.
+
+**When:** from the cron, never on a request.
+- The first hourly run after a trip ends makes the album.
+- It's checked once a day for 7 days after, for photos uploaded late.
+- **Make the album now** on a trip only records a request, like tapping the logo; the next run does
+  it.
+
+**What it does:**
+1. **Search** the photos and videos taken from the trip's first day at 00:00 to its last day at
+   23:59, in the trip's time zone (and each flight day in the departure city's zone), using Immich's
+   metadata search, paged (T0 confirms its date parameters).
+2. **Make an album** named after the trip ("Tokyo, Mar 2027") with them. Later checks add only new
+   ones.
+3. **Keep the album id** on the trip.
+
+**What it never does:** delete or edit a photo, remove one from the album, make a public shared
+link, or download anything into Minty. If the household deletes the album in Immich, Minty notices
+and doesn't make it again; the trip offers **Make it again**.
+
+**The trip shows "Photos: 214 in Immich ↗"**, a link to the album, which opens in Immich behind its
+own Access sign-in.
+- There are no thumbnails in Minty: they'd come from Immich's host, which the page's policy doesn't
+  allow, and would need Immich's sign-in in Minty's page.
+
+**Budget:** a search page holds up to 250 assets. A run makes the search pages plus one album call,
+well inside the 50 subrequests, and a big trip spreads over several runs.
 
 ## 9. Security and privacy
 
@@ -296,26 +337,100 @@ user's search covers the partner's shared photos too. ✋ Decide which user's ke
 | **T0 Spikes** | An Apps Script posting through Access with a service token, and that token's JWT claims; Email Routing on the owner's domain to a test handler; CPU to parse ~20 real confirmations (the owner sends them; only their measurements are kept); Immich's search and album API on the owner's version | Service token, Immich key, test emails |
 | **T1 Trips and bookings** | `trips`, `trip_items`; typed, pasted, PDF and screenshot input; the itinerary and flight cards | Name |
 | **T2 Gmail (default)** | The inbox (`inbox_messages`, shared by views), `POST /inbox` for the household's Access service token, the Apps Script and its Setup page (Copy script, the filter text for `+mintytrips` and `+mintybills`), JSON-LD and known-sender parsers, SETUP.md's steps (a Gmail account for Minty), the security-plan entry | Approve the security change |
-| **T2c Bills by email** | `+mintybills` messages read with `bill-parse.js` into suggested bills; attachments as decided (§2.3) | Attachments (a) or (b) |
+| **T2c Bills by email** | `+mintybills` messages read with `bill-parse.js` into suggested bills; PDF attachments kept until Bills reads them, then deleted (§2.3, option a); CLAUDE.md's Bills rule gets the exception | |
 | **T2b Forward to Minty** | The `email()` handler in Minty's Worker for a domain on Cloudflare, the allowed-login check, a Setup check | The owner's forwarding address |
 | **T3 Transactions** | Suggestions, confirm, totals, `/?trip=` in the dashboard | |
 | **T4 BAM** | Pending changes from award bookings | |
 | **T5 Immich** | Albums from the cron, the link on the trip | Secrets |
-| **T6 Optional** | Live flight status (a provider and its key, cron-only, a daily budget), a map | Provider, cost |
+| **T6a Map** | Minty's own SVG map: the world outline, airports, flight arcs and places with coordinates; "Open in Maps" links (§13) | |
+| **T6b Street map (optional)** | MapLibre and street tiles (§13, option 2) | Tile host |
+| **T6c Live flight status (optional)** | A provider and its key, cron-only polling with a daily cap, on the flight cards and the status strip (§14) | Provider, cost |
 
 ## 12. Decisions for the owner
 
-1. ✋ **The name** (JET, or another).
+1. **The name: JET** (decided 2026-11-19).
 2. **How bookings come in: decided (2026-11-19).** The Gmail script by default, with mail labeled
    only by `+minty` forwarding or by hand; forwarding to the domain's address where there's a domain
    on Cloudflare (the owner has both); paste, PDF, screenshot and share for everyone (§2).
 3. ✋ **Keep a forwarded message's text 30 days** for re-reading, or only its extracted fields.
-4. ✋ **Immich:** whose API key, and the service token for Immich's Access application.
-5. ✋ **Live flight status and a map:** later (T6), or not at all.
+4. **Immich: through its API (decided 2026-11-19),** with an API key with four permissions and a
+   service token for Immich's Access application (§8). ✋ Whose key (the library with the trip
+   photos), and a second person's key only if T0 needs it.
+5. ✋ **Map and live flight status:** §13 and §14. The map (T6a) has no outside service; a street map
+   (T6b) and live status (T6c) each need a choice of provider.
 6. **For forks too:** the Gmail script works for any household with a Gmail account, forwarding to
    Minty for those with a domain on Cloudflare, and paste, PDF and screenshot always.
 7. ✋ **The Gmail script's security change:** one route that accepts the household's Access service
    token instead of a person's login (§2.1).
 8. **A Gmail account made for Minty: recommended (decided 2026-11-19),** shared by Trips
    (`+mintytrips`) and Bills (`+mintybills`).
-9. ✋ **Bills' PDF attachments:** kept until a browser reads them, or ignored (§2.3).
+9. **Bills' PDF attachments: kept until a browser reads them (decided 2026-11-19, option a, §2.3).**
+
+## 13. The map (T6a, T6b)
+
+A Wanderlog-style map of the trip: its places, and its flights as arcs.
+
+**Option 1, first (T6a): Minty's own map, with no outside service.**
+- **Drawn like `charts.js`:** an SVG of the world's outline, from Natural Earth's 1:110m countries
+  (public domain, about 100 KB simplified, vendored).
+- **Airports by IATA code** from OurAirports' list (public domain), the large and medium ones
+  (vendored, a few hundred KB), for every flight's two ends.
+- **Flights** are great-circle arcs, and **places** are pins: hotels, restaurants and activities that
+  have coordinates. Schema.org reservations often include them; a place without any is listed, not
+  placed.
+- Zoomed to the trip's extent. Tapping a pin shows that booking.
+- **Street level:** each place has an **Open in Maps** link (Apple Maps or Google Maps by address).
+  It's a link only, so nothing is loaded from them in Minty.
+- **No change to the page's policy, and no one else sees where the household is going.**
+
+**Option 2, later and optional (T6b): a street map.** ✋
+- [MapLibre GL](https://maplibre.org/), vendored, using its CSP-friendly build with a separate
+  worker file.
+- **Tiles from one of:**
+  - **[OpenFreeMap](https://openfreemap.org/)'s public tiles:** free, no key, no cookies, no limits
+    stated. The policy gains its host, and the tile server sees which areas are viewed (not by whom).
+  - **Self-hosted [Protomaps](https://protomaps.com/) PMTiles** on Cloudflare R2: a region's extract
+    is a few GB, inside R2's free 10 GB, served through a small Worker. No third party. Protomaps is
+    free for non-commercial use, and households are.
+- **Places without coordinates** could be looked up by address (OpenStreetMap's Nominatim, from the
+  cron, one request a second, its usage policy followed), or left as a list. ✋
+
+## 14. Live flight status (T6c, optional)
+
+Flighty's main trick: delays, gate changes and landing times as they happen. It needs a
+flight-data service; there's no free public source of airline schedules and status.
+
+**Providers** (prices as published in 2026; T0 rechecks them):
+
+| Provider | Cost | Notes |
+|---|---|---|
+| [AeroDataBox](https://aerodatabox.com/pricing) (RapidAPI / API.market) | a free or trial tier, then from about $5–7.50 a month | status by flight number and date, gates and terminals where airports publish them |
+| [FlightAware AeroAPI](https://www.flightaware.com/commercial/aeroapi/) Personal | billed per query, with about $5 of free use a month | personal or academic use only; good coverage and live positions |
+
+Each household brings its own key (`FLIGHT_STATUS_PROVIDER` as a variable, `FLIGHT_STATUS_KEY` as a
+secret). It's off without one.
+
+**Polling, from the cron only** (never on a request, like sync). Per flight leg:
+- once 24 hours before, once 6 and once 3 hours before;
+- every 10-minute catch-up run from 2 hours before until it departs;
+- every 30 minutes until it lands, and once after.
+
+That's about 15–20 calls a leg. `FLIGHT_STATUS_CALLS_PER_DAY` caps them (default 50), so a free tier
+isn't overrun. Past the cap, cards say "status paused until tomorrow".
+
+**Stored on the leg:** status (scheduled, delayed, boarding, departed, landed, cancelled, diverted),
+scheduled, estimated and actual times, terminal, gate, baggage belt, aircraft, delay in minutes, the
+time it was fetched, and the provider. Only the latest is kept.
+
+**Shown:**
+- **On the flight card:** "Delayed 45 min · Gate G12 · as of 3 min ago (AeroDataBox)".
+- **On the dashboard's status strip,** for a flight within 24 hours: "UA 837 to Tokyo: gate G12,
+  on time".
+- **Push notifications** to a phone (Web Push, VAPID keys, sent from the cron) are a separate
+  later step. ✋
+
+**Privacy:** the provider learns that someone looked up that flight on that date, from the
+household's API account. Nothing else is sent.
+
+**Decisions:** ✋ whether to build it; which provider (AeroDataBox's free tier to start, if T0 finds
+its quota enough); the daily cap; push notifications later or not.

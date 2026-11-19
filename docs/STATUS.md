@@ -143,8 +143,8 @@ there, gitignored here). If that folder exists, read it too.
    bonuses** ([sub.md](sub.md)): built 2026-11-19: ⋯ menu → Accounts, and ⋯ menu → SUB. Accounts
    also gets holders and a beneficiary on any account, with people still in `MINTY_USERS`. Both
    use ideas from a fork, with its author's permission.
-9. **Trips (a Flighty and Wanderlog hybrid)**, [trips.md](trips.md): plan waiting for the owner's
-   review (2026-11-19). Bookings sent by a Gmail script (labeled by `+minty` or by hand), or forwarded
+9. **JET, trips (a Flighty and Wanderlog hybrid)**, [trips.md](trips.md): plan merged 2026-11-19;
+   next is T0 (§11), after the owner's open decisions in §12. Bookings sent by a Gmail script (labeled by `+minty` or by hand), or forwarded
    to the domain's address, never a mailbox connected; an itinerary and flight cards, the trip's
    transactions, BAM's pending changes, an Immich album.
 10. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
