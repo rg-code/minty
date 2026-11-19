@@ -139,17 +139,21 @@ there, gitignored here). If that folder exists, read it too.
 7. **The finance agent ("Ask Minty").** Its to-do is §11 of [agent-plan.md](agent-plan.md), and
    its decisions were made 2026-10-06. **Next: A0** (§8.1). It needs the owner's go-ahead plus an
    OpenRouter key (training off) and a Workers AI token in `.dev.vars`.
-8. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
+8. **Manual accounts and an Accounts view** ([accounts.md](accounts.md)), and **SUB, sign-up
+   bonuses** ([sub.md](sub.md)): approved 2026-11-19, being built. Accounts
+   also gets holders and a beneficiary on any account, with people still in `MINTY_USERS`. Both
+   use ideas from a fork, with its author's permission.
+9. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
    page so the demo follows. A dashboard change the demo can't follow stops the build, by
    design. Other landing-page to-dos: `docs/private/STATUS.md`.
-9. **Owner housekeeping:**
+10. **Owner housekeeping:**
    - Delete unused `PLAID_*` secrets that Setup checks flag, and set `MINTY_USERS` to show your
      name. Keep the existing person keys: banks are stored under them.
    - **Wrangler logins:** `npx wrangler logout` on machines that don't need Cloudflare access.
    - **Plaid Sandbox end-to-end:** the owner runs `node scripts/sandbox-e2e.ts` against
      `npm run dev`, because it reads `.dev.vars`.
    - Other housekeeping: `docs/private/STATUS.md`.
-10. **Ongoing:**
+11. **Ongoing:**
    - **Keep Cloudflare's "Update your Wrangler configuration" prompt unapplied:** `keep_vars`
      already preserves dashboard variables, and copying them into `wrangler.jsonc` would publish
      the household's emails and Access IDs.
@@ -164,7 +168,7 @@ there, gitignored here). If that folder exists, read it too.
      commits with its cursor. If overruns become frequent, lower `SYNC_MAX_BYTES_PER_RUN`, or move
      to Workers Paid and raise it.
    - **Household notes go in `docs/private/`**, never in this file.
-11. **Later:**
+12. **Later:**
    - Onboard friends with GET-STARTED.md, and fix anything they trip on.
    - Email or push alerts for bank problems (they'd need an outbound mail setup).
    - Several Plaid Trial accounts per person is a Plaid ToS gray area. One paid Plaid account per
