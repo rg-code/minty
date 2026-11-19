@@ -30,87 +30,97 @@ Bookings come in **without Minty reading anyone's mailbox** (§2).
 - **Points** (§7): miles spent on award bookings, shown in BAM against the program's balance.
 - **Photos** (§8): an Immich album of the trip's dates, with its link.
 
-## 2. Getting bookings in
+## 2. Getting bookings in (decided by the owner, 2026-11-19)
 
-The owner doesn't want Minty connected to a mail account (2026-11-19), and asked whether a
-dedicated mailbox would be easier. The options:
+**No mailbox is connected to Minty, and there are no sender lists.** A booking reaches Minty only
+because someone in the household chose to send it. There are two ways in by email, and one without.
 
-| | **Forward to Minty** (Cloudflare Email Routing → an Email Worker) | **A dedicated mailbox Minty reads** (e.g. a new Gmail, Gmail API) |
-|---|---|---|
-| How | An address on the household's domain (e.g. `trips@…`) is routed by Cloudflare Email Service to an `email()` handler in **Minty's own Worker** (beside `fetch` and `scheduled`: nothing new to deploy, idle until a route points at it). Forward confirmations to it, or have an inbox rule forward them. | Minty's cron reads a mailbox through the provider's API, with an OAuth refresh token stored as a secret. |
-| Setup | Email Routing on a domain whose DNS is on Cloudflare (free; subdomains work), one route to the Worker. | A Google Cloud project, an OAuth consent screen, the `gmail.readonly` scope (restricted). Left in "Testing", Google expires the refresh token every 7 days; "In production" but unverified, it works for a few users with Google's warning screen. |
-| What Minty holds | Nothing: mail is pushed to it. | A credential that reads that whole mailbox. |
-| Speed | Seconds after forwarding. | At the next cron run (10 minutes). |
-| Failure modes | A message from someone not allowed is dropped. | Token revoked or expired, consent re-done, API quota. |
-| Per fork | Needs a domain on Cloudflare (optional feature). | Needs each household's own Google project. |
+### 2.1 Gmail: the default for every household
 
-**Recommendation: forward to Minty.** It's less to set up, Minty holds no mail credential, and it's
-instant.
-- A dedicated mailbox is still useful as a **collector**: a new Gmail (or the household's own
-  inbox) with a filter that auto-forwards travel mail to the Minty address. That gives an archive
-  of what was sent, without Minty reading it.
-- Gmail's auto-forwarding asks the forwarding address to confirm. The Email Worker recognises
-  Google's confirmation message and shows its link in Minty, so the owner can click it.
+A short **Google Apps Script** in the household's Gmail (their own, or a free one made for this)
+sends Minty the mail that has the label **`Minty/Trips`**. Mail gets that label in two ways only:
 
-**Who's accepted:** a message is processed only when it's from an address in `ALLOWED_LOGINS`
-(or the collector address) and Cloudflare's checks pass (SPF/DKIM, in the message's
-`Authentication-Results`). Anything else is dropped silently, with no bounce.
+1. **Forward it to `yourname+minty@gmail.com`**, from any mailbox: the same Gmail, a work account, a
+   partner's, Outlook. Gmail delivers `+minty` to the normal inbox. One Gmail filter labels it:
+   `to:(yourname+minty@gmail.com) from:(the household's addresses)`. The `from:` part means a
+   stranger writing to the `+minty` address isn't labeled. Minty's Setup page shows the exact text
+   to paste into Gmail's "Create filter" box.
+2. **Label it by hand** in Gmail, on a phone or a computer.
 
-### 2a. Households without a domain on Cloudflare
+Nothing else is ever sent: no automatic labeling by sender (owner's decision).
 
-Not every household has a domain on Cloudflare (owner, 2026-11-19). Cloudflare Email Service
-(inbound routing to a Worker's `email()` handler, free on the Workers Free plan) needs one: it
-doesn't hand out addresses without a domain, and it keeps no inbox (Minty stores what it needs).
+**The script** runs in the household's Google account every 10 minutes:
+- It finds labeled messages from the last 30 days that it hasn't sent yet. It keeps track of what
+  it sent in its own storage, so it never changes the mail.
+- It sends each one's raw content to `POST /trips/inbox` on the household's Minty. If a send fails,
+  it tries again on the next run; after 3 failures it lists the message instead.
+- It asks Google only for read-only Gmail access, permission to call a web address, and a timer.
+  It's short enough to read in full.
+- Outlook and other mailboxes need nothing of their own: forwarding to the Gmail `+minty` address
+  covers them.
+
+**What Minty checks:** only that the request carries the household's access key. The script runs
+on Google's servers, which can't sign in to Cloudflare Access the way a person does, so it uses an
+Access **service token**:
+- Access checks the token before the request reaches Minty.
+- The Worker then accepts it on `POST /trips/inbox` only, and only when the token's Client ID (the
+  `common_name` in Access's JWT) matches the `TRIPS_INGEST_TOKEN_ID` setting. Every other route
+  still needs a person's login.
+- There's **no sender authentication**: the household chose every message.
+- Messages are still untrusted text. They're parsed, never rendered or run, and every booking is a
+  suggestion until it's confirmed.
+- This is a change to the security model: a security-plan entry, approved before T2. ✋
+
+**Setting it up (once, about 5 minutes):**
+1. **Cloudflare:**
+   - Zero Trust → Access → Service credentials → create a **service token**.
+   - On Minty's Access application, add a **Service Auth** policy for that token.
+   - Put its Client ID in the Worker variable `TRIPS_INGEST_TOKEN_ID`.
+   - A Setup check confirms the token gets through.
+2. **Minty → Setup → Trips → Gmail:** paste the Client ID and secret, then **Copy script**. The
+   page builds the script in the browser, so the secret is never saved in Minty.
+3. **script.google.com:** New project, paste, run **setup**, and allow it. Google says it isn't
+   verified, because it's your own script: Advanced → Go to project.
+4. **Gmail:** make the label, and the one filter from the text Minty shows.
+
+SETUP.md walks through it with screenshots.
+
+### 2.2 Forward to Minty: households with a domain on Cloudflare (the owner's case)
+
+An address on the household's domain (e.g. `trips@…`) is routed by Cloudflare Email Service to an
+`email()` handler in **Minty's own Worker**, beside `fetch` and `scheduled`. There's nothing new
+to deploy, and it's idle until a route points at it. Inbound routing is free on the Workers Free
+plan. Cloudflare needs the domain's DNS on Cloudflare (subdomains work) and keeps no inbox.
 [Docs](https://developers.cloudflare.com/email-service/), [the handler](https://developers.cloudflare.com/email-service/api/route-emails/email-handler/).
 
-**The way for everyone: tier 1, with a domain bought for it if needed.** A domain at cost from
-Cloudflare Registrar (a .com is roughly $10 a year) is a few clicks in the dashboard the household
-already uses for Minty. Turning on Email Routing for it sets the mail records, and one rule sends
-`trips@` to the `minty` Worker. A Setup check confirms the route works (a test message to itself
-shows up). Apps Script (tier 2) stays for those who'd rather not buy a domain and are comfortable
-with a script; the owner found it likely to be hard for some households (2026-11-19).
+You forward what you choose, as with `+minty`. Anyone on the internet can send to an address on
+a domain, though, so Minty checks one thing: the message is **from an address in
+`ALLOWED_LOGINS`** (the household member who forwarded it), and Cloudflare's own DMARC verdict
+on that sender passes. That's one header compared, with no sender lists. Anything else is
+dropped silently, with no bounce.
 
-The tiers, all ending in the same parsers and inbox:
+**The owner uses both** 2.1 (`+minty` and by hand, in Gmail) and 2.2.
 
-| Tier | For | How | Minty holds | Setup |
-|---|---|---|---|---|
-| **1. Forward to Minty** | a domain on Cloudflare | Email Routing → the Email Worker (above) | nothing | one route |
-| **2. Gmail pushes to Minty** (advanced) | any Gmail (a dedicated one or the household's), no domain, and comfortable with a script | A **Google Apps Script** in that Gmail account finds new mail with a label (a filter adds it) every 10 minutes and POSTs it to Minty, then marks it done | nothing: the script holds a Cloudflare Access **service token**, scoped to the one ingest route | copy the script, allow it once, paste the token |
-| **3. No automation** | everyone | paste, PDF, screenshot, Android share | nothing | none |
+### 2.3 Without email, for everyone
 
-**Tier 2 in more detail** (optional, for households without a domain):
-- **No Google Cloud project, no OAuth app, no refresh token in Minty.** The script runs inside the
-  household's own Google account with its own permission. Google shows "this app isn't verified"
-  for a script you wrote yourself; you allow it once.
-- **It reaches Minty through Access.** A service token made for Minty's Access application (a
-  "Service Auth" rule) is sent as Access's service-token headers.
-- **The Worker accepts that token only on `POST /trips/inbox`, and only that token.** Today a sign-in
-  with no email is refused everywhere; this one route accepts a service token whose identity (its
-  Client ID, in the Access JWT's `common_name`) matches the `TRIPS_INGEST_TOKEN_ID` setting.
-  Everything else still needs a person's login.
-  - This is a change to the security model: security plan §5-style, to be written there before T2b.
-  - The token only ever adds messages to the trips inbox, where the same sender and parsing rules
-    apply as in tier 1.
-- **Gmail's limits** for a personal account (thousands of fetches a day) are far beyond a
-  household's travel mail.
-- **Outlook and others** have no free equivalent (Power Automate's HTTP step is a paid connector).
-  There, tier 1 with a cheap domain, or tier 3.
-
-**A domain for tier 1:** buy one at cost through Cloudflare Registrar, or move an existing one's
-DNS to Cloudflare (free plan). If the domain already has a mail provider, Email Routing can take a
-**subdomain** (e.g. `trips.example.com`) and leave the existing mail alone. SETUP.md gets these
-steps, with screenshots.
-
-**Not offered:** third-party inbound-mail services such as Postmark's or CloudMailin's, which give
-an address with no domain and post each message to a webhook. They'd read every booking, and
-Minty would need an endpoint reachable without signing in.
-
-**Also, without email:**
 - **Paste, PDF or screenshot,** reusing SUB's on-device readers (`pdf-read.js`, `/sub-scan`'s
   Tesseract).
 - **Share to Minty** on Android: the installed app takes a shared screenshot or PDF (`share_target`
   in the manifest). iOS doesn't support this for web apps; there, it's a screenshot picked in Minty.
 - **Wallet passes and calendar files** (`.pkpass`, `.ics`) as a later step.
+
+### 2.4 Considered and set aside
+
+- **Minty reading a mailbox** (Gmail API): a Google Cloud project, the restricted `gmail.readonly`
+  scope, refresh tokens that expire every 7 days while the app is in "Testing", and Minty holding a
+  credential that reads the whole mailbox.
+- **Labeling automatically by sender** (a filter of airlines and hotels): sender lists to keep up to
+  date, and each sender's authentication to check. The owner chose household-chosen mail only.
+- **Third-party inbound-mail services** (Postmark, CloudMailin, AgentMail): an address with no
+  domain, but they'd read every booking, and Minty would need an endpoint reachable without signing
+  in.
+- **One shared address for every fork:** whoever ran it would receive every household's bookings.
+- **Buying a domain just for this:** possible (Cloudflare Registrar, at cost), but not required.
 
 ## 3. Reading a booking
 
@@ -130,8 +140,8 @@ found.
 
 **CPU:** decoding a forwarded email (MIME, quoted-printable, base64) and finding its JSON-LD on
 the free plan's 10 ms is the open question. T0 measures it on real confirmations. If it doesn't
-fit, the Email Worker only checks the sender and stores the message's text parts (capped at
-256 KB), and the cron parses a few per run, as sync handles Plaid's pages.
+fit, `POST /trips/inbox` and the `email()` handler only store the message (capped at 256 KB), and
+the cron parses a few per run, as sync handles Plaid's pages.
 
 ## 4. What it stores
 
@@ -218,9 +228,9 @@ user's search covers the partner's shared photos too. ✋ Decide which user's ke
 
 ## 9. Security and privacy
 
-- **The Email Worker:** accepts only allowed senders with passing checks (§2). It never replies,
-  never follows links in a message (Google's forwarding confirmation is shown, not clicked), and
-  never loads remote images.
+- **What gets in:** only mail the household chose (§2): labeled in Gmail and sent with the
+  household's access key, or forwarded from an allowed login to the domain's address. Minty never
+  replies, never follows a link in a message, and never loads remote images.
 - **Forwarded mail is untrusted text.** It's parsed, never executed. HTML is never rendered: the
   trip view shows extracted fields, and the stored text is shown as plain text.
 - **What's kept:** extracted fields, a SHA-256 per message, and the text for 30 days (§4, ✋).
@@ -230,7 +240,7 @@ user's search covers the partner's shared photos too. ✋ Decide which user's ke
 
 ## 10. Limits
 
-- **CPU (10 ms):** parsing in the Email Worker or, if it doesn't fit, in the cron with a budget
+- **CPU (10 ms):** parsing as a message arrives or, if it doesn't fit, in the cron with a budget
   (§3, T0).
 - **D1 reads:** the trip view reads its trips, items and links by index. Suggestions read the
   trip's date window by the date index, bounded at both ends. Each route gets a budget in
@@ -241,10 +251,10 @@ user's search covers the partner's shared photos too. ✋ Decide which user's ke
 
 | Phase | What | ✋ |
 |---|---|---|
-| **T0 Spikes** | Email Routing on the household's domain, a route to a test Email Worker; CPU to parse ~20 real confirmations (the owner forwards them; only their measurements are kept); Immich's search and album API on the owner's version; a service token's Access JWT (its claims) and an Apps Script posting through Access | Domain, Immich key, test emails |
+| **T0 Spikes** | An Apps Script posting through Access with a service token, and that token's JWT claims; Email Routing on the owner's domain to a test handler; CPU to parse ~20 real confirmations (the owner sends them; only their measurements are kept); Immich's search and album API on the owner's version | Service token, Immich key, test emails |
 | **T1 Trips and bookings** | `trips`, `trip_items`; typed, pasted, PDF and screenshot input; the itinerary and flight cards | Name |
-| **T2 Email in** | The `email()` handler in Minty's Worker, `trip_inbox`, JSON-LD and known-sender parsers, Gmail's forwarding confirmation, the Setup check, and SETUP.md's steps (buying a domain included) | The forwarding address |
-| **T2b Gmail push (optional)** | `POST /trips/inbox` for one Access service token (§2a), the Apps Script and its setup page, the security-plan entry | Approve the security change |
+| **T2 Gmail (default)** | `trip_inbox`, `POST /trips/inbox` for the household's Access service token, the Apps Script and its Setup page (Copy script, the filter text), JSON-LD and known-sender parsers, SETUP.md's steps, the security-plan entry | Approve the security change |
+| **T2b Forward to Minty** | The `email()` handler in Minty's Worker for a domain on Cloudflare, the allowed-login check, a Setup check | The owner's forwarding address |
 | **T3 Transactions** | Suggestions, confirm, totals, `/?trip=` in the dashboard | |
 | **T4 BAM** | Pending changes from award bookings | |
 | **T5 Immich** | Albums from the cron, the link on the trip | Secrets |
@@ -253,14 +263,13 @@ user's search covers the partner's shared photos too. ✋ Decide which user's ke
 ## 12. Decisions for the owner
 
 1. ✋ **The name** (JET, or another).
-2. ✋ **How bookings come in:** forward to Minty through Cloudflare Email Service (recommended for
-   every household, buying a domain if needed), with an optional collector inbox that
-   auto-forwards; Apps Script as an optional extra; or a dedicated mailbox Minty reads (not
-   recommended).
+2. **How bookings come in: decided (2026-11-19).** The Gmail script by default, with mail labeled
+   only by `+minty` forwarding or by hand; forwarding to the domain's address where there's a domain
+   on Cloudflare (the owner has both); paste, PDF, screenshot and share for everyone (§2).
 3. ✋ **Keep a forwarded message's text 30 days** for re-reading, or only its extracted fields.
 4. ✋ **Immich:** whose API key, and the service token for Immich's Access application.
 5. ✋ **Live flight status and a map:** later (T6), or not at all.
-6. ✋ **Owner-only or for forks:** with §2a, forks get tier 1 if they have a domain on Cloudflare,
-   tier 2 with any Gmail, and tier 3 always.
-7. ✋ **Tier 2's security change:** one route that accepts a specific Access service token instead
-   of a person's login (§2a).
+6. **For forks too:** the Gmail script works for any household with a Gmail account, forwarding to
+   Minty for those with a domain on Cloudflare, and paste, PDF and screenshot always.
+7. ✋ **The Gmail script's security change:** one route that accepts the household's Access service
+   token instead of a person's login (§2.1).
