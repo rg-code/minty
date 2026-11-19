@@ -143,7 +143,8 @@ there, gitignored here). If that folder exists, read it too.
    bonuses** ([sub.md](sub.md)): built 2026-11-19: ⋯ menu → Accounts, and ⋯ menu → SUB. Accounts
    also gets holders and a beneficiary on any account, with people still in `MINTY_USERS`. Both
    use ideas from a fork, with its author's permission.
-9. **JET, trips (a Flighty and Wanderlog hybrid)**, [trips.md](trips.md): plan merged 2026-11-19.
+9. **JET, trips (a Flighty and Wanderlog hybrid)**, [trips.md](trips.md): **J1 built 2026-11-19**, the app at
+   `/jet/` (§16): trips, bookings, itinerary, flight cards, the map, the trip's spending.
    - Bookings (and bills) come from a Gmail account made for Minty, by forwarding to
      `+mintytrips` / `+mintybills` or labeling by hand, or by forwarding to the domain's address.
      No mailbox is connected to Minty.

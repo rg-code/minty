@@ -1,6 +1,6 @@
 # Plan: JET, trips (a Flighty and Wanderlog hybrid)
 
-**Status: plan, merged 2026-11-19 with the owner's decisions (§12). T0 started: the owner runs `scripts/jet-t0/`.** Its
+**Status: J1 built (2026-11-19): the JET app at `/jet/` (§16), with T1, T3, T6a and T6b. T0 started: the owner runs `scripts/jet-t0/`; T2, T5, T6c and T7 follow its results.** Its
 inbox (§2) also serves Bills. Named **JET** (owner, 2026-11-19).
 
 A trip view built from the household's bookings:
@@ -512,3 +512,70 @@ gets:
 **T0 checks:** Immich's metadata search returns GPS and city with each asset (and whether a
 partner's photos are included). T7 depends on T1 (trips), T3 (transactions) and T5 (the Immich key);
 the map is T6a.
+
+## 16. The JET app (J1, built 2026-11-19)
+
+**Owner's request:** a Wanderlog, Flighty and Immich inspired trip app as a standalone PWA, with
+GRAZE's OpenStreetMap map as the model. The look borrows from the two apps; the features are
+JET's own:
+- **Flights, the theme and the map look like Flighty:** dark first, big airport codes, a progress
+  line, status pills, a boarding-pass card, glowing arcs on a night map.
+- **Trips look like Wanderlog:** a cover, a day-by-day plan with a colour per day, and numbered
+  markers that match the map's numbered pins.
+
+**Where it lives: Minty's Worker, at `/jet/`, as an app of its own.**
+- It has its own manifest (`id`, `scope` and `start_url` `/jet/`), icon, service worker
+  (`/jet/sw.js`, cache `jet-…`) and home-screen entry.
+- It's behind Minty's Access sign-in and `ALLOWED_LOGINS`, on Minty's D1.
+- A separate Worker would have needed its own copy of the data, or a key to read Minty's
+  transactions. The owner was fine either way (2026-11-19).
+- Each service worker deletes only its own old caches (`minty-…`, `jet-…`).
+- Minty's ⋯ menu links to it; the demo leaves it out.
+
+**Built (J1):**
+- **Data (migration 0025):**
+  - `trips`: name, days, place, travellers.
+  - `trip_items`: one per booking (a flight leg, a stay, a car, a train, a restaurant, an event),
+    with local times as given (their offset when known), place and coordinates, price or points,
+    and the flight's airline, number, airports, terminal, gate and seat. A booking can wait with
+    no trip.
+  - `trip_transactions`: a trip's confirmed or dismissed transactions, and the booking each paid
+    for.
+- **API:**
+  - `GET/POST/PUT/DELETE /trips`, and `/trips/items`.
+  - `POST /trips/read-email`: an `.eml`'s bytes, up to 2 MB, the one route past 16 KiB. It's read
+    by `src/jet/` into suggested bookings, and nothing is stored.
+  - `GET /trips/{id}/suggestions` (§6).
+  - `POST /trips/{id}/transactions` (confirm, dismiss, remove).
+  - `GET /transactions?trip_id=`, which starts from the trip's links (`CROSS JOIN`).
+  - Read budgets in `test/reads.test.ts`. The booking-price look-ups use `INDEXED BY
+    idx_txn_pair`, because the planner chose the date index and read a year.
+- **The app (`public/jet/`):**
+  - **Trips:** the next flight at the top, with its countdown. Trips as covers. Bookings waiting
+    for a trip, and making a trip from them.
+  - **A trip:** the itinerary by day, before and after the trip, and bookings with no date. The
+    flights as cards, with "add to calendar" (an `.ics` made in the browser). Spending: a total,
+    by category and a day, with suggestions to confirm and "Open in Minty" (`/?trip=`).
+  - **The map beside the plan (above it on a phone):** the itinerary frames the trip's places, the
+    Flights tab its flights. Places either side of the date line are shifted to sit together.
+  - **Adding a booking:** typed; pasted text, a PDF (pdf.js) or a screenshot (`/sub-scan?for=jet`),
+    all read on the device by `public/jet/jet-parse.js`; or an email file read by the server.
+    Every suggestion is checked before it's saved.
+- **The map (§13, T6a and T6b together):**
+  - MapLibre GL 5.24.0, its CSP build, vendored in `public/vendor/maplibre/` (BSD-3-Clause).
+    GRAZE loads it from unpkg; Minty doesn't use CDNs.
+  - OpenFreeMap's "liberty" style, and at night GRAZE's palette (`public/jet/map-style.js`).
+  - Labels in Latin script only: OpenFreeMap's fonts have no CJK glyphs, so Japanese names drew as
+    empty boxes.
+  - Airports from OurAirports (public domain): 3,245 with scheduled service, `public/jet/airports.json`.
+  - **Policy:** only `/jet/*` and `/vendor/maplibre/*` (the worker fetches tiles under its own file's
+    policy) may reach `tiles.openfreemap.org`. The dashboard's policy is unchanged.
+- **The dashboard:** `/?trip=ID` shows one trip's transactions, with a link back to JET.
+
+**Next, after T0:**
+- T2: the inbox, the Gmail script and forwarding to the domain;
+- T5: Immich albums;
+- T6c: live status through AeroAPI;
+- T7: the timeline;
+- T4: BAM's pending changes.
+

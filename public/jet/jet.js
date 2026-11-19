@@ -1,0 +1,526 @@
+// JET (docs/trips.md): the household's trips, as an app of its own at /jet/. Served by Minty's
+// Worker, behind Minty's sign-in, on Minty's data: trips and bookings (GET /trips…), the trip's
+// transactions (GET /transactions?trip_id=, suggestions to confirm), BAM's programs for award
+// bookings. Bookings come typed, pasted, from a PDF (pdf.js, read on the device), a screenshot
+// (/sub-scan?for=jet, read on the device) or an email file (POST /trips/read-email, read on the
+// server and not stored). The look: flights, the theme and the map after Flighty; trips after
+// Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
+import { createMap, drawTrip, focus, loadAirports } from "./map.js";
+
+const app = document.getElementById("app");
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = (c, cur = "USD") => { try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur || "USD", maximumFractionDigits: (c ?? 0) % 100 ? 2 : 0 }).format((c ?? 0) / 100); } catch { return `${cur} ${((c ?? 0) / 100).toFixed(2)}`; } };
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const asDay = (d) => new Date(`${d}T00:00:00Z`);
+const fmtDay = (d) => d ? `${DOW[asDay(d).getUTCDay()]}, ${MON[asDay(d).getUTCMonth()]} ${asDay(d).getUTCDate()}` : "";
+const fmtShort = (d) => d ? `${MON[asDay(d).getUTCMonth()]} ${asDay(d).getUTCDate()}` : "";
+const addDays = (d, n) => { const t = asDay(d); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+const dateOf = (s) => (s ? s.slice(0, 10) : null);
+const timeOf = (s) => (s && s.length >= 16 ? s.slice(11, 16) : "");
+/** An instant, only when the time carries its offset (bookings from email do); typed local times don't. */
+const instant = (s) => (s && /(Z|[+-]\d{2}:?\d{2})$/.test(s) ? Date.parse(s) : null);
+const localDay = () => new Date().toLocaleDateString("en-CA");
+const DAY_COLORS = ["#6b8cff", "#ff7a59", "#2fbf71", "#c96bff", "#ffb020", "#27b9d6", "#ff5d8f", "#9aa95b"];
+const hue = (s) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 17);
+const KIND = { flight: "Flight", lodging: "Stay", car: "Car", train: "Train", bus: "Bus", restaurant: "Restaurant", event: "Activity", other: "Booking" };
+const NAME_LABEL = { flight: "Airline", lodging: "Hotel or stay", car: "Company", train: "Train or company", bus: "Company", restaurant: "Restaurant", event: "Activity or event", other: "Name" };
+const AIRLINE_COLORS = ["#2f6fec", "#d8344a", "#1d9a6c", "#7d4cdb", "#e07b1f", "#178aa1"];
+const CAT = { FOOD_AND_DRINK: "Food & drink", TRAVEL: "Travel", TRANSPORTATION: "Transport", ENTERTAINMENT: "Activities", GENERAL_MERCHANDISE: "Shopping",
+              PERSONAL_CARE: "Personal care", GENERAL_SERVICES: "Services", RENT_AND_UTILITIES: "Home", MEDICAL: "Medical", BANK_FEES: "Fees" };
+
+let data = null, users = [], airports = {}, programs = null, map = null, mapKey = "", focused = null;
+
+async function api(method, path, body, raw) {
+  const r = await fetch(path, { method, headers: raw ? { "content-type": "message/rfc822" } : body ? { "content-type": "application/json" } : {},
+                                body: raw ?? (body ? JSON.stringify(body) : undefined) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || `${r.status}`);
+  return d;
+}
+async function load() {
+  const [t, u, a] = await Promise.all([api("GET", "/trips"), api("GET", "/users").catch(() => []), loadAirports()]);
+  data = t; users = Array.isArray(u) ? u : []; airports = a;
+}
+const label = (k) => users.find((u) => u.key === k)?.label ?? k;
+const airport = (code) => (code && airports[code] ? { name: airports[code][0], city: airports[code][1], country: airports[code][2], lat: airports[code][3], lon: airports[code][4] } : null);
+const tripById = (id) => data.trips.find((t) => t.id === id);
+const itemById = (id) => [...data.trips.flatMap((t) => t.items), ...data.unassigned].find((i) => i.id === id);
+
+// --- Flighty: the flight card -----------------------------------------------------------------
+function status(f) {
+  const dep = instant(f.start_at), arr = instant(f.end_at), now = Date.now();
+  if (dep && arr && now >= arr) return { label: "Landed", cls: "dim", progress: 1 };
+  if (dep && arr && now >= dep) return { label: "In the air", cls: "info", progress: (now - dep) / (arr - dep) };
+  if (dep && dep - now < 864e5 && dep > now) return { label: "Today", cls: "good", progress: 0 };
+  const d = dateOf(f.start_at);
+  if (d && d < localDay()) return { label: "Flown", cls: "dim", progress: 1 };
+  return { label: "Scheduled", cls: "good", progress: 0 };
+}
+const until = (ms) => { const m = Math.round(ms / 6e4); if (m < 60) return `${m} min`; const h = Math.floor(m / 60); return h < 48 ? `${h} h ${m % 60} min` : `${Math.floor(h / 24)} days`; };
+function duration(f) {
+  const a = instant(f.start_at), b = instant(f.end_at);
+  if (!a || !b || b <= a) return "";
+  const m = Math.round((b - a) / 6e4);
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+}
+const PLANE = `<svg class="plane" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 16v-2l-8-5V3.5A1.5 1.5 0 0 0 11.5 2 1.5 1.5 0 0 0 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>`;
+function flightCard(f, { compact = false, countdown = false } = {}) {
+  const dep = airport(f.dep_airport), arr = airport(f.arr_airport), st = status(f), dur = duration(f);
+  const color = AIRLINE_COLORS[hue(f.airline ?? f.name ?? "") % AIRLINE_COLORS.length];
+  const plusDays = dateOf(f.end_at) && dateOf(f.start_at) && dateOf(f.end_at) > dateOf(f.start_at) ? Math.round((asDay(dateOf(f.end_at)) - asDay(dateOf(f.start_at))) / 864e5) : 0;
+  const dep0 = instant(f.start_at);
+  const cd = countdown && dep0 && dep0 > Date.now() ? `<span class="countdown">Departs in ${until(dep0 - Date.now())}</span>` : "";
+  return `<article class="flight${compact ? " compact" : ""}" data-item="${f.id}">
+    <div class="flight-top"><span class="who"><span class="airline" style="background:${color}">${esc(f.airline ?? "✈")}</span>${esc([f.airline, f.flight_number].filter(Boolean).join(" ") || f.name || "Flight")}${f.name && f.airline ? ` <span class="muted">· ${esc(f.name)}</span>` : ""}</span>
+      <span class="pill ${st.cls}">${st.label}</span></div>
+    <div class="route">
+      <div class="end"><div class="code">${esc(f.dep_airport ?? "—")}</div><div class="city">${esc(dep?.city || dep?.name || "")}</div><div class="time">${esc(timeOf(f.start_at) || "—")}<small>${esc(fmtShort(dateOf(f.start_at)))}</small></div></div>
+      <div class="track"><span class="done" style="width:${Math.round(st.progress * 100)}%"></span><span style="position:absolute;left:${Math.round(Math.max(0, Math.min(1, st.progress)) * 100)}%;top:50%">${PLANE}</span>${dur ? `<span class="dur">${dur}</span>` : ""}</div>
+      <div class="end arr"><div class="code">${esc(f.arr_airport ?? "—")}</div><div class="city">${esc(arr?.city || arr?.name || "")}</div><div class="time">${esc(timeOf(f.end_at) || "—")}${plusDays ? `<small>+${plusDays}</small>` : ""}</div></div>
+    </div>
+    <div class="facts"><div><span>Terminal</span><b>${esc(f.dep_terminal ?? "—")}</b></div><div><span>Gate</span><b>${esc(f.dep_gate ?? "—")}</b></div>
+      <div><span>Seat</span><b>${esc(f.seat ?? "—")}</b></div><div><span>Confirmation</span><b>${esc(f.confirmation ?? "—")}</b></div></div>
+    <div class="flight-foot">${cd || `<span>${esc(fmtDay(dateOf(f.start_at)))}</span>`}<span>${f.points ? `${f.points.toLocaleString()} pts` : f.price_cents ? money(f.price_cents, f.currency) : ""}
+      ${compact ? "" : ` · <button type="button" class="btn small ghost" data-ics="${f.id}">Add to calendar</button>`}</span></div>
+  </article>`;
+}
+
+// --- the trips list ---------------------------------------------------------------------------
+function home() {
+  const today = localDay();
+  const flights = data.trips.flatMap((t) => t.items).concat(data.unassigned).filter((i) => i.kind === "flight" && dateOf(i.start_at) && (dateOf(i.end_at) ?? dateOf(i.start_at)) >= today)
+    .sort((a, b) => (a.start_at < b.start_at ? -1 : 1));
+  const upcoming = data.trips.filter((t) => t.end_date >= today).sort((a, b) => (a.start_date < b.start_date ? -1 : 1));
+  const past = data.trips.filter((t) => t.end_date < today);
+  const tripCard = (t) => `<a class="trip-card" href="#/trip/${t.id}">
+    <div class="cover" style="--h:${hue(t.name)}"><h3>${esc(t.name)}</h3><div class="when">${esc(fmtShort(t.start_date))} – ${esc(fmtShort(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div></div>
+    <div class="meta">${t.start_date > today ? `<span class="pill info">in ${Math.round((asDay(t.start_date) - asDay(today)) / 864e5)} days</span>` : t.end_date >= today ? `<span class="pill good">On now</span>` : ""}
+      ${["flight", "lodging"].map((k) => { const n = t.items.filter((i) => i.kind === k).length; return n ? `<span class="pill dim">${n} ${k === "flight" ? (n === 1 ? "flight" : "flights") : (n === 1 ? "stay" : "stays")}</span>` : ""; }).join("")}
+      ${t.transactions ? `<span class="pill dim">${money(t.spent_cents)} spent</span>` : ""}</div></a>`;
+  return `${flights.length ? `<div class="section-title"><h2>Next flight</h2><span class="muted">${flights.length > 1 ? `${flights.length - 1} more after it` : ""}</span></div>
+      <div class="hero">${flightCard(flights[0], { countdown: true })}</div>` : ""}
+    <div class="section-title"><h2>Trips</h2><a class="btn small" href="#/new">New trip</a></div>
+    ${upcoming.length ? `<div class="trips">${upcoming.map(tripCard).join("")}</div>` : `<div class="card muted">No trips coming up. Make one, or add a booking and JET will hold it until you do.</div>`}
+    ${data.unassigned.length ? `<div class="section-title"><h2>Bookings waiting for a trip</h2><span class="muted">${data.unassigned.length}</span></div>
+      <div class="list">${data.unassigned.map((i) => `<label class="row"><input type="checkbox" data-pick="${i.id}" /><span class="grow"><b>${esc(itemTitle(i))}</b><span class="muted">${esc(KIND[i.kind])} · ${esc(fmtDay(dateOf(i.start_at)) || "no date")}</span></span><a href="#/item/${i.id}" class="btn small ghost">Edit</a></label>`).join("")}</div>
+      <div class="actions"><button type="button" class="btn primary" data-make-trip>Make a trip from the ticked ones</button></div>` : ""}
+    ${past.length ? `<div class="section-title"><h2>Past trips</h2></div><div class="trips">${past.map(tripCard).join("")}</div>` : ""}
+    <a class="fab" href="#/add" aria-label="Add a booking" title="Add a booking">+</a>`;
+}
+const itemTitle = (i) => i.kind === "flight" ? [[i.airline, i.flight_number].filter(Boolean).join(" "), [i.dep_airport, i.arr_airport].filter(Boolean).join(" → ")].filter(Boolean).join(" · ") || "Flight" : i.name || KIND[i.kind];
+
+// --- Wanderlog: the trip ----------------------------------------------------------------------
+/** The trip's plan by day: each booking on its day (a stay's check-in and check-out both), numbered
+ * per day like Wanderlog, and the same numbers on the map's pins. */
+function plan(t) {
+  const days = [];
+  for (let d = t.start_date; d <= t.end_date; d = addDays(d, 1)) days.push({ date: d, entries: [] });
+  const before = [], after = [], unscheduled = [];
+  const put = (date, entry) => {
+    const day = days.find((x) => x.date === date);
+    if (day) day.entries.push(entry); else if (!date) unscheduled.push(entry); else (date < t.start_date ? before : after).push(entry);
+  };
+  for (const i of t.items) {
+    put(dateOf(i.start_at), { item: i, at: timeOf(i.start_at), role: i.kind === "lodging" ? "Check in" : "" });
+    if (i.kind === "lodging" && dateOf(i.end_at) && dateOf(i.end_at) !== dateOf(i.start_at)) put(dateOf(i.end_at), { item: i, at: timeOf(i.end_at), role: "Check out", repeat: true });
+  }
+  for (const d of days) d.entries.sort((a, b) => (a.at || "99") < (b.at || "99") ? -1 : 1);
+  days.forEach((d, n) => { d.color = DAY_COLORS[n % DAY_COLORS.length]; let k = 0; for (const e of d.entries) e.n = ++k; });
+  return { days, before, after, unscheduled };
+}
+function entryHtml(e) {
+  const i = e.item;
+  if (i.kind === "flight" && !e.repeat) return `<div class="stop"><span class="marker">${e.n ?? "·"}</span>${flightCard(i, { compact: true })}</div>`;
+  const where = [i.place, i.confirmation ? `Conf. ${i.confirmation}` : ""].filter(Boolean).join(" · ");
+  return `<div class="stop"><span class="marker">${e.n ?? "·"}</span><button type="button" class="item" data-item="${i.id}">
+    <div class="row1"><span class="what"><span class="kind">${esc(e.role || KIND[i.kind])}</span> ${esc(i.name || KIND[i.kind])}</span><span class="at">${esc(e.at)}</span></div>
+    ${where ? `<div class="sub">${esc(where)}</div>` : ""}${!e.repeat && (i.price_cents || i.points) ? `<div class="sub">${i.points ? `${i.points.toLocaleString()} pts` : money(i.price_cents, i.currency)}</div>` : ""}</button></div>`;
+}
+function tripView(t, tab) {
+  const p = plan(t);
+  const tabs = [["", "Itinerary"], ["flights", "Flights"], ["spending", "Spending"]];
+  const flights = t.items.filter((i) => i.kind === "flight").sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
+  let body;
+  if (tab === "flights") body = flights.length ? flights.map((f) => flightCard(f)).join("") : `<div class="card muted">No flights in this trip yet.</div>`;
+  else if (tab === "spending") body = `<div id="spending"><p class="muted">Loading the trip's spending…</p></div>`;
+  else body = `${p.before.length ? dayHtml({ label: "Before the trip", entries: p.before, color: "#8c96ad" }) : ""}
+    ${p.days.map((d, n) => dayHtml({ label: `Day ${n + 1}`, sub: fmtDay(d.date), entries: d.entries, color: d.color })).join("")}
+    ${p.after.length ? dayHtml({ label: "After the trip", entries: p.after, color: "#8c96ad" }) : ""}
+    ${p.unscheduled.length ? dayHtml({ label: "No date yet", entries: p.unscheduled, color: "#8c96ad" }) : ""}`;
+  return `<section class="trip-head"><div class="cover" style="--h:${hue(t.name)}">
+      <div class="cover-actions"><a class="btn small" href="#/trip/${t.id}/edit">Edit</a><a class="btn small" href="#/add?trip=${t.id}">Add booking</a></div>
+      <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div>
+      ${t.travellers.length ? `<div class="avatars">${t.travellers.map((k) => `<span title="${esc(label(k))}">${esc(label(k).slice(0, 1).toUpperCase())}</span>`).join("")}</div>` : ""}</div></section>
+    <div class="trip"><div class="plan">
+      <div class="tabs"><div class="seg" role="group">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${(tab || "") === k}">${l}</button>`).join("")}</div></div>
+      ${body}</div>
+      <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div></div></div>
+    <a class="fab" href="#/add?trip=${t.id}" aria-label="Add a booking" title="Add a booking">+</a>`;
+}
+function dayHtml({ label: l, sub, entries, color }) {
+  return `<section class="day" style="--day:${color}"><div class="day-head"><span class="day-dot"></span><h3>${esc(l)}</h3>${sub ? `<span class="muted">${esc(sub)}</span>` : ""}</div>
+    <div class="stops">${entries.length ? entries.map(entryHtml).join("") : `<div class="empty-day">Nothing planned yet.</div>`}</div></section>`;
+}
+/** What the map draws for a trip: each flight's arc, and numbered pins in their day's colour. */
+function mapData(t) {
+  const p = plan(t), arcs = [], pins = [];
+  p.days.forEach((d) => {
+    for (const e of d.entries) {
+      const i = e.item;
+      if (i.kind === "flight") {
+        const a = airport(i.dep_airport), b = airport(i.arr_airport);
+        if (a && b && !e.repeat) arcs.push({ from: [a.lon, a.lat], to: [b.lon, b.lat], id: String(i.id), label: `${i.dep_airport}→${i.arr_airport}` });
+        if (a && !e.repeat) pins.push({ lon: a.lon, lat: a.lat, kind: "flight", label: `${e.n} ${i.dep_airport}`, id: String(i.id), color: d.color });
+      } else if (i.lat !== null && i.lon !== null && !e.repeat) pins.push({ lon: i.lon, lat: i.lat, kind: i.kind, label: `${e.n} ${i.name ?? ""}`.trim(), id: String(i.id), color: d.color });
+    }
+  });
+  // flights outside the trip's days (the flight home after the last day, say) still draw
+  for (const e of [...p.before, ...p.after]) {
+    const i = e.item, a = airport(i.dep_airport), b = airport(i.arr_airport);
+    if (i.kind === "flight" && a && b) arcs.push({ from: [a.lon, a.lat], to: [b.lon, b.lat], id: String(i.id) });
+  }
+  if (!arcs.length && !pins.length && t.lat !== null && t.lon !== null) pins.push({ lon: t.lon, lat: t.lat, kind: "other", label: t.place ?? t.name });
+  return { arcs, pins };
+}
+async function showMap(t, tab = "") {
+  const el = document.getElementById("map"), note = document.getElementById("mapNote");
+  if (!el) return;
+  const dark = document.documentElement.dataset.theme !== "light";
+  const key = `${t.id}:${dark}`;
+  if (map && mapKey === key && map.getContainer() === el) return;
+  if (map) { map.remove(); map = null; }
+  map = await createMap(el, { dark });
+  mapKey = key;
+  if (!map) { note.hidden = false; note.textContent = "The map couldn't load here (it needs WebGL and OpenFreeMap's tiles). The plan is all here."; return; }
+  const d = mapData(t);
+  // pins take their day's colour (Wanderlog), flights the accent (Flighty)
+  drawTrip(map, d, (id) => {
+    const card = app.querySelector(`[data-item="${CSS.escape(id)}"]`);
+    if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); card.animate?.([{ outline: "2px solid var(--accent)" }, { outline: "2px solid transparent" }], 1200); }
+  }, tab === "flights" ? "all" : "pins", dark);
+}
+
+// --- the trip's spending ----------------------------------------------------------------------
+async function spending(t) {
+  const box = document.getElementById("spending");
+  try {
+    const [s, rows] = await Promise.all([api("GET", `/trips/${t.id}/suggestions`), api("GET", `/transactions?trip_id=${t.id}&limit=1000`)]);
+    const out = rows.filter((r) => r.amount > 0), total = Math.round(out.reduce((a, r) => a + r.amount, 0) * 100);
+    const byCat = {};
+    for (const r of out) byCat[r.category ?? "OTHER"] = (byCat[r.category ?? "OTHER"] ?? 0) + Math.round(r.amount * 100);
+    const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]), top = cats[0]?.[1] ?? 1;
+    const days = Math.max(1, Math.round((asDay(t.end_date) - asDay(t.start_date)) / 864e5) + 1);
+    const sug = (list, title, why) => list.length ? `<div class="section-title"><h2>${title}</h2><span class="muted">${why}</span></div>
+      <div class="list">${list.map((r) => `<label class="row"><input type="checkbox" data-sug="${r.id}" checked /><span class="grow"><b>${esc(r.name)}</b><span class="muted">${esc(fmtDay(r.date))} · ${esc(r.account_name ?? "")}${r.account_mask ? ` ••${esc(r.account_mask)}` : ""}</span></span><span class="amt">${money(r.amount_cents, r.currency)}</span></label>`).join("")}</div>` : "";
+    const booked = s.booked.flatMap((b) => b.matches.map((m) => ({ ...m, name: `${m.name} (for ${b.item})` })));
+    const any = s.during.length + s.also.length + booked.length;
+    box.innerHTML = `<div class="card"><div class="muted">Spent on this trip</div><div class="total num">${money(total)}</div>
+        <div class="muted">${out.length} transactions · ${money(Math.round(total / days))} a day</div>
+        ${cats.length ? `<div class="bars" style="margin-top:14px">${cats.map(([c, v]) => `<div class="b"><span>${esc(CAT[c] ?? c.replace(/_/g, " ").toLowerCase())}</span><i style="width:${Math.max(4, Math.round((v / top) * 100))}%"></i><span class="num">${money(v)}</span></div>`).join("")}</div>` : ""}
+        <div class="actions"><a class="btn small" href="/?trip=${t.id}">Open in Minty</a></div></div>
+      ${any ? `${sug(s.during, "Suggested", "travel, food, transport and activities during the trip")}${sug(booked, "Booked before", "charges matching a booking's price")}${sug(s.also, "Also during the trip", "everything else on those days")}
+        <div class="actions"><button type="button" class="btn primary" data-sug-add>Add the ticked ones</button><button type="button" class="btn" data-sug-dismiss>Not this trip</button><span class="err" id="sugErr"></span></div>` : `<p class="muted">Nothing more to suggest from ${esc(fmtShort(s.from))} to ${esc(fmtShort(s.to))}.</p>`}
+      ${out.length ? `<div class="section-title"><h2>In this trip</h2></div><div class="list">${rows.map((r) => `<div class="row"><span class="grow"><b>${esc(r.merchant_name || r.name)}</b><span class="muted">${esc(fmtDay(r.date))} · ${esc(CAT[r.category] ?? "")}</span></span><span class="amt">${money(Math.round(r.amount * 100), r.currency)}</span><button type="button" class="btn small ghost" data-unlink="${r.id}">Remove</button></div>`).join("")}</div>` : ""}`;
+  } catch (e) { box.innerHTML = `<p class="err">Couldn't load the spending: ${esc(e.message)}</p>`; }
+}
+
+// --- forms --------------------------------------------------------------------------------------
+function tripForm(t, picked = []) {
+  return `<div class="section-title"><h2>${t ? "Edit trip" : "New trip"}</h2></div>
+    <form class="card" id="tripForm" data-id="${t?.id ?? ""}" data-items="${picked.join(",")}"><div class="form">
+      <label class="wide">Name<input name="name" required maxlength="100" value="${esc(t?.name ?? "")}" placeholder="Tokyo, spring 2027" /></label>
+      <label>First day<input name="start_date" type="date" required value="${esc(t?.start_date ?? "")}" /></label>
+      <label>Last day<input name="end_date" type="date" required value="${esc(t?.end_date ?? "")}" /></label>
+      <label class="wide">Where<input name="place" maxlength="150" value="${esc(t?.place ?? "")}" placeholder="Tokyo, Japan" /></label>
+      ${users.length ? `<div class="wide"><div class="muted" style="font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Who's going</div>${users.map((u) => `<label class="check"><input type="checkbox" name="trav" value="${esc(u.key)}"${(t?.travellers ?? users.map((x) => x.key)).includes(u.key) ? " checked" : ""} /> ${esc(u.label)}</label>`).join("")}</div>` : ""}
+      <label class="wide">Notes<textarea name="notes" rows="3" maxlength="2000">${esc(t?.notes ?? "")}</textarea></label>
+    </div><div class="actions"><button class="btn primary" type="submit">${t ? "Save" : "Make the trip"}</button><a class="btn ghost" href="${t ? `#/trip/${t.id}` : "#/"}">Cancel</a>
+      ${t ? `<button type="button" class="btn danger" data-del-trip="${t.id}">Delete trip</button>` : ""}<span class="err" id="formErr"></span></div></form>`;
+}
+
+let draft = null;   // a booking being added: fields suggested from an email, paste, PDF or screenshot
+function itemForm(i, tripId) {
+  const v = (k) => esc(i?.[k] ?? "");
+  const kind = i?.kind ?? "flight";
+  const trips = data.trips.filter((t) => t.end_date >= addDays(localDay(), -365));
+  return `<form class="card" id="itemForm" data-id="${i?.id ?? ""}" data-source="${esc(i?.source ?? "typed")}" data-sha="${esc(i?.source_sha256 ?? "")}" data-lat="${i?.lat ?? ""}" data-lon="${i?.lon ?? ""}"
+      data-start-off="${esc(offsetOf(i?.start_at))}" data-end-off="${esc(offsetOf(i?.end_at))}"><div class="form">
+    <label>Kind<select name="kind">${Object.entries(KIND).map(([k, l]) => `<option value="${k}"${kind === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label>Trip<select name="trip_id"><option value="">No trip yet</option>${trips.map((t) => `<option value="${t.id}"${(i?.trip_id ?? tripId) === t.id ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>
+    <label class="wide"><span data-name-label>${NAME_LABEL[kind]}</span><input name="name" maxlength="150" value="${v("name")}" /></label>
+    <div class="wide form" data-flight ${kind === "flight" ? "" : "hidden"}>
+      <label>Airline code<input name="airline" maxlength="3" value="${v("airline")}" placeholder="UA" /></label>
+      <label>Flight number<input name="flight_number" maxlength="5" inputmode="numeric" value="${v("flight_number")}" placeholder="837" /></label>
+      <label>From<input name="dep_airport" maxlength="3" value="${v("dep_airport")}" placeholder="SFO" /></label>
+      <label>To<input name="arr_airport" maxlength="3" value="${v("arr_airport")}" placeholder="NRT" /></label>
+      <label>Terminal<input name="dep_terminal" maxlength="10" value="${v("dep_terminal")}" /></label>
+      <label>Gate<input name="dep_gate" maxlength="10" value="${v("dep_gate")}" /></label>
+      <label>Seat<input name="seat" maxlength="10" value="${v("seat")}" /></label>
+    </div>
+    <label><span data-start-label>${kind === "lodging" ? "Check in" : kind === "flight" ? "Departs" : "Starts"}</span><input name="start_date" type="date" value="${esc(dateOf(i?.start_at) ?? "")}" /></label>
+    <label>Time<input name="start_time" type="time" value="${esc(timeOf(i?.start_at))}" /></label>
+    <label><span data-end-label>${kind === "lodging" ? "Check out" : kind === "flight" ? "Arrives" : "Ends"}</span><input name="end_date" type="date" value="${esc(dateOf(i?.end_at) ?? "")}" /></label>
+    <label>Time<input name="end_time" type="time" value="${esc(timeOf(i?.end_at))}" /></label>
+    <label class="wide">Address or place<input name="place" maxlength="200" value="${v("place")}" /></label>
+    <label>Confirmation<input name="confirmation" maxlength="40" value="${v("confirmation")}" /></label>
+    <label>Price<input name="price" inputmode="decimal" value="${i?.price_cents ? i.price_cents / 100 : ""}" /></label>
+    <label>Currency<input name="currency" maxlength="3" value="${esc(i?.currency ?? "USD")}" /></label>
+    <label>Or points<input name="points" inputmode="numeric" value="${v("points")}" /></label>
+    <label>Program<select name="points_program" data-programs><option value="">—</option>${(programs ?? (i?.points_program ? [{ id: i.points_program, name: i.points_program }] : [])).map((p) => `<option value="${esc(p.id)}"${i?.points_program === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
+    <label class="wide">Notes<textarea name="notes" rows="2" maxlength="2000">${v("notes")}</textarea></label>
+  </div><div class="actions"><button class="btn primary" type="submit">${i?.id ? "Save" : "Add booking"}</button>
+    <a class="btn ghost" href="${tripId || i?.trip_id ? `#/trip/${i?.trip_id ?? tripId}` : "#/"}">Cancel</a>
+    ${i?.id ? `<button type="button" class="btn danger" data-del-item="${i.id}">Delete</button>` : ""}<span class="err" id="formErr"></span></div></form>`;
+}
+const offsetOf = (s) => (s ? (/(Z|[+-]\d{2}:?\d{2})$/.exec(s)?.[1] ?? "") : "");
+
+function addView(tripId, source) {
+  const sources = [["type", "Type it"], ["paste", "Paste"], ["pdf", "PDF"], ["shot", "Screenshot"], ["email", "Email file"]];
+  return `<div class="section-title"><h2>Add a booking</h2><span class="muted">${tripId ? esc(tripById(tripId)?.name ?? "") : ""}</span></div>
+    <div class="seg" role="group" style="margin-bottom:14px">${sources.map(([k, l]) => `<button type="button" data-source="${k}" aria-pressed="${source === k}">${l}</button>`).join("")}</div>
+    <div id="sourceBox">${sourceBox(source)}</div>
+    <div id="suggestBox"></div>
+    <div id="formBox">${itemForm(draft, tripId)}</div>`;
+}
+function sourceBox(source) {
+  if (source === "paste") return `<div class="card"><textarea class="paste" id="pasteText" placeholder="Paste a confirmation: the flight's number, airports, dates and times, or a stay's check-in and check-out"></textarea>
+    <div class="actions"><button type="button" class="btn primary" data-read-paste>Find the booking</button></div></div>`;
+  if (source === "pdf") return `<div class="card"><p class="muted" style="margin-top:0">The PDF is read here, on this device; nothing is uploaded.</p><input type="file" accept="application/pdf,.pdf" id="pdfFile" /></div>`;
+  if (source === "shot") return `<div class="card"><p class="muted" style="margin-top:0">A screenshot is read on this device too. On a phone, copying the text out of it (Live Text, Lens) and pasting is quickest.</p>
+    <div class="actions"><button type="button" class="btn primary" data-scan>Read a screenshot</button></div></div>`;
+  if (source === "email") return `<div class="card"><p class="muted" style="margin-top:0">An email file (in Gmail: open the email → ⋮ → Download message). Minty reads its booking details and keeps nothing until you add them.</p><input type="file" accept=".eml,message/rfc822" id="emlFile" /></div>`;
+  return "";
+}
+function suggestionsHtml(list, from) {
+  if (!list.length) return `<div class="suggest muted">Nothing recognisable there: fill the form in yourself.</div>`;
+  return `<div class="suggest"><b>Found ${list.length} booking${list.length === 1 ? "" : "s"}</b> (check each):<div class="list" style="margin-top:8px">${list.map((b, n) => `<div class="row"><span class="grow"><b>${esc(itemTitle(b))}</b>
+      <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
+      <button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}</div>`).join("")}</div>
+    ${from === "email" && list.length > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${list.length}</button></div>` : ""}</div>`;
+}
+let found = [], foundFrom = "";
+/** A suggestion (from the email reader or jet-parse.js) as the booking API's fields. */
+function asItem(b, tripId) {
+  const out = { kind: b.kind, trip_id: tripId ?? null, name: b.name ?? null, confirmation: b.confirmation ?? null, guest: b.guest ?? null,
+    start_at: b.start ?? b.start_at ?? null, end_at: b.end ?? b.end_at ?? null, place: b.place ?? null, lat: b.lat ?? null, lon: b.lon ?? null,
+    price_cents: b.price_cents ?? null, currency: b.currency ?? null, points: b.points ?? null };
+  const f = b.flight ?? b;
+  if (b.kind === "flight") Object.assign(out, { airline: f.airline ?? null, flight_number: f.number ?? f.flight_number ?? null, dep_airport: f.from ?? f.dep_airport ?? null,
+    arr_airport: f.to ?? f.arr_airport ?? null, dep_terminal: f.terminal ?? f.dep_terminal ?? null, dep_gate: f.gate ?? f.dep_gate ?? null, seat: f.seat ?? null });
+  for (const k of Object.keys(out)) if (out[k] === undefined) out[k] = null;
+  // the API takes local times like 2027-03-10T11:05(:00)(+09:00); trim anything finer
+  for (const k of ["start_at", "end_at"]) if (out[k]) out[k] = String(out[k]).replace(/(\.\d+)(?=Z|[+-]|$)/, "");
+  if (out.airline && !/^[A-Z0-9]{2,3}$/i.test(out.airline)) { out.name ??= out.airline; out.airline = null; }
+  return out;
+}
+async function readText(text, source) {
+  const { parseBookings } = await import("./jet-parse.js");
+  const year = new Date().getFullYear();
+  found = parseBookings(text, { year, isAirport: (c) => Boolean(airports[c]) }).bookings.map((b) => ({ ...b, source }));
+  foundFrom = source;
+  document.getElementById("suggestBox").innerHTML = suggestionsHtml(found, source);
+}
+
+async function itemBody(f) {
+  const e = f.elements;
+  const when = (d, t, off) => (d ? (t ? `${d}T${t}${off}` : d) : null);
+  const cents = (s) => { const t = String(s ?? "").replace(/[^\d.]/g, ""); return t ? Math.round(Number(t) * 100) : null; };
+  const int = (s) => { const t = String(s ?? "").replace(/[^\d]/g, ""); return t ? Number(t) : null; };
+  const flight = e.kind.value === "flight";
+  const lat = f.dataset.lat === "" ? null : Number(f.dataset.lat), lon = f.dataset.lon === "" ? null : Number(f.dataset.lon);
+  return {
+    kind: e.kind.value, trip_id: e.trip_id.value ? Number(e.trip_id.value) : null, name: e.name.value, confirmation: e.confirmation.value,
+    start_at: when(e.start_date.value, e.start_time.value, f.dataset.startOff), end_at: when(e.end_date.value, e.end_time.value, f.dataset.endOff),
+    place: e.place.value, price_cents: cents(e.price.value), currency: e.currency.value || null, points: int(e.points.value), points_program: e.points_program.value || null,
+    notes: e.notes.value, lat: Number.isFinite(lat) ? lat : null, lon: Number.isFinite(lon) ? lon : null,
+    airline: flight ? e.airline.value : null, flight_number: flight ? e.flight_number.value : null, dep_airport: flight ? e.dep_airport.value : null, arr_airport: flight ? e.arr_airport.value : null,
+    dep_terminal: flight ? e.dep_terminal.value : null, dep_gate: flight ? e.dep_gate.value : null, seat: flight ? e.seat.value : null,
+    source: f.dataset.source || "typed", ...(f.dataset.sha ? { source_sha256: f.dataset.sha } : {}),
+  };
+}
+
+/** A calendar file for a flight, made in the browser: an instant (UTC) when the booking had offsets,
+ * else floating local time. */
+function ics(f) {
+  const stamp = (s) => { const t = instant(s); return t ? new Date(t).toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "") : (s ?? "").replace(/[-:]/g, "").slice(0, 15) + (s && s.length >= 16 ? "00" : ""); };
+  const title = `${[f.airline, f.flight_number].filter(Boolean).join(" ")} ${f.dep_airport ?? ""} → ${f.arr_airport ?? ""}`.trim();
+  const body = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Minty//JET//EN", "BEGIN:VEVENT", `UID:jet-${f.id}@minty`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "")}`,
+    `DTSTART:${stamp(f.start_at)}`, ...(f.end_at ? [`DTEND:${stamp(f.end_at)}`] : []), `SUMMARY:${title.replace(/[,;]/g, " ")}`,
+    `DESCRIPTION:${["Confirmation " + (f.confirmation ?? "—"), f.seat ? `Seat ${f.seat}` : ""].filter(Boolean).join(" · ")}`, "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([body], { type: "text/calendar" })), download: `${title.replace(/\W+/g, "-") || "flight"}.ics` });
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+// --- routing ------------------------------------------------------------------------------------
+function route() {
+  const [path, query] = location.hash.replace(/^#/, "").split("?");
+  return { parts: (path || "/").split("/").filter(Boolean), q: new URLSearchParams(query ?? "") };
+}
+let source = "type";
+async function render() {
+  if (!data) { try { await load(); } catch (e) { app.innerHTML = `<p class="err pad">Couldn't load JET: ${esc(e.message)}</p>`; return; } }
+  const { parts, q } = route();
+  if (map && parts[0] !== "trip") { map.remove(); map = null; mapKey = ""; }
+  if (parts[0] === "trip" && parts[1]) {
+    const t = tripById(Number(parts[1]));
+    if (!t) { app.innerHTML = `<p class="pad muted center">That trip isn't here any more. <a href="#/">All trips</a></p>`; return; }
+    if (parts[2] === "edit") { app.innerHTML = tripForm(t); return; }
+    if (map) { map.remove(); map = null; mapKey = ""; }
+    app.innerHTML = tripView(t, parts[2] ?? "");
+    showMap(t, parts[2] ?? "");
+    if (parts[2] === "spending") spending(t);
+    return;
+  }
+  if (parts[0] === "new") { app.innerHTML = tripForm(null, (q.get("items") ?? "").split(",").filter(Boolean)); return; }
+  if (parts[0] === "item" && parts[1]) {
+    const i = itemById(Number(parts[1]));
+    app.innerHTML = i ? `<div class="section-title"><h2>${esc(itemTitle(i))}</h2></div>${i.kind === "flight" ? `<div style="margin-bottom:14px">${flightCard(i)}</div>` : ""}${itemForm(i, i.trip_id)}` : `<p class="pad muted center">That booking isn't here any more.</p>`;
+    loadPrograms();
+    return;
+  }
+  if (parts[0] === "add") {
+    const tripId = q.get("trip") ? Number(q.get("trip")) : null;
+    // back from /sub-scan with a screenshot's text
+    let scan = null;
+    try { scan = JSON.parse(sessionStorage.getItem("minty.jet.scan") ?? "null"); if (scan?.text !== undefined) sessionStorage.removeItem("minty.jet.scan"); } catch { /* none */ }
+    const tid = scan?.trip ?? tripId;
+    if (scan?.text !== undefined) source = "shot";
+    app.innerHTML = addView(tid, source);
+    loadPrograms();
+    if (scan?.text) await readText(scan.text, "screenshot");
+    return;
+  }
+  app.innerHTML = home();
+}
+async function loadPrograms() {
+  if (!programs) { try { programs = (await api("GET", "/points")).programs ?? []; } catch { programs = []; } }
+  for (const sel of app.querySelectorAll("[data-programs]")) {
+    const cur = sel.value;
+    sel.innerHTML = `<option value="">—</option>${programs.map((p) => `<option value="${esc(p.id)}"${cur === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("")}`;
+  }
+}
+const refresh = async () => { data = null; await render(); };
+
+// --- events -------------------------------------------------------------------------------------
+app.addEventListener("click", async (ev) => {
+  const t = ev.target, at = (s) => t.closest(s);
+  const err = (m) => { const box = app.querySelector("#formErr, #sugErr"); if (box) box.textContent = m; else alert(m); };
+  try {
+    if (at("[data-tab]")) { const id = route().parts[1]; location.hash = `#/trip/${id}${at("[data-tab]").dataset.tab ? `/${at("[data-tab]").dataset.tab}` : ""}`; return; }
+    if (at("[data-ics]")) { ics(itemById(Number(at("[data-ics]").dataset.ics))); return; }
+    if (at("button.item[data-item]")) {
+      // Wanderlog: the first tap shows it on the map, a second opens it; no place on the map opens it at once
+      const id = Number(at("[data-item]").dataset.item), i = itemById(id);
+      if (map && i && i.lat !== null && i.lon !== null && focused !== id) { focus(map, i.lon, i.lat); focused = id; return; }
+      location.hash = `#/item/${id}`;
+      return;
+    }
+    if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-make-trip]")) {
+      const ids = [...app.querySelectorAll("[data-pick]:checked")].map((x) => x.dataset.pick);
+      if (!ids.length) { alert("Tick the bookings to put in the trip first."); return; }
+      location.hash = `#/new?items=${ids.join(",")}`; return;
+    }
+    if (at("[data-source]")) { source = at("[data-source]").dataset.source; draft = null; render(); return; }
+    if (at("[data-read-paste]")) { await readText(document.getElementById("pasteText").value, "paste"); return; }
+    if (at("[data-scan]")) {
+      try { sessionStorage.setItem("minty.jet.scan", JSON.stringify({ trip: route().q.get("trip") ? Number(route().q.get("trip")) : null })); } catch { /* private window */ }
+      location.href = "/sub-scan?for=jet"; return;
+    }
+    if (at("[data-use]")) {
+      const b = found[Number(at("[data-use]").dataset.use)], tripId = Number(app.querySelector("[name=trip_id]")?.value) || null;
+      draft = { ...asItem(b, tripId), source: foundFrom === "paste" ? "paste" : foundFrom, source_sha256: b.sha256 ?? null };
+      document.getElementById("formBox").innerHTML = itemForm(draft, tripId);
+      loadPrograms();
+      document.getElementById("formBox").scrollIntoView({ behavior: "smooth" });
+      return;
+    }
+    if (at("[data-add-now]") || at("[data-add-all]")) {
+      const tripId = route().q.get("trip") ? Number(route().q.get("trip")) : null;
+      const list = at("[data-add-all]") ? found : [found[Number(at("[data-add-now]").dataset.addNow)]];
+      for (const b of list) await api("POST", "/trips/items", { ...asItem(b, tripId), source: "email", source_sha256: b.sha256 ?? null });
+      data = null; draft = null; found = [];
+      location.hash = tripId ? `#/trip/${tripId}` : "#/";
+      return;
+    }
+    if (at("[data-del-item]")) {
+      if (!confirm("Delete this booking?")) return;
+      const i = itemById(Number(at("[data-del-item]").dataset.delItem));
+      await api("DELETE", `/trips/items/${i.id}`); data = null; location.hash = i.trip_id ? `#/trip/${i.trip_id}` : "#/"; return;
+    }
+    if (at("[data-del-trip]")) {
+      if (!confirm("Delete this trip? Its bookings stay, waiting for a trip.")) return;
+      await api("DELETE", `/trips/${at("[data-del-trip]").dataset.delTrip}`); data = null; location.hash = "#/"; return;
+    }
+    const sugIds = () => [...app.querySelectorAll("[data-sug]:checked")].map((x) => Number(x.dataset.sug));
+    if (at("[data-sug-add]") || at("[data-sug-dismiss]")) {
+      const id = Number(route().parts[1]), ids = sugIds();
+      if (!ids.length) return;
+      await api("POST", `/trips/${id}/transactions`, at("[data-sug-add]") ? { confirm: ids } : { dismiss: ids });
+      data = null; await load(); spending(tripById(id)); return;
+    }
+    if (at("[data-unlink]")) {
+      const id = Number(route().parts[1]);
+      await api("POST", `/trips/${id}/transactions`, { remove: [Number(at("[data-unlink]").dataset.unlink)] });
+      data = null; await load(); spending(tripById(id)); return;
+    }
+  } catch (e) { err(e.message); }
+});
+app.addEventListener("change", async (ev) => {
+  const t = ev.target;
+  if (t.name === "kind" && t.form?.id === "itemForm") {
+    const k = t.value, f = t.form;
+    f.querySelector("[data-flight]").hidden = k !== "flight";
+    f.querySelector("[data-name-label]").textContent = NAME_LABEL[k];
+    f.querySelector("[data-start-label]").textContent = k === "lodging" ? "Check in" : k === "flight" ? "Departs" : "Starts";
+    f.querySelector("[data-end-label]").textContent = k === "lodging" ? "Check out" : k === "flight" ? "Arrives" : "Ends";
+  }
+  if (t.id === "pdfFile" && t.files.length) {
+    const { readPdfs } = await import("/pdf-read.js");
+    const { rows } = await readPdfs(t.files, { view: "jet", known: async () => [], parse: (text) => ({ text }), max: 1 });
+    if (!rows[0] || rows[0].error) { document.getElementById("suggestBox").innerHTML = `<div class="suggest err">${esc(rows[0]?.error ?? "Couldn't read this PDF")}</div>`; return; }
+    await readText(rows[0].text, "pdf");
+    found = found.map((b) => ({ ...b, sha256: rows[0].sha }));
+  }
+  if (t.id === "emlFile" && t.files.length) {
+    const box = document.getElementById("suggestBox");
+    box.innerHTML = `<div class="suggest muted">Reading…</div>`;
+    try {
+      const r = await api("POST", "/trips/read-email", null, await t.files[0].arrayBuffer());
+      found = r.bookings.map((b) => ({ ...b, sha256: r.sha256 }));
+      foundFrom = "email";
+      box.innerHTML = r.bookings.length ? suggestionsHtml(found, "email")
+        : `<div class="suggest muted">No booking details in "${esc(r.subject ?? "this email")}". ${r.text ? "Its text is below to paste instead." : ""}</div>${r.text ? `<textarea class="paste" readonly>${esc(r.text)}</textarea>` : ""}`;
+    } catch (e) { box.innerHTML = `<div class="suggest err">${esc(e.message)}</div>`; }
+  }
+});
+app.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const f = ev.target, err = (m) => { f.querySelector("#formErr").textContent = m; };
+  try {
+    if (f.id === "tripForm") {
+      const e = f.elements;
+      const body = { name: e.name.value, start_date: e.start_date.value, end_date: e.end_date.value, place: e.place.value, notes: e.notes.value,
+                     travellers: [...f.querySelectorAll("[name=trav]:checked")].map((x) => x.value) };
+      if (!f.dataset.id && f.dataset.items) body.items = f.dataset.items.split(",").map(Number);
+      const r = f.dataset.id ? await api("PUT", `/trips/${f.dataset.id}`, body) : await api("POST", "/trips", body);
+      data = null; location.hash = `#/trip/${r.id}`; return;
+    }
+    if (f.id === "itemForm") {
+      const body = await itemBody(f);
+      const r = f.dataset.id ? await api("PUT", `/trips/items/${f.dataset.id}`, body) : await api("POST", "/trips/items", body);
+      data = null; draft = null; found = [];
+      location.hash = body.trip_id ? `#/trip/${body.trip_id}` : r.id ? "#/" : "#/";
+    }
+  } catch (e) { err(e.message); }
+});
+window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
+document.getElementById("themeBtn").addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("jet-theme", next); } catch { /* not remembered */ }
+  const { parts } = route();
+  if (parts[0] === "trip" && parts[1] && parts[2] !== "edit") { mapKey = ""; showMap(tripById(Number(parts[1])), parts[2] ?? ""); }
+});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/jet/sw.js", { scope: "/jet/" }).catch(() => {});
+render();
