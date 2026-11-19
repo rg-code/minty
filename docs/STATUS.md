@@ -149,8 +149,10 @@ there, gitignored here). If that folder exists, read it too.
      No mailbox is connected to Minty.
    - An itinerary and flight cards, the trip's transactions, BAM's pending changes, an Immich album,
      Minty's own map; live flight status optional.
-   - **Next: T0** (§11), after the owner's open decisions in §12: keeping a forwarded message's text
-     30 days, whose Immich key, the map and live status, and the Gmail script's security change.
+   - **T0 started (2026-11-19):** the owner runs the five checks in `scripts/jet-t0/README.md` and
+     sends back their output. Decided: text kept 30 days, the owner's Immich key, the map and live
+     status (AeroAPI Personal), and a timeline from bookings, photos' metadata and transactions (§15).
+     Still open: the Gmail script's security change (§12, 7), the street map's tiles, push.
 10. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
    page so the demo follows. A dashboard change the demo can't follow stops the build, by
    design. Other landing-page to-dos: `docs/private/STATUS.md`.
