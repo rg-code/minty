@@ -56,6 +56,42 @@ instant.
 (or the collector address) and Cloudflare's checks pass (SPF/DKIM, in the message's
 `Authentication-Results`). Anything else is dropped silently, with no bounce.
 
+### 2a. Households without a domain on Cloudflare
+
+Not every household has a domain on Cloudflare (owner, 2026-11-19), so there are three tiers. All
+of them end in the same parsers and inbox.
+
+| Tier | For | How | Minty holds | Setup |
+|---|---|---|---|---|
+| **1. Forward to Minty** | a domain on Cloudflare | Email Routing → the Email Worker (above) | nothing | one route |
+| **2. Gmail pushes to Minty** | any Gmail (a dedicated one or the household's), no domain | A **Google Apps Script** in that Gmail account finds new mail with a label (a filter adds it) every 10 minutes and POSTs it to Minty, then marks it done | nothing: the script holds a Cloudflare Access **service token**, scoped to the one ingest route | copy the script, allow it once, paste the token |
+| **3. No automation** | everyone | paste, PDF, screenshot, Android share | nothing | none |
+
+**Tier 2 in more detail** (recommended for households without a domain):
+- **No Google Cloud project, no OAuth app, no refresh token in Minty.** The script runs inside the
+  household's own Google account with its own permission. Google shows "this app isn't verified"
+  for a script you wrote yourself; you allow it once.
+- **It reaches Minty through Access.** A service token made for Minty's Access application (a
+  "Service Auth" rule) is sent as Access's service-token headers.
+- **The Worker accepts that token only on `POST /trips/inbox`, and only that token.** Today a sign-in
+  with no email is refused everywhere; this one route accepts a service token whose identity (its
+  Client ID, in the Access JWT's `common_name`) matches the `TRIPS_INGEST_TOKEN_ID` setting.
+  Everything else still needs a person's login.
+  - This is a change to the security model: security plan §5-style, to be written there before T2b.
+  - The token only ever adds messages to the trips inbox, where the same sender and parsing rules
+    apply as in tier 1.
+- **Gmail's limits** for a personal account (thousands of fetches a day) are far beyond a
+  household's travel mail.
+- **Outlook and others** have no free equivalent (Power Automate's HTTP step is a paid connector).
+  There, tier 1 with a cheap domain, or tier 3.
+
+**A domain for tier 1**, if a household wants one: any domain can be moved to Cloudflare's DNS (free
+plan), or bought at cost through Cloudflare Registrar. If the domain already has a mail provider,
+Email Routing can take a **subdomain** (e.g. `trips.example.com`) and leave the existing mail alone.
+
+**Not offered:** third-party inbound-mail services (an address on their domain that posts to a
+webhook). They'd see every booking, and they need an unauthenticated public endpoint on Minty.
+
 **Also, without email:**
 - **Paste, PDF or screenshot,** reusing SUB's on-device readers (`pdf-read.js`, `/sub-scan`'s
   Tesseract).
@@ -192,9 +228,10 @@ user's search covers the partner's shared photos too. ✋ Decide which user's ke
 
 | Phase | What | ✋ |
 |---|---|---|
-| **T0 Spikes** | Email Routing on the household's domain, a route to a test Email Worker; CPU to parse ~20 real confirmations (the owner forwards them; only their measurements are kept); Immich's search and album API on the owner's version | Domain, Immich key, test emails |
+| **T0 Spikes** | Email Routing on the household's domain, a route to a test Email Worker; CPU to parse ~20 real confirmations (the owner forwards them; only their measurements are kept); Immich's search and album API on the owner's version; a service token's Access JWT (its claims) and an Apps Script posting through Access | Domain, Immich key, test emails |
 | **T1 Trips and bookings** | `trips`, `trip_items`; typed, pasted, PDF and screenshot input; the itinerary and flight cards | Name |
 | **T2 Email in** | The Email Worker, `trip_inbox`, JSON-LD and known-sender parsers, Gmail's forwarding confirmation | The forwarding address |
+| **T2b Gmail push** | `POST /trips/inbox` for one Access service token (§2a), the Apps Script and its setup page, the security-plan entry | Approve the security change |
 | **T3 Transactions** | Suggestions, confirm, totals, `/?trip=` in the dashboard | |
 | **T4 BAM** | Pending changes from award bookings | |
 | **T5 Immich** | Albums from the cron, the link on the trip | Secrets |
@@ -208,5 +245,7 @@ user's search covers the partner's shared photos too. ✋ Decide which user's ke
 3. ✋ **Keep a forwarded message's text 30 days** for re-reading, or only its extracted fields.
 4. ✋ **Immich:** whose API key, and the service token for Immich's Access application.
 5. ✋ **Live flight status and a map:** later (T6), or not at all.
-6. ✋ **Owner-only or for forks:** email ingest needs a domain on Cloudflare, so for forks it would
-   be off unless set up (paste, PDF and screenshot always work).
+6. ✋ **Owner-only or for forks:** with §2a, forks get tier 1 if they have a domain on Cloudflare,
+   tier 2 with any Gmail, and tier 3 always.
+7. ✋ **Tier 2's security change:** one route that accepts a specific Access service token instead
+   of a person's login (§2a).
