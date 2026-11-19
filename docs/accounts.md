@@ -51,20 +51,29 @@ Sync never writes manual accounts: it upserts by Plaid's account ids, and manual
 
 Plaid's own `type` and `subtype` where one exists, so the rest of Minty understands them:
 
-| Group | Stored as | Examples |
+**Proposed (2026-11-19), for the owner to confirm.** Five groups. The subtypes are Plaid's own
+spellings, so a manual account behaves exactly like a linked one of the same kind (EGG's
+`IN_RETIREMENT`, ABC's card list, Bills):
+
+| Group | Stored as (`type` / `subtype`) | In net worth |
 |---|---|---|
-| Cash | `depository` / checking, savings, cd, money market | an account at a bank Plaid doesn't support |
-| Investments | `investment` / brokerage, 529, … | a brokerage that blocks aggregators |
-| Retirement | `investment` / 401k, ira, roth, pension, … | a pension statement (goes to EGG, as linked ones do) |
-| Card or loan | `credit` / credit card; `loan` / mortgage, auto, student, other | a family loan, a mortgage servicer Plaid lacks |
-| **Other asset** (new) | `other` / real estate, vehicle, valuables, other | a house, a car |
+| Cash | `depository` / checking, savings, cd, money market, cash management | yes |
+| Investments | `investment` / brokerage, 529, education savings account, ugma, utma, crypto exchange, other | yes |
+| Retirement (EGG) | `investment` / 401k, 403B, 457b, roth 401k, ira, roth, sep ira, simple ira, pension, hsa, other retirement | yes |
+| Cards and loans | `credit` / credit card; `loan` / mortgage, auto, student, home equity, personal, other | yes, as debts |
+| **Other assets** (new) | `other` / **home**, vehicle, valuables, other | **only home** |
 
-**Net worth gains one rule:** `type = 'other'` on a manual account counts as an asset. CFA's net
-worth SQL and its rebuild get that one `CASE` line. The monthly totals have no transactions from
-manual accounts, so nothing else changes, and no `RULES_VERSION` bump is needed.
-
-✋ **Decide:** the fork's catalog of 24 types is more detailed (education, custodial, HSA as its
-own group). I'd start with the table above and add types when there's a real account for them.
+- **Only a home counts as an asset** (the owner's decision). A vehicle, valuables or anything
+  else in Other assets shows in Accounts with its value, marked "not in net worth", and isn't
+  added. Cars lose value and aren't readily spent, so leaving them out is the usual practice.
+- **Their loans still count.** An auto loan is money owed whether or not the car is counted, so
+  net worth stays conservative. ✋ Confirm.
+- **Not taken from the fork's 24-type catalog:** separate groups for education, custodial and
+  HSA. A 529 or UTMA sits in Investments with its beneficiary (§5); an HSA goes to EGG, as linked
+  HSAs do. More subtypes can be added when a real account needs one.
+- **The net worth rule** in CFA's SQL and its rebuild: `type = 'other' AND subtype = 'home'` is an
+  asset, other `other` rows are left out. Monthly totals have no transactions from manual
+  accounts, so nothing else changes, and no `RULES_VERSION` bump is needed.
 
 ## 3. Balances and their dates
 
@@ -76,10 +85,32 @@ own group). I'd start with the table above and add types when there's a real acc
   is rebuilt on that run. An old valuation never looks new, and a back-dated one lands on its day.
 - **Stale balances:** a manual balance older than 90 days shows "updated 4 months ago" in
   Accounts. It's a reminder, never an automatic change.
-- **Currency:** the account's currency is stored as entered. Today net worth adds up balances
-  whatever their currency. ✋ **Decide:** the proposal is that Accounts shows each account's
-  currency, and totals and net worth leave a non-USD account out, with a note. That also changes
-  net worth for any linked non-USD account, so it's a CFA change too.
+- **Currency (proposed, to confirm):** totals and net worth are in **US dollars only**.
+  - The account's currency is stored as entered (linked: Plaid's `iso_currency_code`; a missing
+    one counts as USD).
+  - A non-USD account shows in Accounts with its own currency and amount, and isn't added to any
+    total. Each total says so: "1 account in EUR not included".
+  - No conversion: a rate would have to come from somewhere at runtime, and a total silently
+    mixing currencies is worse than one that says what it left out.
+  - This also applies to CFA's net worth, so a linked non-USD account (if the household has one)
+    would leave net worth. That's a correction: today it's added as if it were dollars. ✋ The owner
+    can check first: `SELECT count(*) FROM accounts WHERE coalesce(currency,'USD') <> 'USD'`.
+
+## 3a. Net worth without the home
+
+A second figure next to net worth: **net worth without the home**, i.e. without the home's value
+**and** without the mortgages and home equity loans against it. That's the usual "excluding home
+equity" figure: what's there apart from the house. ✋ Confirm that it leaves out the mortgage too;
+the alternative, leaving out the house but still counting the mortgage, says more about debt but
+makes the figure look worse than it is.
+
+- **Stored with net worth:** `net_worth` gains `home_cents` (homes) and `home_debt_cents`
+  (`loan` / mortgage and home equity), written by the same SQL and rebuild. A migration adds
+  them; their history fills from the next rebuild (the snapshots are already there).
+- **Accounts view:** "Net worth $X", with a **Without home** button that switches the headline
+  and the group totals to the other figure. The choice is remembered on the device.
+- **CFA's net worth chart:** the same **Without home** button, switching the line.
+- Only when the household has a home or a mortgage; otherwise the button doesn't show.
 
 ## 4. The Accounts view
 
@@ -151,11 +182,15 @@ the holder), archiving people, and adding or renaming people in Minty (that stay
 
 ✋ = needs the owner.
 
-- [ ] ✋ Approve this plan, and the decisions in §2 and §3.
+- [ ] ✋ Confirm §2 (types, only a home counts, auto loans still count), §3 (USD only) and §3a
+      (without home also leaves out its mortgage).
 - [ ] A migration (the next free number, 0023 today): `accounts.is_manual`, `balance_as_of`, `notes`,
-      `holders` (default `'[]'`), `beneficiary`. Added to `EXPECTED_MIGRATIONS`.
+      `holders` (default `'[]'`), `beneficiary`; `net_worth.home_cents`, `home_debt_cents`. Added to
+      `EXPECTED_MIGRATIONS`.
 - [ ] `PLAID_ITEM()` in every bank-walking query, and the test that enforces it.
-- [ ] The manual routes, the snapshot dating, and net worth's `other` assets, with tests on local D1.
+- [ ] The manual routes, the snapshot dating, net worth's home rule and USD-only totals, with
+      tests on local D1.
+- [ ] `net_worth.home_cents` and `home_debt_cents`, and the Without home button in Accounts and CFA.
 - [ ] `PUT /accounts/{id}/holders`, the Setup check for unknown keys, and a test that sync never
       writes `holders` or `beneficiary`.
 - [ ] The Accounts popup (with `sw.js`'s shell updated and its cache name bumped), light and dark, phone.
