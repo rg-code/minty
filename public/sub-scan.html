@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex" />
+<title>Minty · Read a screenshot</title>
+<script src="/theme.js"></script>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<style>
+  :root { color-scheme:light; --bg:#f2f8f5; --surface:#fff; --ink:#16181d; --muted:#6b7280; --hairline:#e7e9ee;
+          --accent:#4c6ef5; --ok:#0ca678; --err:#e03131; --code-bg:#f6f7f9;
+          --btn-bg:#16181d; --btn-ink:#fff; --shadow:rgba(0,0,0,.05); --radius:10px;
+          --u0:#4c6ef5; --u1:#0ca678; --u2:#e8590c; --u3:#ae3ec9; --u4:#1098ad; --u5:#d6336c; }
+  :root[data-theme="dark"] { color-scheme:dark; --bg:#0e1413; --surface:#171a21; --ink:#e6e8ee; --muted:#9aa3b2;
+          --hairline:#272c37; --accent:#748ffc; --ok:#20c997; --err:#ff6b6b; --code-bg:#0f1115;
+          --btn-bg:#e6e8ee; --btn-ink:#0f1115; --shadow:rgba(0,0,0,.4);
+          --u0:#748ffc; --u1:#20c997; --u2:#ff922b; --u3:#da77f2; --u4:#3bc9db; --u5:#f06595; }
+</style>
+<link rel="stylesheet" href="/sub.css" />
+<link rel="stylesheet" href="/lock.css" />
+<script src="/lock.js"></script>
+</head>
+<body class="sub-scan">
+<!-- SUB's screenshot reader (docs/sub.md §2a): Tesseract.js, vendored, reads the offer's terms from a
+     screenshot here in the browser, and hands the text back to SUB through sessionStorage. Its own
+     page so only it (and public/vendor/tesseract/) gets 'wasm-unsafe-eval' (public/_headers). -->
+<main>
+  <h1>Read a screenshot</h1>
+  <p class="sub-muted">Pick a screenshot or photo of the offer's terms. It's read here, on this device, and never uploaded; only the text you keep goes back to SUB.</p>
+  <p class="sub-muted">On a phone it's quicker to copy the text out of the screenshot (Live Text on iPhone, Lens on Android) and paste it into SUB.</p>
+  <label class="pill solid sub-pick">Choose a screenshot<input type="file" id="shot" accept="image/png,image/jpeg,image/webp,image/heic,image/*" hidden /></label>
+  <p id="status" class="sub-muted" role="status"></p>
+  <img id="preview" alt="" hidden />
+  <textarea id="text" rows="12" maxlength="20000" placeholder="The text read from the screenshot appears here; correct it if something was misread." hidden></textarea>
+  <div class="sub-buttons"><button type="button" class="pill solid" id="use" hidden>Use this text</button><a class="pill" id="back" href="/?sub">Back to SUB</a></div>
+</main>
+<script src="/sub-scan.js"></script>
+</body>
+</html>

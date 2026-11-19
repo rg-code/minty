@@ -62,6 +62,8 @@
       "/benefits",
       "/benefits/*",
       "/bills",
+      "/sub",
+      "/sub/*",
       "/bills/*",
       "/statements",
       "/statements/*",

@@ -55,6 +55,7 @@ describe("the guard: Plaid's bank queries skip the manual bank rows", () => {
     "FROM items WHERE plaid_item_id = 'manual:'",                    // the manual routes themselves
     "(SELECT id FROM items WHERE plaid_item_id = 'manual:'",
     "DELETE FROM items WHERE id = ? AND products = 'manual'",
+    "LEFT JOIN accounts a ON a.id = o.account_id LEFT JOIN items i ON i.id = a.item_id",   // SUB: the linked account's bank, for "can't tell yet"
   ];
   const sources = import.meta.glob("../src/**/*.ts", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 

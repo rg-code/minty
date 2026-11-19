@@ -31,6 +31,9 @@ export interface DemoData {
   holdings: Record<string, string | number | null>[];
   investmentTxns: Record<string, string | number | null>[];
   snapshots: Record<string, string | number | null>[];
+  subOffers: Record<string, string | number | null>[];       // SUB (docs/sub.md): two made-up offers
+  subRequirements: Record<string, string | number | null>[];
+  subPayouts: Record<string, string | number | null>[];
 }
 
 export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", sam: "sam" }): DemoData {
@@ -356,8 +359,23 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   }
 
   const users = [`${owners.alex}:Alex`, `${owners.sam}:Sam`, ...CAMEOS.map(([label]) => `${label.toLowerCase()}:${label}`)].join(",");
+  // SUB: a card bonus in progress (its spend estimated from the card's own transactions), and a bank
+  // bonus that paid out, now in its keep-open period.
+  const subOffers: DemoData["subOffers"] = [
+    { id: 1, owner: owners.alex, account_id: sapphire, kind: "card", institution: "Chase", product: "Sapphire Preferred", status: "open",
+      reward_points: 60000, reward_program: "chase_ur", opened_date: daysAgo(60), rule_trigger: "opened", rule_length: 12, rule_unit: "months",
+      annual_fee_cents: 9500, terms_text: "Earn 60,000 bonus points after you spend $4,000 on purchases in the first 3 months from account opening." },
+    { id: 2, owner: owners.sam, account_id: savings, kind: "bank", institution: "Ally Bank", product: "Online Savings", status: "paid",
+      reward_cents: 30000, opened_date: daysAgo(160), rule_trigger: "last_payout", rule_length: 6, rule_unit: "months",
+      rule_text: "If the account is closed within 6 months after the bonus is paid, the bonus may be deducted." },
+  ];
+  const subRequirements: DemoData["subRequirements"] = [
+    { id: 1, offer_id: 1, kind: "spend", target_cents: 400000, deadline: iso(Y, M, D - 60 + 91) },
+    { id: 2, offer_id: 2, kind: "deposits", target_cents: 1500000, deadline: daysAgo(70), done_at: daysAgo(120) },
+  ];
+  const subPayouts: DemoData["subPayouts"] = [{ id: 1, offer_id: 2, date: daysAgo(95), amount_cents: 30000 }];
   return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills, points, netWorth,
-           investmentSync, securities, holdings, investmentTxns, snapshots };
+           investmentSync, securities, holdings, investmentTxns, snapshots, subOffers, subRequirements, subPayouts };
 }
 
 /** The Worker settings the demo runs with: its people, and placeholder Plaid keys for each, so no
@@ -384,6 +402,7 @@ export function statements(d: DemoData): [string, (string | number | null)[]][] 
     ...ins("statement_sync", d.statementSync), ...ins("card_statements", d.cardStatements), ...ins("bills", d.bills), ...ins("point_balances", d.points), ...ins("net_worth", d.netWorth),
     ...ins("investment_sync", d.investmentSync), ...ins("securities", d.securities), ...ins("holdings", d.holdings),
     ...ins("investment_txns", d.investmentTxns), ...ins("balance_snapshots", d.snapshots),
+    ...ins("sub_offers", d.subOffers), ...ins("sub_requirements", d.subRequirements), ...ins("sub_payouts", d.subPayouts),
   ];
 }
 
