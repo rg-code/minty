@@ -1,6 +1,6 @@
 # Plan: trips (a Flighty and Wanderlog hybrid)
 
-**Status: plan, for the owner's review (2026-11-19). Nothing is built.** Working name **JET**
+**Status: plan, for the owner's review (2026-11-19). Nothing is built.** Its inbox (§2) also serves Bills. Working name **JET**
 (✋ the owner picks the name, §12).
 
 A trip view built from the household's bookings:
@@ -37,22 +37,39 @@ because someone in the household chose to send it. There are two ways in by emai
 
 ### 2.1 Gmail: the default for every household
 
-A short **Google Apps Script** in the household's Gmail (their own, or a free one made for this)
-sends Minty the mail that has the label **`Minty/Trips`**. Mail gets that label in two ways only:
+**Recommended: a Gmail account made only for Minty** (owner's decision, 2026-11-19), e.g.
+`ourminty@gmail.com`. Google's read-only Gmail permission covers a whole mailbox, with nothing
+narrower such as one label. In an account that only ever receives what the household forwards, the
+script can only ever see that. The household's own mailboxes grant nothing. (The household's own
+Gmail also works, for those who'd rather not make an account, with the label as the boundary.)
 
-1. **Forward it to `yourname+minty@gmail.com`**, from any mailbox: the same Gmail, a work account, a
-   partner's, Outlook. Gmail delivers `+minty` to the normal inbox. One Gmail filter labels it:
-   `to:(yourname+minty@gmail.com) from:(the household's addresses)`. The `from:` part means a
-   stranger writing to the `+minty` address isn't labeled. Minty's Setup page shows the exact text
-   to paste into Gmail's "Create filter" box.
-2. **Label it by hand** in Gmail, on a phone or a computer.
+**One mailbox for several views.** Gmail delivers `name+anything@gmail.com` to `name@gmail.com`, so
+each Minty view gets its own address. Minty sends each message to the view its address names:
 
-Nothing else is ever sent: no automatic labeling by sender (owner's decision).
+| Forward to | Label | Goes to |
+|---|---|---|
+| `ourminty+mintytrips@gmail.com` | `Minty/Trips` | Trips |
+| `ourminty+mintybills@gmail.com` | `Minty/Bills` | Bills (§2.3) |
+
+A **Google Apps Script** in that account sends Minty the mail that has one of those labels. Mail
+gets a label in two ways only:
+
+1. **Forwarding to the view's address**, from any mailbox: Gmail, a work account, a partner's,
+   Outlook. One Gmail filter per view labels it: `to:(ourminty+mintytrips@gmail.com)
+   from:(the household's addresses)`, and the same for `+mintybills`. The `from:` part means a
+   stranger writing to the address isn't labeled. Minty's Setup page shows the exact text to paste
+   into Gmail's "Create filter" box.
+2. **Labeling by hand** in Gmail, on a phone or a computer.
+
+Nothing else is ever sent: no automatic labeling by sender (owner's decision). Minty decides the
+view from the address the message was sent to (the `+mintytrips` or `+mintybills` in its
+`Delivered-To` / `To` headers), and from the label as a fallback. A message for no view waits in the
+inbox, unassigned.
 
 **The script** runs in the household's Google account every 10 minutes:
 - It finds labeled messages from the last 30 days that it hasn't sent yet. It keeps track of what
   it sent in its own storage, so it never changes the mail.
-- It sends each one's raw content to `POST /trips/inbox` on the household's Minty. If a send fails,
+- It sends each one's raw content to `POST /inbox` on the household's Minty. If a send fails,
   it tries again on the next run; after 3 failures it lists the message instead.
 - It asks Google only for read-only Gmail access, permission to call a web address, and a timer.
   It's short enough to read in full.
@@ -63,9 +80,14 @@ Nothing else is ever sent: no automatic labeling by sender (owner's decision).
 on Google's servers, which can't sign in to Cloudflare Access the way a person does, so it uses an
 Access **service token**:
 - Access checks the token before the request reaches Minty.
-- The Worker then accepts it on `POST /trips/inbox` only, and only when the token's Client ID (the
-  `common_name` in Access's JWT) matches the `TRIPS_INGEST_TOKEN_ID` setting. Every other route
-  still needs a person's login.
+- The Worker then accepts it on `POST /inbox` only, and only when the token's Client ID (the
+  `common_name` in Access's JWT) matches the `INBOX_TOKEN_ID` setting. Every other route still
+  needs a person's login.
+- **The key gives no access to email,** nor to anything in Minty: it can only drop a message into
+  Minty's inbox, where it waits as a suggestion. If it leaked, someone could add fake bookings or
+  bills to confirm, and nothing could be read. It's revoked by deleting it in Cloudflare.
+- **The Gmail permission stays with Google:** the script holds it, Minty never sees it, and it's
+  removed at myaccount.google.com/permissions.
 - There's **no sender authentication**: the household chose every message.
 - Messages are still untrusted text. They're parsed, never rendered or run, and every booking is a
   suggestion until it's confirmed.
@@ -75,19 +97,21 @@ Access **service token**:
 1. **Cloudflare:**
    - Zero Trust → Access → Service credentials → create a **service token**.
    - On Minty's Access application, add a **Service Auth** policy for that token.
-   - Put its Client ID in the Worker variable `TRIPS_INGEST_TOKEN_ID`.
+   - Put its Client ID in the Worker variable `INBOX_TOKEN_ID`.
    - A Setup check confirms the token gets through.
-2. **Minty → Setup → Trips → Gmail:** paste the Client ID and secret, then **Copy script**. The
-   page builds the script in the browser, so the secret is never saved in Minty.
-3. **script.google.com:** New project, paste, run **setup**, and allow it. Google says it isn't
-   verified, because it's your own script: Advanced → Go to project.
-4. **Gmail:** make the label, and the one filter from the text Minty shows.
+2. **Gmail:** make the account for Minty (recommended), its two labels, and the two filters from
+   the text Minty shows.
+3. **Minty → Setup → Inbox:** paste the Client ID and secret, then **Copy script**. The page builds
+   the script in the browser, so the secret is never saved in Minty.
+4. **script.google.com,** signed in as the account for Minty: New project, paste, run **setup**,
+   and allow it. Google says it isn't verified, because it's your own script: Advanced → Go to
+   project.
 
 SETUP.md walks through it with screenshots.
 
 ### 2.2 Forward to Minty: households with a domain on Cloudflare (the owner's case)
 
-An address on the household's domain (e.g. `trips@…`) is routed by Cloudflare Email Service to an
+Addresses on the household's domain (e.g. `trips@…` and `bills@…`, each naming its view) are routed by Cloudflare Email Service to an
 `email()` handler in **Minty's own Worker**, beside `fetch` and `scheduled`. There's nothing new
 to deploy, and it's idle until a route points at it. Inbound routing is free on the Workers Free
 plan. Cloudflare needs the domain's DNS on Cloudflare (subdomains work) and keeps no inbox.
@@ -101,7 +125,24 @@ dropped silently, with no bounce.
 
 **The owner uses both** 2.1 (`+minty` and by hand, in Gmail) and 2.2.
 
-### 2.3 Without email, for everyone
+### 2.3 Bills by email
+
+The same inbox serves Bills (`docs/bills.md`, own bills): forward a biller's email to `+mintybills`
+(or `bills@…`).
+- **The email's own text** ("Your bill of $84.12 is due Dec 3") is read with `bill-parse.js`,
+  which is pure and runs in the Worker as well as in the browser. The result is a bill suggested in
+  Bills, waiting for a confirm, like its PDFs today.
+- **A PDF attachment** is the open question. Bills' rule today is that PDFs are read in the browser
+  and never uploaded, only their fields and SHA-256 saved. A forwarded PDF has already gone through
+  the household's mailbox, but keeping it in D1 until a browser reads it changes that rule. ✋ The
+  options:
+  - **(a)** Keep the attachment in the inbox (up to 2 MB, D1's row limit), read by pdf.js when Bills
+    next opens, then delete it at once (or after 30 days if never read).
+  - **(b)** Ignore attachments: only the email's text is read, and a bill that's only in a PDF is
+    added from the PDF as today.
+- Card statements stay with Plaid (Liabilities); this is for the household's own bills.
+
+### 2.4 Without email, for everyone
 
 - **Paste, PDF or screenshot,** reusing SUB's on-device readers (`pdf-read.js`, `/sub-scan`'s
   Tesseract).
@@ -109,7 +150,7 @@ dropped silently, with no bounce.
   in the manifest). iOS doesn't support this for web apps; there, it's a screenshot picked in Minty.
 - **Wallet passes and calendar files** (`.pkpass`, `.ics`) as a later step.
 
-### 2.4 Considered and set aside
+### 2.5 Considered and set aside
 
 - **Minty reading a mailbox** (Gmail API): a Google Cloud project, the restricted `gmail.readonly`
   scope, refresh tokens that expire every 7 days while the app is in "Testing", and Minty holding a
@@ -140,7 +181,7 @@ found.
 
 **CPU:** decoding a forwarded email (MIME, quoted-printable, base64) and finding its JSON-LD on
 the free plan's 10 ms is the open question. T0 measures it on real confirmations. If it doesn't
-fit, `POST /trips/inbox` and the `email()` handler only store the message (capped at 256 KB), and
+fit, `POST /inbox` and the `email()` handler only store the message (capped at 256 KB), and
 the cron parses a few per run, as sync handles Plaid's pages.
 
 ## 4. What it stores
@@ -156,7 +197,8 @@ All of these are written by the household and the ingest only; sync never writes
   - source (email, paste, PDF, screenshot, typed), and its SHA-256.
   - **Flights** add airline, flight number, from and to (IATA), terminal, gate, seat and fare
     class, one row per leg.
-- **`trip_inbox`:** forwarded messages waiting to be read or confirmed. It keeps the extracted
+- **`inbox_messages`** (the inbox, shared by Trips and Bills; each message has its view): forwarded
+  messages waiting to be read or confirmed. It keeps the extracted
   fields, plus the message's text for 30 days so a parser fix can read it again, then deletes it.
   ✋ Decide whether to keep the text that long.
 - **`trip_transactions`:** links a transaction to a trip, by the owner (confirmed) or suggested
@@ -253,7 +295,8 @@ user's search covers the partner's shared photos too. ✋ Decide which user's ke
 |---|---|---|
 | **T0 Spikes** | An Apps Script posting through Access with a service token, and that token's JWT claims; Email Routing on the owner's domain to a test handler; CPU to parse ~20 real confirmations (the owner sends them; only their measurements are kept); Immich's search and album API on the owner's version | Service token, Immich key, test emails |
 | **T1 Trips and bookings** | `trips`, `trip_items`; typed, pasted, PDF and screenshot input; the itinerary and flight cards | Name |
-| **T2 Gmail (default)** | `trip_inbox`, `POST /trips/inbox` for the household's Access service token, the Apps Script and its Setup page (Copy script, the filter text), JSON-LD and known-sender parsers, SETUP.md's steps, the security-plan entry | Approve the security change |
+| **T2 Gmail (default)** | The inbox (`inbox_messages`, shared by views), `POST /inbox` for the household's Access service token, the Apps Script and its Setup page (Copy script, the filter text for `+mintytrips` and `+mintybills`), JSON-LD and known-sender parsers, SETUP.md's steps (a Gmail account for Minty), the security-plan entry | Approve the security change |
+| **T2c Bills by email** | `+mintybills` messages read with `bill-parse.js` into suggested bills; attachments as decided (§2.3) | Attachments (a) or (b) |
 | **T2b Forward to Minty** | The `email()` handler in Minty's Worker for a domain on Cloudflare, the allowed-login check, a Setup check | The owner's forwarding address |
 | **T3 Transactions** | Suggestions, confirm, totals, `/?trip=` in the dashboard | |
 | **T4 BAM** | Pending changes from award bookings | |
@@ -273,3 +316,6 @@ user's search covers the partner's shared photos too. ✋ Decide which user's ke
    Minty for those with a domain on Cloudflare, and paste, PDF and screenshot always.
 7. ✋ **The Gmail script's security change:** one route that accepts the household's Access service
    token instead of a person's login (§2.1).
+8. **A Gmail account made for Minty: recommended (decided 2026-11-19),** shared by Trips
+   (`+mintytrips`) and Bills (`+mintybills`).
+9. ✋ **Bills' PDF attachments:** kept until a browser reads them, or ignored (§2.3).
