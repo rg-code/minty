@@ -345,7 +345,7 @@ well inside the 50 subrequests, and a big trip spreads over several runs.
 | **T4 BAM** | Pending changes from award bookings | |
 | **T5 Immich** | Albums from the cron, the link on the trip | Secrets |
 | **T6a Map** | Minty's own SVG map: the world outline, airports, flight arcs and places with coordinates; "Open in Maps" links (§13) | |
-| **T6b Street map (optional)** | MapLibre and street tiles (§13, option 2) | Tile host |
+| **T6b Street map** | MapLibre (vendored) with OpenFreeMap's tiles, the trip page's policy gaining its host (§13, option 2) | |
 | **T6c Live flight status** | AeroAPI (and AirLabs) adapters, cron-only polling with a daily cap, on the flight cards and the status strip (§14) | AeroAPI key |
 | **T7 Timeline** | The trip's day-by-day timeline and its map from bookings, Immich's photo metadata and the transactions (§15) | |
 
@@ -360,8 +360,8 @@ well inside the 50 subrequests, and a big trip spreads over several runs.
    service token for Immich's Access application (§8). **The owner's key** (decided 2026-11-19); a
    second person's key only if T0 shows partner sharing doesn't cover their photos.
 5. **Map and live flight status: build both (decided 2026-11-19),** after T1 (they draw on trips).
-   Live status uses FlightAware AeroAPI Personal (§14). ✋ The street map's tiles (T6b): OpenFreeMap
-   or self-hosted Protomaps.
+   Live status uses FlightAware AeroAPI Personal (§14). The street map (T6b) uses **OpenFreeMap's
+   tiles** (decided 2026-11-19).
 6. **For forks too:** the Gmail script works for any household with a Gmail account, forwarding to
    Minty for those with a domain on Cloudflare, and paste, PDF and screenshot always.
 7. ✋ **The Gmail script's security change:** one route that accepts the household's Access service
@@ -387,15 +387,16 @@ A Wanderlog-style map of the trip: its places, and its flights as arcs.
   It's a link only, so nothing is loaded from them in Minty.
 - **No change to the page's policy, and no one else sees where the household is going.**
 
-**Option 2, later and optional (T6b): a street map.** ✋
+**Option 2 (T6b): a street map, with OpenFreeMap's tiles (owner, 2026-11-19).**
 - [MapLibre GL](https://maplibre.org/), vendored, using its CSP-friendly build with a separate
   worker file.
-- **Tiles from one of:**
-  - **[OpenFreeMap](https://openfreemap.org/)'s public tiles:** free, no key, no cookies, no limits
-    stated. The policy gains its host, and the tile server sees which areas are viewed (not by whom).
-  - **Self-hosted [Protomaps](https://protomaps.com/) PMTiles** on Cloudflare R2: a region's extract
-    is a few GB, inside R2's free 10 GB, served through a small Worker. No third party. Protomaps is
-    free for non-commercial use, and households are.
+- **Tiles from [OpenFreeMap](https://openfreemap.org/)'s public instance:** free, no key, no
+  cookies, no limits stated. The trip page's policy gains its host (its tiles, styles and fonts), and
+  the tile server sees which areas are viewed, not by whom. MapLibre adds OpenFreeMap's and
+  OpenStreetMap's attribution.
+- Set aside: self-hosted [Protomaps](https://protomaps.com/) PMTiles on Cloudflare R2 (no third
+  party, but a few GB to upload and keep up to date). It stays the fallback if OpenFreeMap's public
+  instance goes away.
 - **Places without coordinates** could be looked up by address (OpenStreetMap's Nominatim, from the
   cron, one request a second, its usage policy followed), or left as a list. ✋
 
@@ -430,8 +431,8 @@ time it was fetched, and the provider. Only the latest is kept.
 - **On the flight card:** "Delayed 45 min · Gate G12 · as of 3 min ago (AeroDataBox)".
 - **On the dashboard's status strip,** for a flight within 24 hours: "UA 837 to Tokyo: gate G12,
   on time".
-- **Push notifications** to a phone (Web Push, VAPID keys, sent from the cron) are a separate
-  later step. ✋
+- **Push notifications** to a phone (Web Push, VAPID keys, sent from the cron): **later** (owner,
+  2026-11-19), as their own step after T6c.
 
 **Privacy:** the provider learns that someone looked up that flight on that date, from the
 household's API account. Nothing else is sent.
@@ -455,7 +456,7 @@ but has only aircraft positions, with no schedules, gates or delays.
 Minty takes one adapter per provider (`FLIGHT_STATUS_PROVIDER` = `aeroapi` or `airlabs`), so a
 household can switch.
 
-**Still to decide:** ✋ the daily cap (default 50), and push notifications later or not.
+**Still to decide:** ✋ the daily cap (default 50). Push notifications come later (decided).
 
 ## 15. The trip's timeline (owner, 2026-11-19)
 

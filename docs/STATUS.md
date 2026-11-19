@@ -152,7 +152,8 @@ there, gitignored here). If that folder exists, read it too.
    - **T0 started (2026-11-19):** the owner runs the five checks in `scripts/jet-t0/README.md` and
      sends back their output. Decided: text kept 30 days, the owner's Immich key, the map and live
      status (AeroAPI Personal), and a timeline from bookings, photos' metadata and transactions (§15).
-     Still open: the Gmail script's security change (§12, 7), the street map's tiles, push.
+     Street map: OpenFreeMap's tiles; push notifications later. Still open: the Gmail script's
+     security change (§12, 7).
 10. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
    page so the demo follows. A dashboard change the demo can't follow stops the build, by
    design. Other landing-page to-dos: `docs/private/STATUS.md`.
