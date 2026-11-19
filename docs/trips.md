@@ -1,6 +1,6 @@
 # Plan: JET, trips (a Flighty and Wanderlog hybrid)
 
-**Status: plan, merged 2026-11-19 with the owner's decisions so far (§12); nothing is built.** Its
+**Status: plan, merged 2026-11-19 with the owner's decisions (§12). T0 started: the owner runs `scripts/jet-t0/`.** Its
 inbox (§2) also serves Bills. Named **JET** (owner, 2026-11-19).
 
 A trip view built from the household's bookings:
@@ -29,6 +29,8 @@ Bookings come in **without Minty reading anyone's mailbox** (§2).
   "Open in dashboard" with the filter set, so Select and its Summary work there.
 - **Points** (§7): miles spent on award bookings, shown in BAM against the program's balance.
 - **Photos** (§8): an Immich album of the trip's dates, with its link.
+- **The timeline** (§15): where the household was each day and when, on the map, from the bookings,
+  the photos' metadata and the transactions.
 
 ## 2. Getting bookings in (decided by the owner, 2026-11-19)
 
@@ -200,8 +202,8 @@ All of these are written by the household and the ingest only; sync never writes
     class, one row per leg.
 - **`inbox_messages`** (the inbox, shared by Trips and Bills; each message has its view): forwarded
   messages waiting to be read or confirmed. It keeps the extracted
-  fields, plus the message's text for 30 days so a parser fix can read it again, then deletes it.
-  ✋ Decide whether to keep the text that long.
+  fields, plus the message's text for 30 days so a parser fix can read it again, then deletes it
+  (owner's decision, 2026-11-19).
 - **`trip_transactions`:** links a transaction to a trip, by the owner (confirmed) or suggested
   (§6). Indexed on `(trip_id, transaction_id)`.
 
@@ -316,7 +318,7 @@ well inside the 50 subrequests, and a big trip spreads over several runs.
   replies, never follows a link in a message, and never loads remote images.
 - **Forwarded mail is untrusted text.** It's parsed, never executed. HTML is never rendered: the
   trip view shows extracted fields, and the stored text is shown as plain text.
-- **What's kept:** extracted fields, a SHA-256 per message, and the text for 30 days (§4, ✋).
+- **What's kept:** extracted fields, a SHA-256 per message, and the text for 30 days (§4).
 - **Secrets:** Immich's and Access's are Worker secrets. No new browser hosts, except a map's tiles
   if T6 adds one.
 - **Trust model unchanged:** every allowed login sees every trip.
@@ -334,7 +336,7 @@ well inside the 50 subrequests, and a big trip spreads over several runs.
 
 | Phase | What | ✋ |
 |---|---|---|
-| **T0 Spikes** | An Apps Script posting through Access with a service token, and that token's JWT claims; Email Routing on the owner's domain to a test handler; CPU to parse ~20 real confirmations (the owner sends them; only their measurements are kept); Immich's search and album API on the owner's version | Service token, Immich key, test emails |
+| **T0 Spikes** (started 2026-11-19) | The owner runs `scripts/jet-t0/` (its README): their own ~20 confirmations through `src/jet/mime.ts` and `reservations.ts` (tested, the T2 reader); Access with a service token, from a terminal and from an Apps Script with read-only Gmail; Immich's version, key permissions, metadata search (GPS, city, a partner's photos) and an album; AeroAPI (and AirLabs) for one flight. Email Routing on the owner's domain waits for T2b | Service tokens, Immich key, AeroAPI key, test emails |
 | **T1 Trips and bookings** | `trips`, `trip_items`; typed, pasted, PDF and screenshot input; the itinerary and flight cards | Name |
 | **T2 Gmail (default)** | The inbox (`inbox_messages`, shared by views), `POST /inbox` for the household's Access service token, the Apps Script and its Setup page (Copy script, the filter text for `+mintytrips` and `+mintybills`), JSON-LD and known-sender parsers, SETUP.md's steps (a Gmail account for Minty), the security-plan entry | Approve the security change |
 | **T2c Bills by email** | `+mintybills` messages read with `bill-parse.js` into suggested bills; PDF attachments kept until Bills reads them, then deleted (§2.3, option a); CLAUDE.md's Bills rule gets the exception | |
@@ -343,8 +345,9 @@ well inside the 50 subrequests, and a big trip spreads over several runs.
 | **T4 BAM** | Pending changes from award bookings | |
 | **T5 Immich** | Albums from the cron, the link on the trip | Secrets |
 | **T6a Map** | Minty's own SVG map: the world outline, airports, flight arcs and places with coordinates; "Open in Maps" links (§13) | |
-| **T6b Street map (optional)** | MapLibre and street tiles (§13, option 2) | Tile host |
-| **T6c Live flight status (optional)** | A provider and its key, cron-only polling with a daily cap, on the flight cards and the status strip (§14) | Provider, cost |
+| **T6b Street map** | MapLibre (vendored) with OpenFreeMap's tiles, the trip page's policy gaining its host (§13, option 2) | |
+| **T6c Live flight status** | AeroAPI (and AirLabs) adapters, cron-only polling with a daily cap, on the flight cards and the status strip (§14) | AeroAPI key |
+| **T7 Timeline** | The trip's day-by-day timeline and its map from bookings, Immich's photo metadata and the transactions (§15) | |
 
 ## 12. Decisions for the owner
 
@@ -352,12 +355,13 @@ well inside the 50 subrequests, and a big trip spreads over several runs.
 2. **How bookings come in: decided (2026-11-19).** The Gmail script by default, with mail labeled
    only by `+minty` forwarding or by hand; forwarding to the domain's address where there's a domain
    on Cloudflare (the owner has both); paste, PDF, screenshot and share for everyone (§2).
-3. ✋ **Keep a forwarded message's text 30 days** for re-reading, or only its extracted fields.
+3. **Keep a forwarded message's text 30 days** for re-reading (decided 2026-11-19).
 4. **Immich: through its API (decided 2026-11-19),** with an API key with four permissions and a
-   service token for Immich's Access application (§8). ✋ Whose key (the library with the trip
-   photos), and a second person's key only if T0 needs it.
-5. ✋ **Map and live flight status:** §13 and §14. The map (T6a) has no outside service; a street map
-   (T6b) and live status (T6c) each need a choice of provider.
+   service token for Immich's Access application (§8). **The owner's key** (decided 2026-11-19); a
+   second person's key only if T0 shows partner sharing doesn't cover their photos.
+5. **Map and live flight status: build both (decided 2026-11-19),** after T1 (they draw on trips).
+   Live status uses FlightAware AeroAPI Personal (§14). The street map (T6b) uses **OpenFreeMap's
+   tiles** (decided 2026-11-19).
 6. **For forks too:** the Gmail script works for any household with a Gmail account, forwarding to
    Minty for those with a domain on Cloudflare, and paste, PDF and screenshot always.
 7. ✋ **The Gmail script's security change:** one route that accepts the household's Access service
@@ -383,15 +387,16 @@ A Wanderlog-style map of the trip: its places, and its flights as arcs.
   It's a link only, so nothing is loaded from them in Minty.
 - **No change to the page's policy, and no one else sees where the household is going.**
 
-**Option 2, later and optional (T6b): a street map.** ✋
+**Option 2 (T6b): a street map, with OpenFreeMap's tiles (owner, 2026-11-19).**
 - [MapLibre GL](https://maplibre.org/), vendored, using its CSP-friendly build with a separate
   worker file.
-- **Tiles from one of:**
-  - **[OpenFreeMap](https://openfreemap.org/)'s public tiles:** free, no key, no cookies, no limits
-    stated. The policy gains its host, and the tile server sees which areas are viewed (not by whom).
-  - **Self-hosted [Protomaps](https://protomaps.com/) PMTiles** on Cloudflare R2: a region's extract
-    is a few GB, inside R2's free 10 GB, served through a small Worker. No third party. Protomaps is
-    free for non-commercial use, and households are.
+- **Tiles from [OpenFreeMap](https://openfreemap.org/)'s public instance:** free, no key, no
+  cookies, no limits stated. The trip page's policy gains its host (its tiles, styles and fonts), and
+  the tile server sees which areas are viewed, not by whom. MapLibre adds OpenFreeMap's and
+  OpenStreetMap's attribution.
+- Set aside: self-hosted [Protomaps](https://protomaps.com/) PMTiles on Cloudflare R2 (no third
+  party, but a few GB to upload and keep up to date). It stays the fallback if OpenFreeMap's public
+  instance goes away.
 - **Places without coordinates** could be looked up by address (OpenStreetMap's Nominatim, from the
   cron, one request a second, its usage policy followed), or left as a list. ✋
 
@@ -426,11 +431,83 @@ time it was fetched, and the provider. Only the latest is kept.
 - **On the flight card:** "Delayed 45 min · Gate G12 · as of 3 min ago (AeroDataBox)".
 - **On the dashboard's status strip,** for a flight within 24 hours: "UA 837 to Tokyo: gate G12,
   on time".
-- **Push notifications** to a phone (Web Push, VAPID keys, sent from the cron) are a separate
-  later step. ✋
+- **Push notifications** to a phone (Web Push, VAPID keys, sent from the cron): **later** (owner,
+  2026-11-19), as their own step after T6c.
 
 **Privacy:** the provider learns that someone looked up that flight on that date, from the
 household's API account. Nothing else is sent.
 
-**Decisions:** ✋ whether to build it; which provider (AeroDataBox's free tier to start, if T0 finds
-its quota enough); the daily cap; push notifications later or not.
+**Recommended provider: FlightAware AeroAPI, Personal** (owner: build it, 2026-11-19).
+- **Free use:** about $5 a month, with no monthly minimum. Billing is per result set (up to 15
+  records), and live flight status is one of the cheaper queries, so the free use covers dozens of
+  legs a month at about 15–20 calls a leg. T0 checks the real cost of the status query on the
+  household's account.
+- **Licence:** for personal use, which a household is. Its rate limit (10 result sets a minute) is
+  far above what polling needs.
+- **Data:** gates, terminals, estimated and actual times, delays and the aircraft.
+
+**Backup with a free plan: AirLabs** (about 1,000 queries a month). Its free key mostly answers for
+the current day, which is what live status needs.
+
+AeroDataBox's free tier (600 "units" a month, where a status call costs several) and AviationStack's
+(about 100 calls a month, with no HTTPS on the free plan) are too small or unsuitable. OpenSky is free
+but has only aircraft positions, with no schedules, gates or delays.
+
+Minty takes one adapter per provider (`FLIGHT_STATUS_PROVIDER` = `aeroapi` or `airlabs`), so a
+household can switch.
+
+**Still to decide:** ✋ the daily cap (default 50). Push notifications come later (decided).
+
+## 15. The trip's timeline (owner, 2026-11-19)
+
+A Google-Timeline-like record of the trip, built after the fact (and refreshed during it): for each
+day, **where the household was and when**, on the map, from three sources Minty already has or
+gets:
+
+| Source | Gives | From |
+|---|---|---|
+| **JET's bookings** | flights (airports, times), hotel stays, reservations, activities, with times and often coordinates | §3 |
+| **Immich's photo metadata** | where and when each photo was taken: GPS coordinates, time and time zone, and the city, state and country Immich already worked out | the same API key as §8 (`asset.read`), metadata only, **never the images** |
+| **The trip's transactions** | what was bought, where and when: merchant, amount, date (and time when the bank gives it), and the place when Plaid gives it | §6 |
+
+**Stops, from the photos.**
+- Photos are grouped in time order. A new stop starts after a gap of more than 90 minutes, or a move of
+  more than 500 m.
+- Each stop has a time span, a centre, Immich's city, the number of photos, and a link to them in
+  Immich.
+- A day's stops in order are its path on the map.
+- Stays (the hotel) and flights (two airports) are stops of their own, from the bookings, so a day
+  with no photos still has a shape.
+
+**Transactions placed on the timeline.**
+- **When Plaid gives a place** (a city, sometimes coordinates), the charge goes to the stop nearest in
+  time in that city.
+- **Otherwise** it goes to that day, listed under the stop whose city matches the merchant's, or
+  under "elsewhere that day".
+- A booking's charge goes to the booking itself (§6).
+- **Plaid's place for a transaction is new to Minty.** A migration adds `location_city`,
+  `location_region`, `location_country`, `location_lat` and `location_lon` to `transactions`. Sync
+  fills them from Plaid's `location` in the same SQL statement that writes the rest, so there's no
+  per-row work in the Worker. Transactions synced before keep none.
+
+**The view.**
+- The trip's map (§13) draws each day's path in its own colour, through its stops.
+- Beside it, the day as a list: "9:10 Hotel · 10:30–12:15 Senso-ji, 34 photos ↗ · 12:40 Lunch,
+  ¥3,200 · 15:00 teamLab (booked) · …".
+- Tapping a stop shows its photos' link, its charges and its bookings.
+
+**Computed in the cron, never on a request.**
+- After a trip ends, and daily while it's on, the timeline is rebuilt and stored as `trip_stops` (a
+  trip, a day, a start and end, a centre, a place name, its sources).
+- The photos' metadata is fetched page by page across runs, inside the subrequest limit.
+- Grouping is one pass in time order, cheap enough for the CPU limit; T7 measures it on a real trip.
+
+**Privacy.**
+- This is the household's own location history, stored in its own D1: trip stops only (times,
+  centres, place names, counts), never each photo's coordinates or the photos themselves.
+- It's built only for trips, never for days outside one.
+- Removing a trip removes its stops.
+
+**T0 checks:** Immich's metadata search returns GPS and city with each asset (and whether a
+partner's photos are included). T7 depends on T1 (trips), T3 (transactions) and T5 (the Immich key);
+the map is T6a.
