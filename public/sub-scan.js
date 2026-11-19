@@ -3,7 +3,11 @@
 // sessionStorage ("minty.sub.scan", set by SUB with the form's draft before it came here), with the
 // screenshot's SHA-256 so the same file is recognised later. Nothing is uploaded.
 (function () {
-  const KEY = "minty.sub.scan", V = "/vendor/tesseract/";
+  // ?for=jet: JET's "add a booking" sent us here (docs/trips.md §2.4); otherwise SUB did
+  const FOR_JET = new URLSearchParams(location.search).get("for") === "jet";
+  const KEY = FOR_JET ? "minty.jet.scan" : "minty.sub.scan", BACK = FOR_JET ? "/jet/#/add" : "/?sub", V = "/vendor/tesseract/";
+  document.getElementById("back").href = BACK;
+  if (FOR_JET) document.querySelector("h1").textContent = "Read a booking's screenshot";
   const $ = id => document.getElementById(id);
   const status = t => { $("status").textContent = t; };
   let sha = null, lib = null;
@@ -45,6 +49,6 @@
     const text = $("text").value.trim();
     try { sessionStorage.setItem(KEY, JSON.stringify({ offer: scan.offer ?? "new", draft: scan.draft ?? null, text, sha })); }
     catch { status("This browser won't hand the text back (private window?): copy it and paste it into SUB."); return; }
-    location.href = "/?sub";
+    location.href = BACK;
   });
 })();

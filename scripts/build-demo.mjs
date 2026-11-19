@@ -76,6 +76,7 @@ const og = ogImage ? `
 <meta name="twitter:card" content="summary_large_image" />` : "";
 edit("demo script first", /^<head>$/m, `<head>\n<meta name="robots" content="noindex" />${og}\n<script src="demo.js"></script>`);
 edit("no manifest", /<link rel="manifest"[^>]*>\n?/, "");
+edit("no JET", /\s*<a href="\/jet\/"[^\n]*<\/a>/, "");                     // JET (public/jet/) is its own app, not in the demo
 edit("no device lock", '<link rel="stylesheet" href="/lock.css" />\n<script src="/lock.js"></script>\n', "");   // demo visitors are never asked for Face ID
 editIn("app.js", "no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});`, "// the demo registers no service worker");
 // SUB's screenshot reader is its own page with Tesseract (7 MB), which the demo leaves out: paste and PDFs still work.

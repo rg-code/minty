@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>JET</title>
+<link rel="icon" href="/jet/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/jet/apple-touch-icon.png" />
+<link rel="manifest" href="/jet/manifest.webmanifest" crossorigin="use-credentials" />
+<meta name="theme-color" content="#0b1020" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="JET" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<script src="/jet/theme.js"></script>
+<link rel="stylesheet" href="/vendor/maplibre/maplibre-gl.css" />
+<link rel="stylesheet" href="/jet/jet.css" />
+<link rel="stylesheet" href="/lock.css" />
+<script src="/lock.js"></script>
+</head>
+<body>
+<!-- JET (docs/trips.md): the household's trips, as an app of its own, served by Minty's Worker with
+     Minty's sign-in and data. Flights, the theme and the map look like Flighty; trips like Wanderlog. -->
+<header class="bar">
+  <a class="brand" href="#/"><img src="/jet/icon.svg" alt="" width="28" height="28" /><span>JET</span></a>
+  <nav class="bar-actions">
+    <button type="button" class="icon-btn" id="themeBtn" aria-label="Light or dark" title="Light or dark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+    <a class="icon-btn" href="/" title="Open Minty" aria-label="Open Minty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg></a>
+  </nav>
+</header>
+<main id="app" aria-live="polite"><p class="muted center pad">Loading your trips…</p></main>
+<script src="/vendor/maplibre/maplibre-gl-csp.js" defer></script>
+<script type="module" src="/jet/jet.js"></script>
+</body>
+</html>

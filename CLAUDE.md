@@ -171,6 +171,13 @@ Design history and decisions: `docs/serverless-plan.md`.
   never "safe to close". Terms come from pasted text, a PDF (pdf.js) or a screenshot read on
   `/sub-scan` (vendored Tesseract.js, `public/vendor/tesseract/`), all on the device; only that page
   and those files get `'wasm-unsafe-eval'` (`public/_headers`). The demo has no screenshot reader.
+- JET, trips (`docs/trips.md` §16): an app of its own at `/jet/` (manifest scope `/jet/`, its own
+  service worker; each SW deletes only its own `minty-…` / `jet-…` caches), on Minty's Worker, Access
+  and D1. Sync never writes `trips`, `trip_items` or `trip_transactions`. `POST /trips/read-email`
+  is the one route past the 16 KiB body cap (2 MB), reads an `.eml` with `src/jet/` and stores
+  nothing. The map is vendored MapLibre (CSP build) on OpenFreeMap's tiles: only `/jet/*` and
+  `/vendor/maplibre/*` may reach `tiles.openfreemap.org`. Its look follows Flighty (flights, theme,
+  map) and Wanderlog (trips).
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

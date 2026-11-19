@@ -51,9 +51,12 @@ new ResizeObserver(() => placeOwnerThumb()).observe(document.getElementById("own
 const PAGE = 500;
 let loaded = [], hasMore = false, loadSeq = 0;
 
+// /?trip=ID: one JET trip's transactions (JET's "Open in Minty", docs/trips.md §6)
+const TRIP = /^\d+$/.test(new URLSearchParams(location.search).get("trip") ?? "") ? new URLSearchParams(location.search).get("trip") : null;
 async function load(more = false) {
   const seq = ++loadSeq;
   const p = new URLSearchParams();
+  if (TRIP) p.set("trip_id", TRIP);
   if (state.owner !== "all") p.set("owner", state.owner);
   if (state.q) p.set("q", state.q);
   if (state.start) p.set("start", state.start);
@@ -377,6 +380,7 @@ function render(txns) {
     !txns.length ? "no transactions"
     : hasMore ? `latest ${txns.length.toLocaleString()} transactions`
     : `${txns.length.toLocaleString()} transaction${txns.length === 1 ? "" : "s"}`;
+  if (TRIP) document.getElementById("count").insertAdjacentHTML("beforeend", ` · one JET trip (<a href="/jet/#/trip/${TRIP}">open in JET</a> · <a href="/">show all</a>)`);
   renderTotals(txns);
 
   const feed = document.getElementById("feed");
@@ -541,7 +545,7 @@ const CAT = { FOOD_AND_DRINK: "Food & drink", GENERAL_MERCHANDISE: "Shopping", R
               LOAN_PAYMENTS: "Loan payments", TRANSFER_OUT: "Transfers out (not matched)", OTHER: "Other" };
 const catName = c => CAT[c] ?? titleCase(c);
 const monName = (m, opts = { month: "short", year: "numeric" }) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString(undefined, { ...opts, timeZone: "UTC" });
-const filtersOn = () => !!(state.q || state.start || state.end || state.tags.length || state.categories.length || state.banks.length || state.accounts.length || state.cards.length);
+const filtersOn = () => !!(TRIP || state.q || state.start || state.end || state.tags.length || state.categories.length || state.banks.length || state.accounts.length || state.cards.length);
 
 let cardDays = null;                   // this month's spending by day, per person (GET /audit/daily split=owner): the cards' running totals
 let cardLastYear = null;               // the same month last year, the same way: the grey area behind them
