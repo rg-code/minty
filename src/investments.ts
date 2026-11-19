@@ -23,8 +23,10 @@ const OVERLAP_DAYS = 30;                         // later fetches look back this
 
 /** Account subtypes that are retirement accounts (HSAs included, decided 2026-10-16): islanded in
  * EGG unless the household switches one back to the dashboard (accounts.view). */
-export const RETIREMENT_SUBTYPES = ["401a", "401k", "403b", "457b", "ira", "roth", "roth 401k", "sep ira", "simple ira", "sarsep",
-  "keogh", "pension", "retirement", "thrift savings plan", "profit sharing plan", "hsa", "rrsp", "rrif", "lira", "lrif", "lif", "prif", "rdsp", "sipp"];
+// Lower case: IN_RETIREMENT compares lower(subtype) (Plaid writes "403B" and "roth 403B").
+export const RETIREMENT_SUBTYPES = ["401a", "401k", "403b", "457b", "ira", "roth", "roth 401k", "roth 403b", "roth 457b", "sep ira", "simple ira", "sarsep",
+  "keogh", "pension", "roth pension", "retirement", "thrift savings plan", "roth thrift savings plan", "profit sharing plan", "roth profit sharing plan",
+  "hsa", "rrsp", "rrif", "lira", "lrif", "lif", "prif", "rdsp", "sipp"];
 
 /** SQL: whether account `a` shows in EGG instead of the dashboard. */
 export const IN_RETIREMENT = (a: string) =>
