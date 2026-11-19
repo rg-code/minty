@@ -9,6 +9,10 @@ Two pieces that go together:
    a pension statement, an account at a bank Plaid doesn't support. They count in net worth and
    show next to the linked accounts.
 2. **An Accounts view:** every account in one place, grouped, with totals, per person.
+3. **Holders and a beneficiary** on any account: who holds it (one person, or two for a joint
+   account) and who it's for (a child's 529 or custodial account, a beneficiary named on an IRA).
+   This is the useful part of the fork's "people in D1" change, **without moving people out of
+   `MINTY_USERS`** (owner's decision, 2026-11-19).
 
 ## 1. Where a manual account lives
 
@@ -84,7 +88,8 @@ In the ⋯ menu next to Bills and CFA, as a popup like CFA (`public/accounts.js`
 - **Groups:** Cash, Cards, Loans, Investments, Retirement, Other assets. Each group has its total,
   then net worth (assets less debts) at the top. The numbers are CFA's: what's left out of the
   numbers is shown greyed with "left out", not counted.
-- **Person switch:** the dashboard's (Combined, then each person). It's a filter, as everywhere.
+- **Person switch:** the dashboard's (Combined, then each person). It's a filter, as everywhere;
+  §5 adds holders and beneficiaries to it.
 - **Each row:** display name, bank (or "Entered by hand"), ••mask, balance, and its date. Linked:
   when the bank last reported it; manual: its as-of date, flagged when stale.
 - **Actions:** rename (the existing `PUT /accounts/{id}/name`), "update balance" and edit or
@@ -102,14 +107,57 @@ In the ⋯ menu next to Bills and CFA, as a popup like CFA (`public/accounts.js`
 - `GET /accounts` reads card members from the transactions. For this view, `?members=0` skips
   them, so it reads one row per account. It gets a budget line in `test/reads.test.ts`.
 
-## 5. To-do
+## 5. Holders and a beneficiary
+
+The fork moved people into a D1 table to get these. Minty keeps `MINTY_USERS` as the one list of
+people (CLAUDE.md), and adds only the relationships:
+
+| Column (on `accounts`) | Holds | Example |
+|---|---|---|
+| `holders` | a JSON array of `MINTY_USERS` keys, at most 4; empty means "the owner" | `["me","sam"]` for a joint checking account |
+| `beneficiary` | a `MINTY_USERS` key, or a name for someone who isn't a Minty person (up to 100 characters) | `"kim"`, or `"Ava"` for a child with no Minty login or banks |
+
+**What doesn't change:**
+- `owner` is still the account's one person: the person switch filters by it, totals count by it,
+  and Plaid credentials are still chosen by it. Holders and beneficiary are **labels and an extra
+  filter**, never an access boundary (the trust model is unchanged), and never a way to pick
+  Plaid keys.
+- **Sync never writes them**, like `display_name`, so they survive re-syncs and reconnects. They
+  work on linked accounts too, not only manual ones: a 529 at a linked brokerage needs a
+  beneficiary just as much.
+- A key later removed from `MINTY_USERS` still shows, as the key itself, with "(not in
+  MINTY_USERS)". Setup checks list accounts whose holders or beneficiary name an unknown key, the
+  way they flag stranded banks.
+
+**Where they show:**
+- **Accounts view:** under the name, "Held by Alex & Sam" and "For Ava". The person switch gains
+  a choice: **Owned** (the default, what totals count) or **Owned, held or for** (adds the
+  accounts where that person is a holder or the beneficiary, marked, and not added to that
+  person's totals, so nothing is counted twice).
+- **EGG:** a retirement account's beneficiary shows on its card. A 529 or custodial account in
+  the Investments group shows who it's for.
+- **The dashboard's account filter:** unchanged.
+
+**Editing:** `PUT /accounts/{id}/holders` takes `{ holders: [keys], beneficiary: key or name or
+null }`. It works for every account; keys must be in `MINTY_USERS`; at most 4 holders. Manual
+accounts set them in the same form as the rest of their fields. A test checks that sync leaves
+both columns alone.
+
+Not taken from the fork: a "responsible adult" field (for a custodial account, the custodian is
+the holder), archiving people, and adding or renaming people in Minty (that stays in
+`MINTY_USERS`).
+
+## 6. To-do
 
 ✋ = needs the owner.
 
-- [ ] ✋ Approve this plan, and the decision in §2.
-- [ ] A migration (the next free number, 0023 today): `accounts.is_manual`, `balance_as_of`, `notes`. Added to `EXPECTED_MIGRATIONS`.
+- [ ] ✋ Approve this plan, and the decisions in §2 and §3.
+- [ ] A migration (the next free number, 0023 today): `accounts.is_manual`, `balance_as_of`, `notes`,
+      `holders` (default `'[]'`), `beneficiary`. Added to `EXPECTED_MIGRATIONS`.
 - [ ] `PLAID_ITEM()` in every bank-walking query, and the test that enforces it.
 - [ ] The manual routes, the snapshot dating, and net worth's `other` assets, with tests on local D1.
+- [ ] `PUT /accounts/{id}/holders`, the Setup check for unknown keys, and a test that sync never
+      writes `holders` or `beneficiary`.
 - [ ] The Accounts popup (with `sw.js`'s shell updated and its cache name bumped), light and dark, phone.
 - [ ] The demo: a manual house and car in the made-up household (`test/demo.test.ts`).
 - [ ] ✋ Try it on the live deployment: add one manual account, check net worth the next hour.
