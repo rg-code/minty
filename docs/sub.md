@@ -1,6 +1,6 @@
 # SUB: sign-up bonuses (plan)
 
-**Status: plan, for the owner's review (2026-11-19). Nothing is built.** Ideas from a fork
+**Status: plan; the owner approved §5 on 2026-11-19, and the plan as a whole is waiting for review. Nothing is built.** Ideas from a fork
 (Shayaeng/minty), used with its author's permission; the design here is Minty's own.
 
 SUB keeps track of account-opening bonuses: a card's "spend $4,000 in 3 months, get 60,000
@@ -53,7 +53,7 @@ net worth or a transaction.
   - **costs:** annual fee and its date;
   - **status:** planned, applied, open, met, paid, closed, or lost;
   - **source:** a link to the terms, the terms text (up to 8,000 characters, to fit the existing
-    16 KiB body limit), and notes.
+    16 KiB body limit), the SHA-256 of the PDF or screenshot it was read from (§2a), and notes.
 - **`sub_requirements`**, one or more per offer:
   - kind (spend, deposits, direct deposits, keep a balance, a number of transactions, other);
   - a target amount and/or count, a deadline;
@@ -61,6 +61,52 @@ net worth or a transaction.
 - **`sub_payouts`**, one or more per offer (installments, corrections):
   - a date and an amount or points, either one can be unknown but not both;
   - the matched transaction id, if any.
+
+## 2a. Reading an offer's terms: PDF, screenshot or pasted text
+
+Owner's decision (2026-11-19): all three are accepted. Each one ends as text in the offer's terms
+(up to 8,000 characters), and a parser **suggests** the offer's fields from it. You check and edit
+the suggestions before anything is saved.
+
+**Nothing is uploaded.** As with Bills and BAM, the file is read in the browser and never leaves
+the device. Only the text you keep and the file's SHA-256 are saved, so adding the same file
+twice is recognised.
+
+| From | How |
+|---|---|
+| Pasted text | straight into the terms box |
+| PDF | pdf.js, already in `public/vendor/pdfjs/` (the Bills/BAM reader, `pdf-read.js`), text from the first pages |
+| Screenshot or photo (PNG, JPEG, WebP, HEIC where the browser opens it) | OCR in the browser with **Tesseract.js** (Apache-2.0), vendored under `public/vendor/tesseract/`, never a CDN |
+
+**OCR, and the page's security policy.** Tesseract runs as WebAssembly, which the pages' policy
+(`script-src 'self'`) blocks. Adding `'wasm-unsafe-eval'` to the dashboard's policy would loosen
+it for every page.
+- So screenshots are read on **their own small page**, `/sub-scan`, with its own policy in
+  `public/_headers` (as `/connect` has one for Plaid). It's the same as the pages' policy plus
+  `'wasm-unsafe-eval'` and `worker-src 'self' blob:`.
+- SUB opens it in a dialog frame from the same origin. It hands back only the recognised text,
+  through `postMessage`, checked for the origin.
+- The OCR files (the engine, about 3 MB, and English language data, about 2 MB, the "fast"
+  model) load **only when a screenshot is picked**. They aren't in `sw.js`'s shell, so the app
+  doesn't download them up front.
+- **Phones:** iOS and Android can already copy text out of a screenshot (Live Text, Lens). SUB's
+  hint says so, as a quicker path that needs no OCR.
+
+**The parser** (`public/sub-parse.js`, pure, tested on made-up offer texts like `bill-parse.js`).
+It looks for the common phrasings:
+- **The reward:** "60,000 bonus points", "$300 bonus", "earn 75,000 miles". The program comes from
+  BAM's list when the issuer's name or a program name appears.
+- **Spend:** "spend $4,000 on purchases in the first 3 months" becomes a spend requirement of
+  $4,000, 3 months from opening.
+- **Deposits:** "direct deposits totaling $500 within 90 days" or "two qualifying direct
+  deposits" becomes a deposit requirement.
+- **Holding:** "account must remain open for 6 months", "if closed within 180 days … forfeit"
+  becomes a holding rule, with the sentence it came from quoted beside it.
+- **Fees:** "annual fee of $95", and whether it's waived the first year.
+- Each suggestion shows the words it came from. Anything it can't find stays empty, never
+  guessed, matching §3's rules on unknowns.
+- Long terms keep the sentences the parser used, then the rest up to 8,000 characters, with a
+  note when text was cut. The link to the full terms stays.
 
 ## 3. Rules it keeps (from the fork's careful version)
 
@@ -97,22 +143,23 @@ net worth or a transaction.
 `isHeavyRead` only if its reads grow with the transactions (they're bounded by window, so
 probably not).
 
-## 5. Decisions
+## 5. Decisions (approved by the owner, 2026-11-19)
 
-✋ = the owner's.
-
-1. ✋ The name **SUB**, in the ⋯ menu.
-2. ✋ **Terms text up to 8,000 characters**, inside the existing 16 KiB limit. The fork allows
-   48,000 and raises the limit for that route to 64 KiB; I'd rather keep one limit and link to
-   the terms.
-3. ✋ **What counts as spend** (§1): purchases less refunds on the card in the window, excluding
+1. The name **SUB**, in the ⋯ menu.
+2. **Terms text up to 8,000 characters**, inside the existing 16 KiB limit. The fork allows
+   48,000 and raises the limit for that route to 64 KiB; one limit is kept, with a link to the
+   full terms.
+3. **What counts as spend** (§1): purchases less refunds on the card in the window, excluding
    payments, fees, interest and transfers. Shown as an estimate.
-4. ✋ **No cash value for points** at first: SUB shows "60,000 Amex MR", not dollars. A value per
+4. **No cash value for points** at first: SUB shows "60,000 Amex MR", not dollars. A value per
    point could come with BAM later.
+5. **Terms from a PDF, a screenshot or pasted text** (§2a), read on the device. Screenshots use
+   vendored Tesseract.js on its own page with its own security policy.
 
 ## 6. To-do
 
-- [ ] ✋ Approve this plan and §5.
+- [x] The owner approved §5 (2026-11-19).
+- [ ] ✋ Approve the plan as a whole, including §2a's separate OCR page and its policy.
 - [ ] Its migration, added to `EXPECTED_MIGRATIONS`.
 - [ ] `src/sub/` with pure functions:
   - holding dates (month ends, unknowns, several offers);
@@ -123,5 +170,9 @@ probably not).
       `sub_*`.
 - [ ] The popup (`public/sub.js`, `sub.css`, in `sw.js`'s shell, with its cache name bumped),
       light and dark, phone.
+- [ ] Terms from pasted text and PDFs, and the parser with its tests.
+- [ ] `/sub-scan` with vendored Tesseract.js (pinned version, its licence beside it like pdf.js's),
+      its policy in `_headers`, the `postMessage` hand-back, and a test that the dashboard's policy
+      didn't change.
 - [ ] The demo: two made-up offers, one open and one holding.
 - [ ] ✋ Try it on a real offer.
