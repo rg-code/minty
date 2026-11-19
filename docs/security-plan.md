@@ -1,6 +1,6 @@
 # Plan: security hardening after the 2026-10-14 review
 
-**Status: decisions made (2026-10-14, §2); steps 1–4 done (step 4 enforced 2026-10-16); step 5 in progress (5a done). To-do list: §4.** Written 2026-10-14.
+**Status: decisions made (2026-10-14, §2); steps 1–4 done (step 4 enforced 2026-10-16); step 5 in progress (5a done). To-do list: §4. §6 (approved 2026-11-19): JET's inbox route for one Access service token.** Written 2026-10-14.
 
 An external review of `main` at 183d15b (API, pages, encryption, migrations, workflows, tests)
 found no unauthenticated path to financial data. Its main risks were how updates reach a
@@ -226,3 +226,44 @@ where Plaid is involved.
 - **Step 4** ships CSP as report-only first. A follow-up PR enforces it once the owner sees no
   violations. New `.js` files go into `public/sw.js`'s cached list.
 - **Step 6** merges only after the owner has cut the first signed release tag.
+
+## 6. JET's inbox: one route for one service token (approved by the owner, 2026-11-19)
+
+The design is [trips.md](trips.md) §2.1. (Numbered 6 to leave §5 to the MCP Worker's proposal.)
+
+**The change.** Today every API route needs a person: the Access JWT must carry an email, and the
+email must pass `ALLOWED_LOGINS`. JET's Gmail script runs on Google's servers, which can't sign in
+as a person, so **one route, `POST /inbox`, also accepts one Cloudflare Access service token**:
+- **Access checks the token first.** A Service Auth policy on Minty's Access application admits it,
+  and Access signs a JWT for it, as for a person.
+- **The Worker checks that JWT** as it does every other (team, audience, signature, expiry). Then,
+  on `POST /inbox` only, it accepts a JWT with no email when its `common_name` (the token's Client
+  ID) equals the `INBOX_TOKEN_ID` setting.
+- **Every other route, and every other method on `/inbox`, still refuses it:** "service tokens can't
+  use Minty", as today.
+- **An unset `INBOX_TOKEN_ID` means no token is accepted anywhere.** It's off by default, and forks
+  are unchanged until they set it.
+
+**What the token can do:** add one message to the inbox, which holds suggestions until a person
+confirms them. It can't read anything: no trips, bills, transactions or accounts, and not the inbox
+itself. It can't confirm, edit or delete.
+
+**If it leaks:** someone could add messages to the inbox, which would wait as suggestions. Nothing
+could be read or changed. Delete the token in Zero Trust and make a new one.
+
+**Limits:**
+- The rate limit applies per token (as `RL_GENERAL` does per login).
+- Bodies are capped: a message up to 2 MB through `POST /inbox` alone (attachments, §2.3), every
+  other route keeping 16 KiB.
+- The inbox holds at most 500 unread messages. Past that, new ones are refused with 429, so a flood
+  can't fill D1.
+
+**Tests (with T2):**
+- the token on every other route, and on `GET /inbox`, is refused;
+- a token with another Client ID is refused;
+- with `INBOX_TOKEN_ID` unset, it's refused everywhere;
+- a person's login still works on `POST /inbox` as before;
+- the size and count caps hold.
+
+**Rule update (with T2):** CLAUDE.md's Auth rule gains this one exception, worded as above.
+

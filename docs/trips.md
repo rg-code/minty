@@ -93,7 +93,8 @@ Access **service token**:
 - There's **no sender authentication**: the household chose every message.
 - Messages are still untrusted text. They're parsed, never rendered or run, and every booking is a
   suggestion until it's confirmed.
-- This is a change to the security model: a security-plan entry, approved before T2. ✋
+- This changes the security model: **approved by the owner (2026-11-19)**, recorded in
+  [security-plan.md](security-plan.md) §6, with its tests and limits.
 
 **Setting it up (once, about 5 minutes):**
 1. **Cloudflare:**
@@ -364,8 +365,8 @@ well inside the 50 subrequests, and a big trip spreads over several runs.
    tiles** (decided 2026-11-19).
 6. **For forks too:** the Gmail script works for any household with a Gmail account, forwarding to
    Minty for those with a domain on Cloudflare, and paste, PDF and screenshot always.
-7. ✋ **The Gmail script's security change:** one route that accepts the household's Access service
-   token instead of a person's login (§2.1).
+7. **The Gmail script's security change: approved (2026-11-19).** One route, `POST /inbox`, accepts
+   the household's Access service token instead of a person's login (§2.1, security-plan §6).
 8. **A Gmail account made for Minty: recommended (decided 2026-11-19),** shared by Trips
    (`+mintytrips`) and Bills (`+mintybills`).
 9. **Bills' PDF attachments: kept until a browser reads them (decided 2026-11-19, option a, §2.3).**
