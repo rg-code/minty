@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { PLAID_ITEM } from "./accounts";
 import { type Config, credsFor, isConfigured, loadConfig } from "./config";
 import { FernetError } from "./fernet";
 import { openAccessToken } from "./token-key";
@@ -298,7 +299,7 @@ export async function checkItem(env: Env, config: Config, item: ItemRow): Promis
 export async function checkConnections(env: Env, max = CHECKS_PER_RUN): Promise<Record<number, string | null>> {
   const config = loadConfig(env);
   const { results: items } = await env.DB.prepare(
-    `SELECT * FROM items WHERE status IN ('good', 'login_required')
+    `SELECT * FROM items WHERE status IN ('good', 'login_required') AND ${PLAID_ITEM("items")}
        AND (checked_at IS NULL OR checked_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '${CHECK_EVERY}'))
      ORDER BY checked_at IS NOT NULL, checked_at, id LIMIT ?`,
   ).bind(max).all<ItemRow>();
@@ -318,7 +319,7 @@ export async function runSyncAll(
 ): Promise<Record<number, ItemResult>> {
   const config = loadConfig(env);
   const { results: items } = await env.DB.prepare(
-    `SELECT * FROM items WHERE status IN ('good', 'login_required') AND products = 'transactions'
+    `SELECT * FROM items WHERE status IN ('good', 'login_required') AND products = 'transactions' AND ${PLAID_ITEM("items")}
      ${opts.updatesOnly ? "AND sync_start_cursor IS NOT NULL" : ""}
      ORDER BY sync_start_cursor IS NOT NULL, coalesce(attempted_at, updated_at), id`,
   ).all<ItemRow>();

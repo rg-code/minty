@@ -116,6 +116,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/transactions?before=2025-06-01:3000", 2500],   // the next page, via the same index
     ["/transactions?category=FOOD_AND_DRINK", 2500],   // a category: the newest 500 of it
     ["/accounts", 3500],                 // card members: only accounts that have some
+    ["/accounts?view=all&manual=1&members=0", 200],   // Accounts: one row per account, no card members (docs/accounts.md)
     ["/status", 3500],
     ["/tags", 100],
     ["/users", 10],
@@ -175,7 +176,7 @@ describe("D1 rows read by the audit's cron step (docs/cfa.md, C1)", () => {
     expect(full.tally.rows).toBeLessThanOrEqual(12 * n);
     const quiet = counting(env.DB);
     expect(await refreshTotals({ ...E, DB: quiet.db })).toEqual({ from: null, full: false });
-    expect(quiet.tally.rows).toBeLessThanOrEqual(12);
+    expect(quiet.tally.rows).toBeLessThanOrEqual(13);              // 13 since migration 0023: the networth_dirty row now always exists (its value is cleared, not the row)
     const snap = counting(env.DB);
     await snapshotBalances({ ...E, DB: snap.db }, new Date("2026-10-15T12:00:00Z"));   // midday: the first run after midnight also thins old snapshots
     expect(snap.tally.rows).toBeLessThanOrEqual(200);              // one row per account, plus each one's snapshot by its key

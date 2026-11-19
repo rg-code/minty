@@ -16,6 +16,7 @@ import * as inv from "./routes/investments";
 import * as egg from "./routes/retirement";
 import * as advice from "./routes/advice";
 import * as accountNames from "./accounts";
+import * as manual from "./routes/manual";
 import { runInvestmentSync } from "./investments";
 import { refreshIrsLimits } from "./retirement/irs";
 import { PlaidError } from "./plaid";
@@ -91,6 +92,11 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["GET", /^\/investments$/, ({ env }) => inv.investmentBanks(env)],
   ["POST", /^\/investments\/off$/, ({ env, request }) => inv.investmentsOff(env, request)],
   ["PUT", /^\/accounts\/(\d+)\/name$/, ({ env, request, params }) => accountNames.renameAccount(env, request, Number(params[0]))],
+  // Manual accounts, holders and a beneficiary (docs/accounts.md)
+  ["POST", /^\/accounts\/manual$/, ({ env, config, request }) => manual.create(env, config, request)],
+  ["PUT", /^\/accounts\/(\d+)\/manual$/, ({ env, config, request, params }) => manual.update(env, config, request, Number(params[0]))],
+  ["DELETE", /^\/accounts\/(\d+)\/manual$/, ({ env, params }) => manual.remove(env, Number(params[0]))],
+  ["PUT", /^\/accounts\/(\d+)\/holders$/, ({ env, config, request, params }) => manual.setHolders(env, config, request, Number(params[0]))],
   ["PUT", /^\/accounts\/(\d+)\/view$/, ({ env, request, params }) => inv.setAccountView(env, request, Number(params[0]))],
   ["POST", /^\/link\/reconnected$/, ({ env, config, request }) => link.reconnected(env, config, request)],
 ];

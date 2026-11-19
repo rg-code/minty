@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { PLAID_ITEM } from "../accounts";
 import { type Config, credsFor, isConfigured } from "../config";
 import { FernetError } from "../fernet";
 import { openAccessToken } from "../token-key";
@@ -32,7 +33,7 @@ export async function completeInvestments(env: Env, config: Config, request: Req
                  AND used_at IS NULL AND released_at IS NULL AND expires_at > ${NOW}`;
   const session = await env.DB.prepare(`SELECT item_id FROM link_sessions WHERE ${valid}`).bind(sessionId, email).first<{ item_id: number }>();
   if (!session) throw new HttpError(409, "This connection expired or was already finished. Start it again.");
-  const item = await env.DB.prepare("SELECT * FROM items WHERE id = ?").bind(session.item_id).first<ItemRow>();
+  const item = await env.DB.prepare(`SELECT * FROM items WHERE id = ? AND ${PLAID_ITEM("items")}`).bind(session.item_id).first<ItemRow>();
   if (!item) throw new HttpError(404, "bank not found");
   if (!env.TOKEN_ENC_KEY || !config.accountOwner.has(item.plaid_account) || !isConfigured(env, config, item.plaid_account)) {
     throw new HttpError(409, "This bank's Plaid keys aren't set up. Check Setup checks, then try again.");
@@ -70,6 +71,7 @@ export async function investmentBanks(env: Env): Promise<Response> {
             (SELECT count(*) FROM accounts a WHERE a.item_id = i.id AND ${IN_RETIREMENT("a")}) AS retirement_accounts,
             (SELECT count(*) FROM accounts a WHERE a.item_id = i.id AND a.type = 'investment') AS investment_accounts
      FROM items i LEFT JOIN investment_sync s ON s.item_id = i.id
+     WHERE ${PLAID_ITEM("i")}
      ORDER BY i.owner, i.id`).all();
   return json(results);
 }

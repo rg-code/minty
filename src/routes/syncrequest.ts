@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { PLAID_ITEM } from "../accounts";
 import { json } from "../http";
 
 /** Asking for a sync from the dashboard (clicking the logo). There is still no HTTP sync
@@ -31,7 +32,7 @@ const out = (s: SyncState) => ({ ...s, pending: isPending(s), runs_by: isPending
 /** When Minty last saved data from Plaid: the most recent successful sync of any bank (~8 rows). */
 async function lastSynced(env: Env): Promise<string | null> {
   const r = await env.DB.prepare(
-    "SELECT max(updated_at) AS t FROM items WHERE status IN ('good', 'login_required') AND txn_cursor IS NOT NULL").first<{ t: string | null }>();
+    `SELECT max(updated_at) AS t FROM items WHERE status IN ('good', 'login_required') AND txn_cursor IS NOT NULL AND ${PLAID_ITEM("items")}`).first<{ t: string | null }>();
   return r?.t ?? null;
 }
 
