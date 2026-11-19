@@ -1,6 +1,6 @@
 # Plan: manual accounts and an Accounts view
 
-**Status: plan, for the owner's review (2026-11-19). Nothing is built.** Ideas from a fork
+**Status: approved by the owner (2026-11-19), with §2, §3 and §3a confirmed; being built.** Ideas from a fork
 (Shayaeng/minty), used with its author's permission; the design here is Minty's own.
 
 Two pieces that go together:
@@ -51,7 +51,7 @@ Sync never writes manual accounts: it upserts by Plaid's account ids, and manual
 
 Plaid's own `type` and `subtype` where one exists, so the rest of Minty understands them:
 
-**Proposed (2026-11-19), for the owner to confirm.** Five groups. The subtypes are Plaid's own
+**Confirmed by the owner (2026-11-19).** Five groups. The subtypes are Plaid's own
 spellings, so a manual account behaves exactly like a linked one of the same kind (EGG's
 `IN_RETIREMENT`, ABC's card list, Bills):
 
@@ -67,7 +67,7 @@ spellings, so a manual account behaves exactly like a linked one of the same kin
   else in Other assets shows in Accounts with its value, marked "not in net worth", and isn't
   added. Cars lose value and aren't readily spent, so leaving them out is the usual practice.
 - **Their loans still count.** An auto loan is money owed whether or not the car is counted, so
-  net worth stays conservative. ✋ Confirm.
+  net worth stays conservative (confirmed).
 - **Not taken from the fork's 24-type catalog:** separate groups for education, custodial and
   HSA. A 529 or UTMA sits in Investments with its beneficiary (§5); an HSA goes to EGG, as linked
   HSAs do. More subtypes can be added when a real account needs one.
@@ -85,7 +85,7 @@ spellings, so a manual account behaves exactly like a linked one of the same kin
   is rebuilt on that run. An old valuation never looks new, and a back-dated one lands on its day.
 - **Stale balances:** a manual balance older than 90 days shows "updated 4 months ago" in
   Accounts. It's a reminder, never an automatic change.
-- **Currency (proposed, to confirm):** totals and net worth are in **US dollars only**.
+- **Currency (confirmed):** totals and net worth are in **US dollars only**.
   - The account's currency is stored as entered (linked: Plaid's `iso_currency_code`; a missing
     one counts as USD).
   - A non-USD account shows in Accounts with its own currency and amount, and isn't added to any
@@ -100,9 +100,7 @@ spellings, so a manual account behaves exactly like a linked one of the same kin
 
 A second figure next to net worth: **net worth without the home**, i.e. without the home's value
 **and** without the mortgages and home equity loans against it. That's the usual "excluding home
-equity" figure: what's there apart from the house. ✋ Confirm that it leaves out the mortgage too;
-the alternative, leaving out the house but still counting the mortgage, says more about debt but
-makes the figure look worse than it is.
+equity" figure: what's there apart from the house (confirmed by the owner).
 
 - **Stored with net worth:** `net_worth` gains `home_cents` (homes) and `home_debt_cents`
   (`loan` / mortgage and home equity), written by the same SQL and rebuild. A migration adds
@@ -182,8 +180,7 @@ the holder), archiving people, and adding or renaming people in Minty (that stay
 
 ✋ = needs the owner.
 
-- [ ] ✋ Confirm §2 (types, only a home counts, auto loans still count), §3 (USD only) and §3a
-      (without home also leaves out its mortgage).
+- [x] The owner confirmed §2, §3 and §3a (2026-11-19).
 - [ ] A migration (the next free number, 0023 today): `accounts.is_manual`, `balance_as_of`, `notes`,
       `holders` (default `'[]'`), `beneficiary`; `net_worth.home_cents`, `home_debt_cents`. Added to
       `EXPECTED_MIGRATIONS`.

@@ -1,6 +1,6 @@
 # SUB: sign-up bonuses (plan)
 
-**Status: plan; the owner approved §5 on 2026-11-19, and the plan as a whole is waiting for review. Nothing is built.** Ideas from a fork
+**Status: approved by the owner (2026-11-19); being built.** Ideas from a fork
 (Shayaeng/minty), used with its author's permission; the design here is Minty's own.
 
 SUB keeps track of account-opening bonuses: a card's "spend $4,000 in 3 months, get 60,000
@@ -159,7 +159,7 @@ probably not).
 ## 6. To-do
 
 - [x] The owner approved §5 (2026-11-19).
-- [ ] ✋ Approve the plan as a whole, including §2a's separate OCR page and its policy.
+- [x] The owner approved the plan, including §2a's separate OCR page and its policy (2026-11-19).
 - [ ] Its migration, added to `EXPECTED_MIGRATIONS`.
 - [ ] `src/sub/` with pure functions:
   - holding dates (month ends, unknowns, several offers);
