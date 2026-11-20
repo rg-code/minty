@@ -823,7 +823,9 @@ everywhere):
   noncommercial use with its credit, which Minty is. It's 10 m imagery: sharp at country and city
   zoom, softer at street level. The owner chose it over Stadia (an account, and likely a paid plan).
 - **Over it:** OpenFreeMap's place names, water names and borders, in white (`satelliteStyle`), the
-  flights, each day's stops in its colour, joined in order. It frames the trip's places.
+  flights, and the trip's places numbered in the order it went (1, 2, 3… across the whole trip, inside
+  the dot, in its day's colour), joined by one line. It opens zoomed in on those places; the flights
+  draw without widening it.
 - **The credit** is under the map, and in the map's ⓘ.
 - **The policy:** `/kos/*` and `/vendor/maplibre/*` may reach `tiles.maps.eox.at` (images and
   fetches); nothing else does.

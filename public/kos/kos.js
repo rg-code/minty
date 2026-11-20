@@ -420,12 +420,17 @@ async function journalLoad(t) {
   map = await createMap(el, { dark: true, satellite: true });
   if (!document.body.contains(el)) { map?.remove(); map = null; return; }
   if (!map) { const n = document.getElementById("jmapNote"); n.hidden = false; n.textContent = "The map couldn't load here (it needs WebGL, and the satellite and map tiles)."; return; }
-  const d = mapData(t), paths = [];
-  for (const dd of plan(t).days) {
-    const pts = dd.entries.filter((e) => e.item.kind !== "flight" && !e.repeat && Number.isFinite(e.item.lat) && Number.isFinite(e.item.lon)).map((e) => [e.item.lon, e.item.lat]);
-    if (pts.length > 1) paths.push({ coords: pts, color: dd.color });
+  // the places, in the order the trip went: numbered 1, 2, 3… across the whole trip, in their day's
+  // colour, joined by one line; the map frames them (zoomed in), and the flights draw without widening it
+  const stops = [];
+  for (const dd of plan(t).days) for (const e of dd.entries) {
+    const i = e.item;
+    if (i.kind === "flight" || e.repeat || !Number.isFinite(i.lat) || !Number.isFinite(i.lon)) continue;
+    stops.push({ lon: i.lon, lat: i.lat, kind: i.kind, num: String(stops.length + 1), label: i.name ?? "", id: String(i.id), color: dd.color });
   }
-  drawTrip(map, { ...d, paths }, null, d.pins.length ? "pins" : "all", true);    // the places, like the itinerary; flights only when there are none
+  const d = mapData(t);
+  const paths = stops.length > 1 ? [{ coords: stops.map((p) => [p.lon, p.lat]), color: "#ffffff" }] : [];
+  drawTrip(map, stops.length ? { arcs: d.arcs, pins: stops, paths } : d, null, stops.length ? "pins" : "all", true);
   el.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");   // the credits fold behind ⓘ; EOX's is also under the map
   mapKey = `journal:${t.id}`;
 }

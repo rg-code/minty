@@ -82,7 +82,7 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
     ...arcLines.map((a) => ({ type: "Feature", properties: { id: a.id ?? "", kind: "flight", label: a.label ?? "" }, geometry: { type: "LineString", coordinates: a.coords } })),
     ...paths.map((p) => ({ type: "Feature", properties: { id: p.id ?? "", kind: "path", color: p.color ?? "#868e96" }, geometry: { type: "LineString", coordinates: p.coords } })),
   ] };
-  const points = { type: "FeatureCollection", features: pins.map((p) => ({ type: "Feature", properties: { id: p.id ?? "", kind: p.kind, label: p.label ?? "", color: p.color ?? KIND_COLOR[p.kind] ?? KIND_COLOR.other },
+  const points = { type: "FeatureCollection", features: pins.map((p) => ({ type: "Feature", properties: { id: p.id ?? "", kind: p.kind, label: p.label ?? "", color: p.color ?? KIND_COLOR[p.kind] ?? KIND_COLOR.other, ...(p.num ? { num: p.num } : {}) },
     geometry: { type: "Point", coordinates: [p.lon, p.lat] } })) };
   for (const [id, data] of [["kos-lines", lines], ["kos-pins", points]]) {
     if (map.getSource(id)) map.getSource(id).setData(data); else map.addSource(id, { type: "geojson", data });
@@ -95,10 +95,14 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
     // Flighty's glow under the flight arcs
     map.addLayer({ id: "kos-arcs-glow", type: "line", source: "kos-lines", filter: ["==", ["get", "kind"], "flight"],
                    paint: { "line-color": KIND_COLOR.flight, "line-width": 8, "line-blur": 6, "line-opacity": 0.45 } }, "kos-arcs");
+    // a pin with its place in the trip (num, the journal's) is bigger, with the number inside
     map.addLayer({ id: "kos-pins", type: "circle", source: "kos-pins",
-                   paint: { "circle-radius": 7, "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
+                   paint: { "circle-radius": ["case", ["has", "num"], 11, 7], "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
+    map.addLayer({ id: "kos-nums", type: "symbol", source: "kos-pins", filter: ["has", "num"],
+                   layout: { "text-field": ["get", "num"], "text-font": ["Noto Sans Bold"], "text-size": 11.5, "text-allow-overlap": true, "text-ignore-placement": true },
+                   paint: { "text-color": "#ffffff", "text-halo-color": "rgba(0,0,0,0.35)", "text-halo-width": 0.6 } });
     map.addLayer({ id: "kos-labels", type: "symbol", source: "kos-pins", minzoom: 3,
-                   layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 12, "text-offset": [0, 1.2], "text-anchor": "top", "text-optional": true },
+                   layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 12, "text-offset": ["case", ["has", "num"], ["literal", [0, 1.5]], ["literal", [0, 1.2]]], "text-anchor": "top", "text-optional": true },
                    paint: { "text-color": dark ? "#eef1f8" : "#11162a", "text-halo-color": dark ? "#0b1020" : "#ffffff", "text-halo-width": 1.6 } });
     for (const layer of ["kos-pins", "kos-arcs"]) {
       map.on("click", layer, (e) => { const id = e.features?.[0]?.properties?.id; if (id && onPick) onPick(String(id)); });
