@@ -929,7 +929,7 @@ function gmailView() {
       <p class="muted"><b>iPhone:</b> paste the link into the set-up page <i>inside the installed Kos app</i> (its storage is separate from Safari's).</p></div></div>
       <textarea class="paste" id="phoneLink" rows="3" readonly>${esc(link)}</textarea>
       <div class="actions"><button type="button" class="btn small" data-copy="phoneLink">Copy the link</button>${navigator.share ? `<button type="button" class="btn small" data-share-link>Send…</button>` : ""}</div>
-      <p class="muted" style="margin-bottom:0">Anyone with this link can read your Kos label: send it only to yourself.</p></div>`
+      <p class="muted" style="margin-bottom:0">Anyone with this link can read ${MODE === "minty" ? "your Kos and Bills labels" : "your Kos label"}: send it only to yourself.</p></div>`
     : `<div class="card" style="margin-bottom:12px"><h3 style="margin:0 0 8px">Set up on another device already?</h3>
       <p style="margin-top:0">Open its set-up page, and scan the QR code with this phone, or paste its phone link here:</p>
       <form id="connectForm" class="form"><label class="wide">Phone link<input name="link" placeholder="…/kos/#/gmail?connect=…" autocomplete="off" /></label></form>
@@ -941,7 +941,7 @@ function gmailView() {
     ${c ? "" : phone}
     ${step(1, "A label and a filter, in Gmail (on a computer)", `<p>Make a label named <b>Kos</b>. Then Settings → <b>Filters and blocked addresses</b> → Create a new filter: in <b>To</b>, put your address with +${PLUS} (e.g. <b>you+${PLUS}@gmail.com</b>) → Create filter → <b>Apply the label: Kos</b> → Create filter. Anything you label Kos by hand counts too${MODE === "minty" ? ", and so does a filter you made earlier for +kos" : ""}.</p>
       ${MODE === "minty" ? `<p><b>For Bills too:</b> make a second label, <b>Bills</b>, and a filter for <b>you+bills@gmail.com</b> → <b>Apply the label: Bills</b>. Forward bills there (an email with the bill as a PDF, or the bill in the email itself), and Bills (the dashboard's ⋯ menu) has <b>Check Gmail</b>: it reads them on that device, like PDFs you pick, and only the bill's details are saved. Its script is this one: one set-up for both.</p>` : ""}`)}
-    ${step(2, "The script", `<p>Signed in to that Gmail, open <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → New project</a>. Replace what's there with this (your key is in it):</p>${copy("gsCode", gmail.script(key), 10)}
+    ${step(2, "The script", `<p>Signed in to that Gmail, open <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → New project</a>. Replace what's there with this (your key is in it):</p>${copy("gsCode", gmail.script(key, "Kos", MODE === "minty"), 10)}
       <p>Project Settings (⚙) → tick <b>Show "appsscript.json"</b> → open it in the editor and replace it with:</p>${copy("gsManifest", gmail.MANIFEST, 6)}`)}
     ${step(3, "Deploy it as a web app", `<p><b>Deploy → New deployment</b> → type <b>Web app</b> → Execute as: <b>Me</b>, Who has access: <b>Anyone</b> → Deploy. Allow it: Google says it isn't verified, because it's your own script → Advanced → Go to the project → Allow (it asks only to read Gmail). Copy the <b>Web app URL</b>.</p>
       <p class="muted">"Anyone" lets Kos call it without your Google sign-in; the key in the script is what keeps others out. To stop it, archive the deployment (Deploy → Manage deployments).</p>`)}

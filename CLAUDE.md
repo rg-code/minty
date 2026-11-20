@@ -185,8 +185,8 @@ Design history and decisions: `docs/serverless-plan.md`.
   `upload.wikimedia.org` / `thumb.wikimedia.org` (a trip's city photo, §19). Its look follows Flighty (flights, theme,
   map) and Wanderlog (trips). Gmail pull (§17.1, `public/kos/gmail.js`) asks the person's own
   Apps Script (`gmail.readonly`, a key made on the device, shared with a phone by a `#` link and a
-  QR code from vendored `public/vendor/qrcode/`) from the browser; only `/kos/*` may reach
-  `script.google.com` / `script.googleusercontent.com`. Share to Kos is the manifest's `share_target`,
+  QR code from vendored `public/vendor/qrcode/`) from the browser; only `/kos/*` and the dashboard
+  (`/`, for Bills by email) may reach `script.google.com` / `script.googleusercontent.com`. Share to Kos is the manifest's `share_target`,
   kept on the device by `kos/sw.js` until the add page reads it. It also runs on its own (§17): `public/kos/store.js` is the only
   thing that knows where trips live (Minty's API, or IndexedDB when `mode.js` says `device`);
   `scripts/build-kos.mjs` builds that for the landing site. Keep both stores answering the same

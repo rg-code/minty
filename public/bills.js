@@ -300,7 +300,7 @@
       rows = rows.concat(texts);
     }
     if (fromFolder && !rows.length) return 0;
-    if (mail && !rows.length) { (await gmailLib()).markBillsSeen(mail.ids); return 0; }
+    if (mail && !rows.length) { (await gmailLib()).markBillsSeen(mail.ids); review = null; return 0; }   // no stuck empty review
     review = { rows, fromFolder, gmail: mail?.ids ?? null };
     render();
     return rows.length;

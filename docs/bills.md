@@ -20,11 +20,12 @@ PG&E, water, trash and the like, one entry per bill (a quarterly bill is one ent
 
 - **By hand:** **+ Add a bill** (or **+ Add a bill due this day** on a selected day): biller, amount, due date (picked on the calendar), bill date, person, and the name its payment goes by in transactions (by default the biller's first word, e.g. PG&E).
 - **From PDFs:** **Add from PDFs** (several files) or **Add a folder** (desktop browsers; phones can't pick a folder). The browser reads each PDF with pdf.js 4.10.38, stored in `public/vendor/pdfjs/` (never a CDN, so the CSP stays `'self'`, and only loaded when used), and `public/bill-parse.js` finds the biller, amount due, due date, bill date and the account's last 4 digits. A review table shows them, editable, with date pickers; a PDF already added is recognised by its SHA-256 (`POST /bills/known`) and skipped. **The PDFs never leave the device**: only those fields and the fingerprint are saved.
-- **By email (owner, 2026-11-20):** forward a bill to the household's Gmail at `+bills`, where a filter
+- **By email (built 2026-11-20; the dashboard's policy change awaits the owner's OK, security plan §7.1):**
+  forward a bill to the household's Gmail at `+bills`, where a filter
   labels it **Bills**, and **Check Gmail** in Bills reads it. It uses Kos's Gmail pull (trips.md §17.1):
   the person's own Apps Script in that Gmail, set up once on Kos's Gmail page, on the same device
   (the address and key are in this browser's storage, shared with Kos). Nothing on the server.
-  - **The script's `view=bills`** returns the Bills label's emails from the last 90 days (20 at most, not
+  - **The script's `view=bills`** (only in a script made on a Minty; Kos on its own leaves it out) returns the Bills label's emails from the last 90 days (20 at most, not
     ones this device offered before), each as its plain text and its PDF attachments (up to 5, 5 MB
     each, base64). It still only reads (`gmail.readonly`).
   - **PDFs** go through the same reading as **Add from PDFs** (`pdf-read.js`, `bill-parse.js`, the

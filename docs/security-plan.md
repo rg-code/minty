@@ -349,7 +349,7 @@ from `#/gmail` after "Forget on this device".
 - No write scopes.
 - Nothing reaches Minty's Worker from Google.
 
-### 7.1 The same script for Bills, from the dashboard (owner's "build bills by email", 2026-11-20)
+### 7.1 The same script for Bills, from the dashboard (proposed 2026-11-20; the owner asked for Bills by email, and the dashboard policy change below awaits their OK)
 
 [bills.md](bills.md), "By email". The script gets a second view, `view=bills`: the **Bills** label's
 emails from the last 90 days, as text and PDF attachments. Same key, same `gmail.readonly`; still only
@@ -362,6 +362,10 @@ reads. What changes on Minty's side:
   isn't on every page.
 - **The PDFs are read in the browser**, like any picked PDF; the Worker never sees an email or a PDF.
   Only a bill's fields and a SHA-256 are saved.
+- **The key's reach grows, on a Minty only:** with the URL and key, someone can now also read the
+  **Bills** label's emails from the last 90 days, with their PDFs (bills carry account numbers and
+  addresses). The set-up page's phone-link warning says so. Kos on its own makes a script without the
+  Bills view, so a standalone user's "Bills" label is never read.
 
 ## 8. Kos following a Google Maps short link (owner's request, 2026-11-20)
 

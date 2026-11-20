@@ -53,24 +53,26 @@ export function markSeen(ids, k = SEEN) { const s = seenSet(k); for (const id of
 /** Bills' own list of emails it has offered (docs/bills.md, by email): separate from Kos's. */
 export const markBillsSeen = (ids) => markSeen(ids, BILLS_SEEN);
 
-/** The Apps Script, with the key written in: read-only, the label's emails, newest first, at most 20. */
-export function script(key, label = "Kos") {
-  return `// Minty's Gmail pull (rg-code/minty docs/trips.md §17.1, §21; docs/bills.md). Runs in YOUR Gmail, as
-// you, hosted by Google. It only reads, and only for a request with the key below:
-// - for Kos: the emails labelled "${label}", and those sent to a trip's own address
-//   (you+<the trip's code>@gmail.com), from the last 60 days;
+/** The Apps Script, with the key written in: read-only, the label's emails, newest first, at most 20.
+ * `withBills`: on a Minty only, also Bills' view (docs/bills.md, by email); Kos on its own has no Bills,
+ * so its script never reads a Bills label. */
+export function script(key, label = "Kos", withBills = false) {
+  return `// ${withBills ? "Minty's" : "Kos's"} Gmail pull (rg-code/minty docs/trips.md §17.1, §21${withBills ? "; docs/bills.md" : ""}). Runs in YOUR Gmail,
+// as you, hosted by Google. It only reads, and only for a request with the key below:
+// - the emails labelled "${label}", and those sent to a trip's own address (you+<the trip's code>@gmail.com),
+//   from the last 60 days;${withBills ? `
 // - for Minty's Bills (view=bills): the emails labelled "Bills" from the last 90 days, each as its
-//   plain text and its PDF attachments.
+//   plain text and its PDF attachments.` : ""}
 // Nothing is changed or sent anywhere else.
 const KEY = "${key}";
-const LABEL = "${label}";
-const BILLS = "Bills";
+const LABEL = "${label}";${withBills ? `
+const BILLS = "Bills";` : ""}
 const CODE = /^[2-9a-hjkmnp-z]{10}$/;
 
 function doGet(e) {
   if (!e || !e.parameter || e.parameter.key !== KEY) return out({ error: "forbidden" });
-  const skip = String(e.parameter.seen || "").split(",").filter(Boolean);
-  if (e.parameter.view === "bills") return out({ view: "bills", messages: bills(skip), v: 3 });
+  const skip = String(e.parameter.seen || "").split(",").filter(Boolean);${withBills ? `
+  if (e.parameter.view === "bills") return out({ view: "bills", messages: bills(skip), v: 3 });` : ""}
   const codes = String(e.parameter.codes || "").toLowerCase().split(",").filter(function (c) { return CODE.test(c); }).slice(0, 40);
   const addr = String(e.parameter.address || "").toLowerCase().replace(/[^a-z0-9.@_-]/g, "");
   // the label, or a trip's code anywhere in the message (its address), or the address exactly when Kos knows it
@@ -92,7 +94,7 @@ function doGet(e) {
   });
   return out({ label: LABEL, messages: messages, v: 3 });
 }
-// Bills: each email's text (for a bill in the email itself) and its PDFs (up to 5, 5 MB each).
+${withBills ? `// Bills: each email's text (for a bill in the email itself) and its PDFs (up to 5, 5 MB each).
 function bills(skip) {
   const threads = GmailApp.search('newer_than:90d label:"' + BILLS + '"', 0, 30);
   const messages = [];
@@ -102,7 +104,7 @@ function bills(skip) {
       const id = m.getId();
       if (messages.length >= 20 || size > 20000000 || skip.indexOf(id) >= 0) return;
       const pdfs = m.getAttachments({ includeInlineImages: false }).filter(function (a) {
-        return (/pdf/i.test(a.getContentType()) || /\.pdf$/i.test(a.getName())) && a.getSize() <= 5000000;
+        return (/pdf/i.test(a.getContentType()) || /\\.pdf$/i.test(a.getName())) && a.getSize() <= 5000000;
       }).slice(0, 5).map(function (a) { return { name: a.getName(), data: Utilities.base64Encode(a.getBytes()) }; });
       const text = m.getPlainBody().slice(0, 20000);
       pdfs.forEach(function (p) { size += p.data.length; });
@@ -110,7 +112,7 @@ function bills(skip) {
     });
   });
   return messages;
-}
+}` : ""}
 function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 `;
 }

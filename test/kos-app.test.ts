@@ -129,15 +129,20 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
     expect(code).toContain("trip: trip");
     expect(code).not.toMatch(/GmailApp\.(send|move|mark|delete|create)|addLabel|UrlFetchApp|MailApp/);    // still only reads
   });
-  it("the script's Bills view returns the Bills label's emails as text and PDFs, still only reading (docs/bills.md)", async () => {
+  it("on a Minty, the script's Bills view returns the Bills label's emails as text and PDFs, still only reading (docs/bills.md)", async () => {
     const g = await import("../public/kos/gmail.js");
-    const code = g.script(g.newKey());
+    const code = g.script(g.newKey(), "Kos", true);
+    expect(code).toContain("|| /\\.pdf$/i.test(a.getName())");
     expect(code).toContain('if (e.parameter.view === "bills") return out({ view: "bills", messages: bills(skip), v: 3 });');
     expect(code).toContain(`GmailApp.search('newer_than:90d label:"' + BILLS + '"', 0, 30)`);
     expect(code).toContain("getAttachments({ includeInlineImages: false })");
     expect(code).toContain("a.getSize() <= 5000000");
     expect(code).not.toMatch(/GmailApp\.(send|move|mark|delete|create)|addLabel|UrlFetchApp|MailApp|DriveApp/);
     expect(() => new Function(code)).not.toThrow();
+    // Kos on its own has no Bills: its script never reads a Bills label
+    const alone = g.script(g.newKey());
+    expect(alone).not.toMatch(/bills\(|BILLS|Bills/);
+    expect(() => new Function(alone)).not.toThrow();
   });
   it("pullBills asks with view=bills, decodes the PDFs, and leaves out what Bills already offered", async () => {
     const store = new Map<string, string>();
