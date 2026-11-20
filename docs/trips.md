@@ -663,6 +663,20 @@ Kos's own:
 #014147, inside the safe zone) and `apple-touch-icon.png`, all made from the owner's 1254 px image.
 The old SVG is gone.
 
+### 17.5 Backups, and the theme (owner, 2026-11-20)
+
+- **The reminder:** on Kos on its own, when there are trips of one's own (not only the sample's) and
+  none has been backed up (or, never, the oldest of them was made) more than 30 days ago, the home
+  screen shows "Back up your trips?" for 15 seconds, then it fades and is snoozed for 3 days ("Not now":
+  7 days). `backupDue` in `store.js`; the times are in localStorage (`kos-backup-at`, `kos-backup-snooze`).
+- **Back up** (the reminder, and Your data): the phone's share sheet with the backup file
+  (`kos-backup-<date>.json`, the same as an export), so it goes to Google Drive, an email to oneself,
+  Files, or anything else the phone offers; where a browser can't share files, a download. No Google
+  sign-in in Kos, and the Gmail script stays read-only. An Export counts as a backup too. Restoring is
+  Import, on Your data.
+- **Theme:** Kos is light by default (the owner's choice; it was dark, like Flighty). The theme
+  button is an airplane window: the shutter is up in light and pulled down in dark, and slides between.
+
 ### 17.1 Gmail pull (both modes)
 
 **Why:** on a phone, the Gmail app can't save a message as an `.eml`, so "Email file" alone left Kos

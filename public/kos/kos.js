@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SUM_KINDS, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, shiftSample, store, tripAddress, tripSummary } from "./store.js";
+import { MODE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, shiftSample, store, tripAddress, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 
@@ -107,7 +107,8 @@ function home() {
   const recent = addDays(today, -60);
   const ready = data.trips.filter((t) => t.end_date < today && t.end_date >= recent
     && (MODE === "device" ? !seenHere.includes(t.id) : t.journal_ready_at && !t.journal_seen_at)).slice(0, 2);
-  return `${ready.map((t) => `<a class="card j-ready" href="#/trip/${t.id}/journal"><span class="grow"><b>Your ${esc(t.name)} journal is ready.</b> <span class="muted">Its days, its map and room for your notes.</span></span><span class="btn small primary">Open</span></a>`).join("")}
+  const ownTrips = data.trips.filter((t) => !(sample?.trips ?? []).includes(t.id));
+  return `${backupReminder(ownTrips.length ? ownTrips : null)}${ready.map((t) => `<a class="card j-ready" href="#/trip/${t.id}/journal"><span class="grow"><b>Your ${esc(t.name)} journal is ready.</b> <span class="muted">Its days, its map and room for your notes.</span></span><span class="btn small primary">Open</span></a>`).join("")}
     ${sample ? `<div class="card sample-note"><span class="grow"><b>Sample trips.</b> Made up, to show what Kos does: open one, look at its flights and map, change anything. They're only in this browser.
       Start your own with <a href="#/new">New trip</a> or <a href="#/add">Add a booking</a>.</span><button type="button" class="btn small" data-sample-remove>Remove them</button></div>` : ""}
     ${flights.length ? `<div class="section-title"><h2>Next flight</h2><span class="muted">${flights.length > 1 ? `${flights.length - 1} more after it` : ""}</span></div>
@@ -661,9 +662,38 @@ function dataView() {
          <p class="muted">With a <a href="https://minty.milesmaximizer.com/">Minty</a> of your own, Kos also shows each trip's spending, and an import brings these trips across.</p>`
       : `<p style="margin-top:0"><b>Kos on your Minty.</b> Trips are kept in your Minty's database. Import brings in trips exported from Kos on another device or from Kos on its own.</p>`}
       <p class="muted">${n} trip${n === 1 ? "" : "s"} and ${b} booking${b === 1 ? "" : "s"} here.</p>
-      <div class="actions"><button type="button" class="btn primary" data-export>Export (a JSON file)</button>
+      ${MODE === "device" ? `<p class="muted">${lsNum(BACKED_UP) ? `Last backed up ${ago(lsNum(BACKED_UP))}.` : "Not backed up yet."} <b>Back up</b> saves a copy where you choose: Google Drive, an email to yourself, or your phone's files.</p>` : ""}
+      <div class="actions">${MODE === "device" ? `<button type="button" class="btn primary" data-backup data-goatcounter-click="kos-backup-data">Back up</button>` : ""}<button type="button" class="btn${MODE === "device" ? "" : " primary"}" data-export>Export (a JSON file)</button>
         <label class="btn">Import…<input type="file" accept="application/json,.json" id="importFile" hidden /></label><span class="err" id="formErr"></span></div></div>`;
 }
+// --- backups (docs/trips.md §17.5): the phone's share sheet (Google Drive, email, Files…), else a download
+const BACKED_UP = "kos-backup-at", SNOOZE = "kos-backup-snooze";
+const lsNum = (k) => { try { return Number(localStorage.getItem(k)) || 0; } catch { return 0; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, String(v)); } catch { /* not kept */ } };
+async function backUp() {
+  const json = JSON.stringify(exportFile(data, await store.allNotes().catch(() => [])), null, 1);
+  const file = new File([json], `kos-backup-${localDay()}.json`, { type: "application/json" });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: "Kos backup", text: "My Kos trips: import this file in Kos (Your data) to restore them." }); }
+    catch (e) { if (e?.name === "AbortError") return false; throw e; }                  // closed the sheet: not backed up
+  } else {
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(file), download: file.name });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  lsSet(BACKED_UP, Date.now()); lsSet(SNOOZE, 0);
+  return true;
+}
+const ago = (ms) => { const d = Math.floor((Date.now() - ms) / 864e5); return d < 1 ? "today" : d === 1 ? "yesterday" : `${d} days ago`; };
+/** The reminder, on the home screen of Kos on its own: shown for a short while, then snoozed. */
+function backupReminder(own) {
+  if (MODE !== "device" || !own) return "";
+  const created = own.map((t) => Date.parse(t.created_at ?? "")).filter(Number.isFinite);
+  if (!backupDue({ now: Date.now(), backedUp: lsNum(BACKED_UP), oldestOwn: created.length ? Math.min(...created) : 0, snoozedUntil: lsNum(SNOOZE) })) return "";
+  const last = lsNum(BACKED_UP);
+  return `<div class="card backup-note" id="backupNote" role="status"><span class="grow"><b>Back up your trips?</b> <span class="muted">They live only in this browser. ${last ? `Last backup ${ago(last)}.` : "Never backed up."} Save a copy to Google Drive, email or your phone.</span></span>
+    <button type="button" class="btn small primary" data-backup data-goatcounter-click="kos-backup-banner">Back up now</button><button type="button" class="btn small ghost" data-backup-later aria-label="Not now">Not now</button></div>`;
+}
+
 async function doImport(file) {
   const r = await importData(JSON.parse(await file.text()));
   return { trips: r.trips.length, items: r.items.length };
@@ -889,6 +919,7 @@ async function render() {
   }
   app.innerHTML = home();
   applyPhotos();
+  if (document.getElementById("backupNote")) setTimeout(() => { const n = document.getElementById("backupNote"); if (n) { n.classList.add("leaving"); setTimeout(() => n.remove(), 400); lsSet(SNOOZE, Date.now() + 3 * 864e5); } }, 15000);
   setupTabs();
   lockOffer();
 }
@@ -971,8 +1002,15 @@ app.addEventListener("click", async (ev) => {
       const file = new Blob([JSON.stringify(exportFile(data, await store.allNotes().catch(() => [])), null, 1)], { type: "application/json" });
       const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(file), download: `kos-trips-${localDay()}.json` });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      lsSet(BACKED_UP, Date.now());                              // an export is a backup too
       return;
     }
+    if (at("[data-backup]")) {
+      try { if (await backUp()) { document.getElementById("backupNote")?.remove(); if (route().parts[0] === "data") render(); } }
+      catch (e2) { alert(`Couldn't back up: ${e2.message}`); }
+      return;
+    }
+    if (at("[data-backup-later]")) { lsSet(SNOOZE, Date.now() + 7 * 864e5); document.getElementById("backupNote")?.remove(); return; }
     if (at("[data-make-trip]")) {
       const ids = [...app.querySelectorAll("[data-pick]:checked")].map((x) => x.dataset.pick);
       if (!ids.length) { alert("Tick the bookings to put in the trip first."); return; }

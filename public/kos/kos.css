@@ -34,6 +34,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .icon-btn { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; border: 1px solid var(--hairline); background: var(--surface); color: var(--muted); cursor: pointer; }
 .icon-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .icon-btn:hover { color: var(--ink); }
+/* the theme button: an airplane window whose shutter is up in light and pulled down in dark */
+.win .win-frame { stroke-width: 1.8; }
+.win .win-pane { stroke-width: 1.2; }
+.win .win-sky { fill: color-mix(in srgb, #6bb7ff 55%, transparent); stroke: none; transition: fill .35s; }
+.win .win-shade { fill: currentColor; stroke: none; transition: transform .35s cubic-bezier(.23, 1, .32, 1); }
+:root[data-theme="dark"] .win .win-sky { fill: #1b2742; }
+:root[data-theme="dark"] .win .win-shade { transform: translateY(11px); }   /* most of the way down */
+@media (prefers-reduced-motion: reduce) { .win .win-shade, .win .win-sky { transition: none; } }
 
 main { max-width: 1240px; margin: 0 auto; padding: 16px 16px calc(env(safe-area-inset-bottom) + 96px); }
 h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
@@ -213,10 +221,23 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
    accents, and EasyUI's pill navigation for the set-up's steps. Scoped to .welcome. */
 .welcome { --kos-teal: #024248; --kos-saffron: #feab0a; --kos-cream: #fcf1dd; max-width: 720px; margin: 0 auto; padding: 8px 4px 0; }
 .w-hero { position: relative; isolation: isolate; padding: 28px 0 8px; }   /* the glow is drawn inside it, not under the page */
-.w-hero::before { content: ""; position: absolute; inset: -30px 0 auto 0; height: 320px; z-index: -1; pointer-events: none; opacity: .55;
-                  background: radial-gradient(30% 50% at 32% 40%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
-                              radial-gradient(24% 40% at 68% 28%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%); }   /* both fade out inside the box: no edge */
-:root[data-theme="light"] .w-hero::before { opacity: .22; }
+/* the hero's lights: the same pair as before (the icon's teal and saffron) in three places, each pair
+   breathing slowly, out of step, so they shimmer; each fades out inside the box, so there's no edge */
+.w-hero { --glow-hi: .6; --glow-lo: .3; }
+:root[data-theme="light"] .w-hero { --glow-hi: .26; --glow-lo: .12; }
+.w-hero::before, .w-hero::after { content: ""; position: absolute; inset: -30px 0 auto 0; height: 340px; z-index: -1; pointer-events: none; opacity: var(--glow-hi); }
+.w-hero::before { background:                                   /* the first and third pairs */
+    radial-gradient(18% 42% at 14% 42%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
+    radial-gradient(14% 32% at 28% 26%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%),
+    radial-gradient(18% 42% at 76% 46%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
+    radial-gradient(14% 32% at 90% 30%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%);
+  animation: kos-glow 7s ease-in-out infinite; }
+.w-hero::after { background:                                    /* the middle pair */
+    radial-gradient(18% 42% at 44% 58%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
+    radial-gradient(14% 32% at 58% 34%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%);
+  animation: kos-glow 5.5s ease-in-out -2.5s infinite; }
+@keyframes kos-glow { 0%, 100% { opacity: var(--glow-hi); } 50% { opacity: var(--glow-lo); } }
+@media (prefers-reduced-motion: reduce) { .w-hero::before, .w-hero::after { animation: none; } }
 .w-kicker { margin: 0; display: inline-flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--kos-saffron); }
 .w-kicker span { opacity: .65; font-weight: 700; } .w-kicker a { color: inherit; text-decoration: none; border-bottom: 1.5px solid color-mix(in srgb, currentColor 40%, transparent); }
 :root[data-theme="light"] .w-kicker { color: #b86f00; }
@@ -336,4 +357,8 @@ main:has(> .welcome) { padding-bottom: calc(env(safe-area-inset-bottom) + 14px);
 .photo-credit { position: absolute; right: 10px; bottom: 6px; z-index: 2; max-width: 70%; font-size: 10px; line-height: 1.3; color: rgba(255, 255, 255, .78);
                 text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 a.photo-credit:hover { color: #fff; text-decoration: underline; }
+
+/* the backup reminder (Kos on its own): short-lived, it fades out by itself */
+.backup-note { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 14px; border-color: var(--warn); transition: opacity .4s, transform .4s; }
+.backup-note.leaving { opacity: 0; transform: translateY(-6px); }
 

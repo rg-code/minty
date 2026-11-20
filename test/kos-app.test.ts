@@ -77,6 +77,25 @@ describe("the page", () => {
   });
 });
 
+describe("backups and the theme (docs/trips.md §17.5)", () => {
+  it("the backup reminder: own trips not backed up (or made) in 30 days, unless snoozed", async () => {
+    const { backupDue } = await import("../public/kos/store.js");
+    const now = Date.parse("2026-11-20T12:00:00Z"), day = 864e5;
+    expect(backupDue({ now, backedUp: 0, oldestOwn: 0, snoozedUntil: 0 })).toBe(false);                 // no trips of one's own
+    expect(backupDue({ now, backedUp: 0, oldestOwn: now - 10 * day, snoozedUntil: 0 })).toBe(false);    // made 10 days ago
+    expect(backupDue({ now, backedUp: 0, oldestOwn: now - 40 * day, snoozedUntil: 0 })).toBe(true);     // 40 days, never backed up
+    expect(backupDue({ now, backedUp: now - 5 * day, oldestOwn: now - 400 * day, snoozedUntil: 0 })).toBe(false);
+    expect(backupDue({ now, backedUp: now - 31 * day, oldestOwn: now - 400 * day, snoozedUntil: 0 })).toBe(true);
+    expect(backupDue({ now, backedUp: now - 31 * day, oldestOwn: now - 400 * day, snoozedUntil: now + day })).toBe(false);
+  });
+  it("Kos is light by default, and its theme button is an airplane window with a shutter", async () => {
+    expect(await (await SELF.fetch("https://minty.example.workers.dev/kos/theme.js")).text()).toContain('|| "light";');
+    const html = await (await SELF.fetch("https://minty.example.workers.dev/kos/")).text();
+    expect(html).toMatch(/id="themeBtn"[^>]*><svg class="win"/);
+    expect(html).toContain('class="win-shade"');
+  });
+});
+
 describe("trip codes and addresses (docs/trips.md §21)", () => {
   it("codes are 10 characters without look-alikes; a trip's address is the person's Gmail with +code", async () => {
     const { newTripCode, isTripCode, tripAddress } = await import("../public/kos/store.js");
