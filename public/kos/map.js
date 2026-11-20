@@ -3,7 +3,7 @@
 // arcs between airports (airports.json, from OurAirports, public domain); places with coordinates
 // are pins. Tiles, the style and its fonts come from tiles.openfreemap.org, which the /kos/ page's
 // policy allows (public/_headers); nothing else is loaded from another host.
-import { LIBERTY_STYLE, nightStyle, satelliteStyle } from "./map-style.js";
+import { LIBERTY_STYLE, POSITRON_STYLE, minimalStyle, nightStyle } from "./map-style.js";
 
 /** Latin names only. Liberty prints "name:latin" over "name:nonlatin"; OpenFreeMap's fonts have
  * no Japanese, Chinese or Korean glyphs, so the second line drew as empty boxes. A label with both
@@ -46,13 +46,13 @@ const KIND_COLOR = { flight: "#4c6ef5", lodging: "#e8590c", car: "#1098ad", trai
 
 /** A map in `el`, dark or light. Resolves to the map once its style has loaded; null when the map
  * can't load (no WebGL, or the tiles are unreachable), so the page can say so and carry on. */
-export async function createMap(el, { dark, satellite = false }) {
+export async function createMap(el, { dark, minimal = false }) {
   const gl = window.maplibregl;
   if (!gl) return null;
   try {
     gl.setWorkerUrl("/vendor/maplibre/maplibre-gl-csp-worker.js");
-    const style = latinLabels(await (await fetch(LIBERTY_STYLE)).json());
-    const map = new gl.Map({ container: el, style: satellite ? satelliteStyle(style) : dark ? nightStyle(style) : style, center: [0, 20], zoom: 1, attributionControl: { compact: true },
+    const style = latinLabels(await (await fetch(minimal ? POSITRON_STYLE : LIBERTY_STYLE)).json());
+    const map = new gl.Map({ container: el, style: minimal ? minimalStyle(style, dark) : dark ? nightStyle(style) : style, center: [0, 20], zoom: 1, attributionControl: { compact: true },
                              cooperativeGestures: matchMedia("(hover: none)").matches });
     map.addControl(new gl.NavigationControl({ showCompass: false }), "top-right");
     await new Promise((ok, fail) => { map.once("load", ok); map.once("error", fail); setTimeout(() => fail(new Error("timeout")), 15000); });
@@ -97,12 +97,12 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
                    paint: { "line-color": KIND_COLOR.flight, "line-width": 8, "line-blur": 6, "line-opacity": 0.45 } }, "kos-arcs");
     // a pin with its place in the trip (num, the journal's) is bigger, with the number inside
     map.addLayer({ id: "kos-pins", type: "circle", source: "kos-pins",
-                   paint: { "circle-radius": ["case", ["has", "num"], 11, 7], "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
+                   paint: { "circle-radius": ["case", ["has", "num"], 12, 7], "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
     map.addLayer({ id: "kos-nums", type: "symbol", source: "kos-pins", filter: ["has", "num"],
-                   layout: { "text-field": ["get", "num"], "text-font": ["Noto Sans Bold"], "text-size": 11.5, "text-allow-overlap": true, "text-ignore-placement": true },
+                   layout: { "text-field": ["get", "num"], "text-font": ["Noto Sans Bold"], "text-size": 12.5, "text-allow-overlap": true, "text-ignore-placement": true },
                    paint: { "text-color": "#ffffff", "text-halo-color": "rgba(0,0,0,0.35)", "text-halo-width": 0.6 } });
     map.addLayer({ id: "kos-labels", type: "symbol", source: "kos-pins", minzoom: 3,
-                   layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 12, "text-offset": ["case", ["has", "num"], ["literal", [0, 1.5]], ["literal", [0, 1.2]]], "text-anchor": "top", "text-optional": true },
+                   layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 12, "text-offset": ["case", ["has", "num"], ["literal", [0, 1.6]], ["literal", [0, 1.2]]], "text-anchor": "top", "text-optional": true },
                    paint: { "text-color": dark ? "#eef1f8" : "#11162a", "text-halo-color": dark ? "#0b1020" : "#ffffff", "text-halo-width": 1.6 } });
     for (const layer of ["kos-pins", "kos-arcs"]) {
       map.on("click", layer, (e) => { const id = e.features?.[0]?.properties?.id; if (id && onPick) onPick(String(id)); });

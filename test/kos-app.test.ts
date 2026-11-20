@@ -50,9 +50,12 @@ describe("the page", () => {
     for (const p of ["/kos/", "/kos/kos.js", "/vendor/maplibre/maplibre-gl-csp-worker.js"]) {
       const csp = (await raw(p)).headers.get("content-security-policy") ?? "";
       expect(csp, p).toContain(p.startsWith("/kos/")
-        ? "connect-src 'self' https://tiles.openfreemap.org https://tiles.maps.eox.at https://script.google.com https://script.googleusercontent.com;"
-        : "connect-src 'self' https://tiles.openfreemap.org https://tiles.maps.eox.at;");
-      expect(csp, p).toContain("img-src 'self' data: blob: https://tiles.openfreemap.org https://tiles.maps.eox.at;");   // the journal's satellite (EOX)
+        ? "connect-src 'self' https://tiles.openfreemap.org https://en.wikipedia.org https://script.google.com https://script.googleusercontent.com;"
+        : "connect-src 'self' https://tiles.openfreemap.org;");
+      expect(csp, p).toContain(p.startsWith("/kos/")                                          // a trip's city photo (Wikimedia), only on Kos's pages
+        ? "img-src 'self' data: blob: https://tiles.openfreemap.org https://upload.wikimedia.org https://thumb.wikimedia.org;"
+        : "img-src 'self' data: blob: https://tiles.openfreemap.org;");
+      expect(csp, p).not.toContain("eox");
       expect(csp, p).toContain("script-src 'self';");
       expect(csp.match(/default-src/g), p).toHaveLength(1);
     }
@@ -138,17 +141,26 @@ describe("the trip journal (public/kos/journal.js, map-style.js)", () => {
                   { date: "2027-03-12", amount: -500, name: "PAYMENT" }, { date: "2027-03-13", amount: 42, name: "UNIQLO" }];
     expect(daySpend(rows, "2027-03-12")).toEqual({ cents: 9750, top: ["Sushi Example", "SUICA"] });
   });
-  it("the satellite map: EOX's imagery under the style's place names and borders only, with EOX's credit", async () => {
-    const { satelliteStyle, EOX } = await import("../public/kos/map-style.js");
-    const style = { sources: { openmaptiles: { type: "vector" }, ne2_shaded: { type: "raster" } }, layers: [
-      { id: "water", type: "fill", "source-layer": "water" }, { id: "boundary_2", type: "line", "source-layer": "boundary", paint: {} },
-      { id: "label_city", type: "symbol", "source-layer": "place", paint: {} }, { id: "road_label", type: "symbol", "source-layer": "transportation_name", paint: {} }] };
-    const sat = satelliteStyle(style);
-    expect(sat.layers.map((l: any) => l.id)).toEqual(["eox-satellite", "boundary_2", "label_city"]);
-    expect(Object.keys(sat.sources)).toEqual(["openmaptiles", "eox"]);
-    expect(sat.sources.eox.tiles[0]).toMatch(/^https:\/\/tiles\.maps\.eox\.at\//);
-    expect(EOX.attribution).toContain("Sentinel-2 cloudless - https://s2maps.eu");
-    expect(EOX.attribution).toContain("Contains modified Copernicus Sentinel data");
+  it("the journal's map is minimal: Positron cut to land, water, big roads, borders and city names, recoloured for the theme", async () => {
+    const { minimalStyle } = await import("../public/kos/map-style.js");
+    const style = { sources: { openmaptiles: { type: "vector" } }, layers: [
+      { id: "background", type: "background", paint: {} }, { id: "water", type: "fill", paint: {} }, { id: "building", type: "fill", paint: {} },
+      { id: "highway_major_inner", type: "line", paint: { "line-width": 2 } }, { id: "highway-name-major", type: "symbol", paint: {} },
+      { id: "boundary_2", type: "line", paint: {} }, { id: "label_city", type: "symbol", paint: {} }] };
+    const dark = minimalStyle(style, true), light = minimalStyle(style, false);
+    expect(dark.layers.map((l: any) => l.id)).toEqual(["background", "water", "highway_major_inner", "boundary_2", "label_city"]);
+    expect(dark.layers[0].paint["background-color"]).not.toBe(light.layers[0].paint["background-color"]);
+    expect(dark.layers[2].paint["line-width"]).toBe(2);                                       // shapes kept, colours changed
+  });
+  it("a trip's city photo: which city to ask for, and only Wikimedia's image hosts", async () => {
+    const { cityNames, isWikimediaImage } = await import("../public/kos/store.js");
+    expect(cityNames({ place: "Tokyo, Japan", items: [{ kind: "flight", arr_airport: "NRT", start_at: "2027-03-10" }] }, airports)).toEqual(["Tokyo, Japan", "Tokyo"]);
+    expect(cityNames({ place: "", items: [{ kind: "flight", arr_airport: "NRT", start_at: "2027-03-10" }] }, airports)).toEqual(["Tokyo"]);
+    expect(cityNames({ place: null, items: [] })).toEqual([]);
+    expect(isWikimediaImage("https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b2/Shinjuku.jpg/960px-Shinjuku.jpg")).toBe(true);
+    expect(isWikimediaImage("https://upload.wikimedia.org/wikipedia/commons/4/41/Lisbon.jpg")).toBe(true);
+    for (const bad of ["http://upload.wikimedia.org/x.jpg", "https://upload.wikimedia.org.evil.example/x.jpg", "https://upload.wikimedia.org/x.jpg\") url(https://evil.example", "javascript:alert(1)"])
+      expect(isWikimediaImage(bad), bad).toBe(false);
   });
   it("an export carries the journal's notes, and an import re-ties them to their trips", async () => {
     const { exportFile, importFile } = await import("../public/kos/store.js");

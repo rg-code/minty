@@ -107,22 +107,24 @@ export function nightStyle(style) {
   };
 }
 
-// --- the journal's map (docs/trips.md §20): satellite, like Wanderlog's journal --------------------
-// EOX's Sentinel-2 cloudless mosaic (no key; free for noncommercial use with this credit, which Minty
-// is: PolyForm Strict, noncommercial), with OpenFreeMap's place names and borders over it. Its
-// 10 m pixels are sharp at country and city zoom, softer at street level.
-export const EOX = {
-  tiles: ["https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2024_3857/default/g/{z}/{y}/{x}.jpg"],
-  attribution: '<a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless - https://s2maps.eu</a> by <a href="https://eox.at" target="_blank" rel="noopener">EOX IT Services GmbH</a> (Contains modified Copernicus Sentinel data 2024)',
+// --- the journal's map (docs/trips.md §20): minimal --------------------------------------------
+// OpenFreeMap's Positron, cut down to land, water, the big roads as faint lines, country borders and
+// city names, in a quiet light or dark palette, so the trip's numbered places are what you see.
+export const POSITRON_STYLE = "https://tiles.openfreemap.org/styles/positron";
+const QUIET = {
+  light: { bg: "#f4f3ef", water: "#dbe4ec", road: "#e3e0d8", border: "#cbc7bf", text: "#6e7380", halo: "#f4f3ef" },
+  dark: { bg: "#0e1322", water: "#0a1727", road: "#1a2234", border: "#283149", text: "#8a93a8", halo: "#0e1322" },
 };
-/** OpenFreeMap's Liberty style turned into satellite: the EOX imagery under the style's place names,
- * water names and borders only, in white on a dark halo so they read over imagery. */
-export function satelliteStyle(style) {
-  const keep = (l) => (l.type === "symbol" && ["place", "water_name"].includes(l["source-layer"])) || (l.type === "line" && l["source-layer"] === "boundary");
-  const layers = style.layers.filter(keep).map((l) => l.type === "line"
-    ? { ...l, paint: { ...l.paint, "line-color": "rgba(255,255,255,0.55)" } }
-    : { ...l, paint: { ...l.paint, "text-color": "#ffffff", "text-halo-color": "rgba(0,0,0,0.75)", "text-halo-width": 1.4 } });
-  return { ...style, sources: { openmaptiles: style.sources.openmaptiles, eox: { type: "raster", tiles: EOX.tiles, tileSize: 256, maxzoom: 15, attribution: EOX.attribution } },
-           layers: [{ id: "eox-satellite", type: "raster", source: "eox" }, ...layers] };
+const KEEP = new Set(["background", "water", "highway_motorway_inner", "highway_major_inner", "boundary_2",
+  "label_city", "label_city_capital", "label_town", "label_country_1", "label_country_2", "label_country_3", "water_name_point_label"]);
+/** Positron, minimal: only the layers in KEEP, recoloured for the theme. */
+export function minimalStyle(style, dark = true) {
+  const c = dark ? QUIET.dark : QUIET.light;
+  const layers = style.layers.filter((l) => KEEP.has(l.id)).map((l) => {
+    if (l.type === "background") return { ...l, paint: { "background-color": c.bg } };
+    if (l.type === "fill") return { ...l, paint: { ...l.paint, "fill-color": c.water, "fill-opacity": 1 } };
+    if (l.type === "line") return { ...l, paint: { ...l.paint, "line-color": l.id.startsWith("boundary") ? c.border : c.road } };
+    return { ...l, paint: { ...l.paint, "text-color": c.text, "text-halo-color": c.halo, "text-halo-width": 1.2 } };
+  });
+  return { ...style, layers };
 }
-

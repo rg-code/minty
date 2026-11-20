@@ -155,8 +155,9 @@ there, gitignored here). If that folder exists, read it too.
      plan §7 approved.
    - **Trip tags** (§18): a trip's tags go onto its transactions, so "reimbursed" leaves a trip's
      spending out of CFA and the dashboard's totals.
-   - **Summary strip** (§19): reservations by kind (a tap adds one) and the trip's budgeting.
-   - **Trip journal** (§20, K1): written from the bookings, with notes, a satellite map (EOX) and print;
+   - **Summary strip** (§19): reservations by kind (a tap adds one) and the trip's budgeting; a Lodging tab;
+     a city photo from Wikimedia on each trip's cover (§19.1).
+   - **Trip journal** (§20, K1): written from the bookings, with notes, a minimal numbered map and print;
      ready on its own after a trip. **Next: K2**, Immich in the journal (waits on T0).
    - Bookings (and bills) come from a Gmail account made for Minty, by forwarding to
      `+mintytrips` / `+mintybills` or labeling by hand, or by forwarding to the domain's address.

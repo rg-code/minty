@@ -784,6 +784,21 @@ trip's spending left out too.
 **The Lodging tab** (2026-11-20, beside Itinerary and Flights): the trip's stays as cards (nights, check-in
 and check-out, where, the booking), and the map zooms in on them (`drawTrip`'s "lodging" fit).
 
+**A city photo on a trip's cover** (§19.1, owner, 2026-11-20): Wikipedia's lead image for one of the
+trip's cities, hotlinked from Wikimedia Commons, on the trip's card and its cover, under a scrim.
+- **Which city:** the trip's place as typed ("Tokyo, Japan"), then its first part, then the city its
+  first flight lands in (`cityNames`). A disambiguation page ("Portland") is skipped.
+- **Which photo:** the page's lead image (Wikipedia's PageImages gives only freely licensed ones), as a
+  960 px thumbnail from `thumb.wikimedia.org` or `upload.wikimedia.org`; nothing else is accepted
+  (`isWikimediaImage`), and it's set through the DOM, never the page's HTML.
+- **Credit:** its photographer and licence (from the file's metadata), on the cover; on the trip's
+  page it links to the file on Commons.
+- **Asked once per city:** each answer, or "none", is kept in localStorage (`kos-photos`).
+- **What Wikipedia learns:** the city's name and the browser's address, once per city, from the
+  browser (on a Minty too). The first screen says so.
+- **The policy:** `/kos/*` may reach `en.wikipedia.org` (the lookups) and the two Wikimedia image
+  hosts (the photos). Nothing else does.
+
 **The summary strip** (under a trip's cover, like Wanderlog's):
 - **Reservations:** Flight, Lodging, Rental car, Train (trains and buses), Restaurant, Activity, Other,
   each with its count. A tap opens "Add a booking" for that trip with that kind chosen
@@ -818,17 +833,16 @@ everywhere):
   its own they're in IndexedDB (database `kos` version 2, store `notes`), and an export carries them.
 - **Print or save as PDF:** the browser's print, with a print layout (no buttons, notes as text).
 
-**The journal's map:** satellite, like Wanderlog's (theirs is Stadia Maps' Alidade Satellite).
-- **EOX Sentinel-2 cloudless** (`tiles.maps.eox.at`, the 2024 mosaic): no key or account, free for
-  noncommercial use with its credit, which Minty is. It's 10 m imagery: sharp at country and city
-  zoom, softer at street level. The owner chose it over Stadia (an account, and likely a paid plan).
-- **Over it:** OpenFreeMap's place names, water names and borders, in white (`satelliteStyle`), the
-  flights, and the trip's places numbered in the order it went (1, 2, 3… across the whole trip, inside
-  the dot, in its day's colour), joined by one line. It opens zoomed in on those places; the flights
-  draw without widening it.
-- **The credit** is under the map, and in the map's ⓘ.
-- **The policy:** `/kos/*` and `/vendor/maplibre/*` may reach `tiles.maps.eox.at` (images and
-  fetches); nothing else does.
+**The journal's map:** minimal (owner, 2026-11-20; it was EOX's satellite imagery, which the owner found
+too busy).
+- **OpenFreeMap's Positron**, cut down to land, water, the big roads as faint lines, country borders and
+  city names, in a quiet light or dark palette that follows Kos's theme (`minimalStyle`). It's
+  redrawn when the theme changes.
+- **Over it:** the flights, and the trip's places numbered in the order it went (1, 2, 3… across the
+  whole trip, inside the dot, in its day's colour), joined by one line. It opens zoomed in on those
+  places; the flights draw without widening it.
+- **The credit** (OpenFreeMap, OpenMapTiles, OpenStreetMap) is under the map, and in the map's ⓘ.
+- The itinerary's map numbers its places inside the dots too (per day, as Wanderlog does).
 
 **Reads:** `GET /trips/{id}/journal` reads the trip by its key and its notes by the key's prefix
 (budget in `test/reads.test.ts`). The hourly step reads the trips (few).
