@@ -213,10 +213,23 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
    accents, and EasyUI's pill navigation for the set-up's steps. Scoped to .welcome. */
 .welcome { --kos-teal: #024248; --kos-saffron: #feab0a; --kos-cream: #fcf1dd; max-width: 720px; margin: 0 auto; padding: 8px 4px 0; }
 .w-hero { position: relative; isolation: isolate; padding: 28px 0 8px; }   /* the glow is drawn inside it, not under the page */
-.w-hero::before { content: ""; position: absolute; inset: -30px 0 auto 0; height: 320px; z-index: -1; pointer-events: none; opacity: .55;
-                  background: radial-gradient(30% 50% at 32% 40%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
-                              radial-gradient(24% 40% at 68% 28%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%); }   /* both fade out inside the box: no edge */
-:root[data-theme="light"] .w-hero::before { opacity: .22; }
+/* the hero's lights: the same pair as before (the icon's teal and saffron) in three places, each pair
+   breathing slowly, out of step, so they shimmer; each fades out inside the box, so there's no edge */
+.w-hero { --glow-hi: .6; --glow-lo: .3; }
+:root[data-theme="light"] .w-hero { --glow-hi: .26; --glow-lo: .12; }
+.w-hero::before, .w-hero::after { content: ""; position: absolute; inset: -30px 0 auto 0; height: 340px; z-index: -1; pointer-events: none; opacity: var(--glow-hi); }
+.w-hero::before { background:                                   /* the first and third pairs */
+    radial-gradient(18% 42% at 14% 42%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
+    radial-gradient(14% 32% at 28% 26%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%),
+    radial-gradient(18% 42% at 76% 46%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
+    radial-gradient(14% 32% at 90% 30%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%);
+  animation: kos-glow 7s ease-in-out infinite; }
+.w-hero::after { background:                                    /* the middle pair */
+    radial-gradient(18% 42% at 44% 58%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
+    radial-gradient(14% 32% at 58% 34%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%);
+  animation: kos-glow 5.5s ease-in-out -2.5s infinite; }
+@keyframes kos-glow { 0%, 100% { opacity: var(--glow-hi); } 50% { opacity: var(--glow-lo); } }
+@media (prefers-reduced-motion: reduce) { .w-hero::before, .w-hero::after { animation: none; } }
 .w-kicker { margin: 0; display: inline-flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--kos-saffron); }
 .w-kicker span { opacity: .65; font-weight: 700; } .w-kicker a { color: inherit; text-decoration: none; border-bottom: 1.5px solid color-mix(in srgb, currentColor 40%, transparent); }
 :root[data-theme="light"] .w-kicker { color: #b86f00; }
