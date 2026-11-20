@@ -12,7 +12,7 @@ const envOverrides = demoEnv(data) as any;
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["trip_transactions", "trip_items", "trips", "analytics_exclusions", "sub_payouts", "sub_requirements", "sub_offers", "investment_txns", "holdings", "securities", "investment_sync", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["trip_journal_notes", "trip_transactions", "trip_items", "trips", "analytics_exclusions", "sub_payouts", "sub_requirements", "sub_offers", "investment_txns", "holdings", "securities", "investment_sync", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   await db.batch(statements(data).map(([sql, params]) => db.prepare(sql).bind(...params)));
 });
 

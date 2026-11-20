@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { call, getJson } from "./helpers";
 import { refreshTotals } from "../src/audit/totals";
+import { markJournalsReady } from "../src/routes/kos";
 
 // Kos, trips (docs/trips.md): trips, bookings, reading an email file, and a trip's transactions.
 const db = env.DB;
@@ -11,7 +12,7 @@ const rows = async (sql: string, ...b: unknown[]) => (await db.prepare(sql).bind
 
 let card = 0, checking = 0;
 beforeEach(async () => {
-  await db.batch(["trip_transactions", "trip_items", "trips", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["trip_journal_notes", "trip_transactions", "trip_items", "trips", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   const item = (await db.prepare(`INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, institution_name) VALUES ('me', 'me_primary', 'i-kos', 'x', 'Chase') RETURNING id`).first<{ id: number }>())!.id;
   const acct = (pid: string, name: string, type: string) => db.prepare(`INSERT INTO accounts (owner, item_id, plaid_account_id, name, type, subtype, mask) VALUES ('me', ?, ?, ?, ?, ?, '1234') RETURNING id`)
     .bind(item, pid, name, type, type === "credit" ? "credit card" : "checking").first<{ id: number }>();
@@ -198,3 +199,39 @@ describe("trip tags (docs/trips.md §18)", () => {
     expect(await march()).toBe(before);                                                        // and back in
   });
 });
+
+describe("the trip journal (docs/trips.md §20)", () => {
+  it("keeps a note per day and one for the trip; an empty one removes it; first opened is kept", async () => {
+    const id = await trip();
+    expect((await send("GET", `/trips/${id}/journal`)).body).toEqual({ id, ready_at: null, seen_at: null, notes: {} });
+    expect((await send("PUT", `/trips/${id}/journal`, { day: "trip", text: "  The best one yet.  " })).status).toBe(200);
+    await send("PUT", `/trips/${id}/journal`, { day: "2027-03-12", text: "Sushi, then the river." });
+    await send("PUT", `/trips/${id}/journal`, { day: "2027-03-12", text: "Sushi, then the river at night." });
+    await send("PUT", `/trips/${id}/journal`, { seen: true });
+    let j = (await send("GET", `/trips/${id}/journal`)).body;
+    expect(j.notes).toEqual({ trip: "The best one yet.", "2027-03-12": "Sushi, then the river at night." });
+    expect(j.seen_at).toMatch(/^\d{4}-/);
+    await send("PUT", `/trips/${id}/journal`, { day: "trip", text: "" });
+    j = (await send("GET", `/trips/${id}/journal`)).body;
+    expect(Object.keys(j.notes)).toEqual(["2027-03-12"]);
+    await send("DELETE", `/trips/${id}`);
+    expect(await rows("SELECT * FROM trip_journal_notes")).toEqual([]);                      // they go with the trip
+  });
+  it("checks the day, the text and the trip", async () => {
+    const id = await trip();
+    expect((await send("PUT", `/trips/${id}/journal`, { day: "tuesday", text: "x" })).status).toBe(422);
+    expect((await send("PUT", `/trips/${id}/journal`, { day: "trip", text: 5 })).status).toBe(422);
+    expect((await send("PUT", `/trips/${id}/journal`, { day: "trip", text: "x".repeat(5001) })).status).toBe(422);
+    expect((await send("GET", "/trips/9999/journal")).status).toBe(404);
+  });
+  it("the hourly run marks an ended trip's journal ready, once", async () => {
+    const past = await trip({ name: "Past", start_date: "2020-01-01", end_date: "2020-01-05" });
+    const future = await trip();
+    expect(await markJournalsReady(env as any)).toBe(1);
+    expect(await markJournalsReady(env as any)).toBe(0);
+    const t = (await send("GET", "/trips")).body.trips;
+    expect(t.find((x: any) => x.id === past).journal_ready_at).toMatch(/^\d{4}-/);
+    expect(t.find((x: any) => x.id === future).journal_ready_at).toBe(null);
+  });
+});
+

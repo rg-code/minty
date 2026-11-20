@@ -786,3 +786,43 @@ trip's spending left out too.
   from their prices, by currency.
 - `tripSummary` (`store.js`) counts; `kos.js` draws it with Material Icons glyphs (Apache 2.0).
 
+## 20. The trip journal (K1, owner, 2026-11-20)
+
+**What it is:** a page for each trip (`#/trip/{id}/journal`, the **Journal** button on the trip's
+cover), like Wanderlog's trip journal. It opens any time: before, during or after the trip.
+
+**"On its own" after the trip:** the hourly run marks a trip's journal ready the day after it ends
+(`trips.journal_ready_at`, `markJournalsReady`). The home screen then says **Your Lisbon journal is
+ready** (trips that ended in the last 60 days) until it's first opened (`journal_seen_at`). On Kos on
+its own, a trip that has ended is ready, and this browser remembers which were opened.
+
+**What's in it, written from the bookings** (`public/kos/journal.js`; no AI, so it's free and the same
+everywhere):
+- **The cover:** the trip's dates and place, days, flights, km flown (great circles between the
+  airports), countries (the airports'), places, and on a Minty what it cost (left out of CFA when a
+  trip tag says so, §18).
+- **A note for the trip**, then each day: its lines ("Flew San Francisco → Tokyo on UA 837", "Checked
+  in at…", "Dinner at…" by the booking's time, "Took…"), on a Minty what was spent that day and where,
+  and a note for the day. "Getting there" and "Getting home" hold what falls outside the trip's days.
+- **The household's notes** are all that's stored: `trip_journal_notes` (migration 0027), one per day
+  and one for the trip ('trip'), at most 60, 5,000 characters each, saved as they're typed. On Kos on
+  its own they're in IndexedDB (database `kos` version 2, store `notes`), and an export carries them.
+- **Print or save as PDF:** the browser's print, with a print layout (no buttons, notes as text).
+
+**The journal's map:** satellite, like Wanderlog's (theirs is Stadia Maps' Alidade Satellite).
+- **EOX Sentinel-2 cloudless** (`tiles.maps.eox.at`, the 2024 mosaic): no key or account, free for
+  noncommercial use with its credit, which Minty is. It's 10 m imagery: sharp at country and city
+  zoom, softer at street level. The owner chose it over Stadia (an account, and likely a paid plan).
+- **Over it:** OpenFreeMap's place names, water names and borders, in white (`satelliteStyle`), the
+  flights, each day's stops in its colour, joined in order. It frames the trip's places.
+- **The credit** is under the map, and in the map's ⓘ.
+- **The policy:** `/kos/*` and `/vendor/maplibre/*` may reach `tiles.maps.eox.at` (images and
+  fetches); nothing else does.
+
+**Reads:** `GET /trips/{id}/journal` reads the trip by its key and its notes by the key's prefix
+(budget in `test/reads.test.ts`). The hourly step reads the trips (few).
+
+**Next, K2: Immich in the journal** (§8, waiting on T0): the album, its photos on their days and as
+pins where they were taken, thumbnails through the Worker (only the trip album's), and **Make the
+album now**.
+

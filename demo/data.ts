@@ -39,6 +39,7 @@ export interface DemoData {
   tripTransactions: Record<string, string | number | null>[];
   tripTags: [number, string, number, number][];               // transaction_id, tag, position, trip_id (a trip's tag, §18)
   exclusions: [string, string][];                             // CFA's "Left out of the numbers": kind, value
+  journalNotes: Record<string, string | number | null>[];     // Kos's trip journal (docs/trips.md §20): the household's notes
 }
 
 export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", sam: "sam" }): DemoData {
@@ -458,12 +459,19 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   booking({ trip_id: tokyo, kind: "restaurant", name: "Sushi Mitsuba", place: "Ginza, Tokyo", lat: 35.6717, lon: 139.7650, start_at: at(addDays(tyo0, 1), "19:30", "+09:00"), confirmation: "R-5512" });
   booking({ trip_id: tokyo, kind: "train", name: "Odakyu Romancecar", place: "Shinjuku to Hakone-Yumoto", lat: 35.6896, lon: 139.7006, start_at: at(addDays(tyo0, 4), "10:20", "+09:00") });
   charge(tokyo, add(platinum, daysAgo(35), 2481.2, "UNITED AIRLINES", "United Airlines", "TRAVEL", { member: "ALEX MORGAN" }), tyoOut);
+  // the past trips' journals are ready (the hourly run's job in Minty), with a few notes in Lisbon's
+  for (const t of trips) if (String(t.end_date) < todayIso) t.journal_ready_at = `${addDays(String(t.end_date), 1)}T06:00:00Z`;
+  const journalNotes: DemoData["journalNotes"] = [
+    { trip_id: lisbon, day: "trip", text: "Our first trip to Portugal. Too many pastéis de nata, not enough days." },
+    { trip_id: lisbon, day: addDays(lis0, 1), text: "Got lost in Alfama on purpose, then dinner on the square. Fado two doors down." },
+    { trip_id: lisbon, day: addDays(lis0, 3), text: "Sintra in the fog: Pena Palace appeared out of the cloud at noon." },
+  ];
   // and a booking waiting for a trip
   booking({ trip_id: null, kind: "restaurant", name: "Harvest Table", place: "St. Helena, CA", lat: 38.5052, lon: -122.4703, start_at: at(inDays(50), "19:00", "-08:00") });
 
   return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills, points, netWorth,
            investmentSync, securities, holdings, investmentTxns, snapshots, subOffers, subRequirements, subPayouts,
-           trips, tripItems, tripTransactions, tripTags, exclusions };
+           trips, tripItems, tripTransactions, tripTags, exclusions, journalNotes };
 }
 
 /** The Worker settings the demo runs with: its people, and placeholder Plaid keys for each, so no
@@ -491,7 +499,7 @@ export function statements(d: DemoData): [string, (string | number | null)[]][] 
     ...ins("investment_sync", d.investmentSync), ...ins("securities", d.securities), ...ins("holdings", d.holdings),
     ...ins("investment_txns", d.investmentTxns), ...ins("balance_snapshots", d.snapshots),
     ...ins("sub_offers", d.subOffers), ...ins("sub_requirements", d.subRequirements), ...ins("sub_payouts", d.subPayouts),
-    ...ins("trips", d.trips), ...ins("trip_items", d.tripItems), ...ins("trip_transactions", d.tripTransactions),
+    ...ins("trips", d.trips), ...ins("trip_items", d.tripItems), ...ins("trip_transactions", d.tripTransactions), ...ins("trip_journal_notes", d.journalNotes),
     ...d.tripTags.map((t): [string, (string | number | null)[]] => ["INSERT INTO transaction_tags (transaction_id, tag, position, trip_id) VALUES (?, ?, ?, ?)", t]),
     ...d.exclusions.map((x): [string, (string | number | null)[]] => ["INSERT INTO analytics_exclusions (kind, value) VALUES (?, ?)", x]),
   ];
