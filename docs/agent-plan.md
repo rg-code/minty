@@ -1,6 +1,6 @@
 # Plan: an optional finance agent for Minty
 
-**Status: decisions made (2026-10-06, §10); next is A0 (§8.1). To-do list: §11.** Nothing is built yet. Written 2026-09-29.
+**Status: decisions made (2026-10-06, §10). 2026-11-06: the owner's "Ask Minty" is Claude, through an MCP server on the owner's deployment only (§12); next is M0/M1 (§12.8). The in-app agent for forks (A0, A2–A4) waits. To-do lists: §11, §12.8.** Nothing is built yet. Written 2026-09-29.
 
 Goal: an optional "Ask Minty" assistant that works on the household's own transactions, with
 the household's choice of model provider (OpenRouter, OpenAI, Anthropic, …). For example:
@@ -271,7 +271,7 @@ Setup checks gain agent lines, and each new setting gets a default and a line in
 | **A4 AI-powered automations** | AI instructions as conditions, AI reviews and write-ups, suggested tags with Confirm, the daily AI budget for automations | The examples in §4.1 work on test data within the free limits |
 | **A5 "Sign in with ChatGPT"** | Only if OpenAI opens it beyond its partner preview, and it works for self-hosted apps: use a Plus/Pro plan under its per-app cap | Separate go-ahead |
 | **A6 Per-person sign-in** | Deferred: decision 1 chose a household secret | — |
-| **A7 Optional** | Streamed replies, AI Gateway, and an MCP server offering the same tools to Claude Desktop and similar apps | Separate go-aheads |
+| **A7 Optional** | Streamed replies, AI Gateway. (The MCP server moved to §12, 2026-11-06: owner-only, ahead of A2) | Separate go-aheads |
 
 ### 8.1 A0 in detail (proposed; needs a go-ahead)
 
@@ -358,6 +358,20 @@ key-storage option is chosen.
   - Needs approval in A3: automations may add tags (add-only, labelled), as a separate step after
     the sync, which itself still never writes tags.
 
+- **2026-11-06 (owner): MCP first, for the owner's deployment only** (§12).
+  - Why now: Anthropic's Personal Finance in Claude (beta, 2026-11-05) re-links banks through
+    Anthropic's own Plaid connection and reads raw balances and transactions only. It doesn't see
+    anything Minty adds (tags, corrections, left-out items, bills, card credits, points, people,
+    card members), it can't be used from Claude Code, and it has no API or MCP access.
+  - The owner wants Minty in Claude (claude.ai, Claude Desktop and Claude Code), **reading and
+    tagging**. That is the owner's "Ask Minty": Claude is the chat, Minty supplies the tools.
+  - **Remote, on Cloudflare, not local.** A local MCP server (started by Claude Desktop or Code
+    on a computer) needs no endpoint, but it can't serve claude.ai or a phone, needs set-up on
+    every computer, and leaves a long-lived Access service token on each one. A remote MCP
+    Worker serves every Claude client with one deploy and per-person Access sign-in.
+  - **Not for forks** (for now): its code lives in a private repo, not this one (§12.2). The tool
+    layer it calls is built here, so forks' in-app agent (A2) can use the same tools later.
+
 ## 11. To-do (2026-10-12)
 
 Each phase ends with a PR the owner reviews. ✋ = needs the owner (a go-ahead, a key, or a run).
@@ -427,4 +441,172 @@ Each phase ends with a PR the owner reviews. ✋ = needs the owner (a go-ahead, 
   Add both once ABC and A3 exist.
 
 **Later:** A5 "Sign in with ChatGPT" (if it opens up), A6 per-person sign-in (deferred), A7
-streamed replies, AI Gateway and an MCP server. Each needs its own go-ahead.
+streamed replies and AI Gateway. Each needs its own go-ahead. The MCP server is §12.
+
+## 12. MCP: Minty in Claude, on the owner's deployment (decided 2026-11-06)
+
+**Status: plan, for the owner's review. Nothing is built.** Decision log: §10, 2026-11-06.
+Endpoint decision: [security-plan.md](security-plan.md) §5.
+
+### 12.1 What it is
+
+One remote MCP server lets Claude read Minty and tag transactions from claude.ai, Claude Desktop
+and Claude Code (and other MCP clients). It's the owner's "Ask Minty": the conversation happens in
+Claude, and Minty supplies the tools and the data, including everything Minty adds to the bank
+feed (display names, tags, people, card members, left-out items, CFA's totals, later bills, card
+credits, points and retirement).
+
+- **claude.ai** (and Desktop, which shares the account's connectors): Customize → Connectors →
+  Add custom connector → `https://<mcp-host>/mcp` → sign in. Custom connectors work on every
+  Claude plan (Free allows one). The connection comes **from Anthropic's cloud**, not the device.
+- **Claude Code:** `claude mcp add --transport http minty https://<mcp-host>/mcp`, then `/mcp`
+  to sign in.
+- Mobile: Anthropic's help pages list claude.ai, Cowork and Desktop for custom connectors; whether
+  the phone apps use them is checked in M2.
+
+### 12.2 Where it lives: the owner's deployment only
+
+- **A private repo** (`rg-code/minty-mcp`): a copy of this repo with the MCP Worker added, kept
+  current by merging `main`. Not a branch of this repo, because:
+  - branches of a public repo are public;
+  - Workers Builds can build other branches with the account's build token (security plan §1,
+    finding 1);
+  - its Wrangler config binds the household's D1 by `database_id`, a per-household value that
+    can't go in a public file.
+- **Its own Worker** (`minty-mcp`), its own Workers Builds project (production branch only,
+  previews off, a build token limited to Workers Scripts Edit), on its own hostname. The
+  dashboard Worker, its hostname and its Access application don't change.
+- **The tool layer is built here**, in `src/agent/tools/`, tested here with read budgets, and
+  imported by the MCP Worker. Forks get the tools (useful to the dashboard and to A2 later), not
+  the MCP Worker. `main` never imports from the private repo.
+- **The private repo never adds a migration.** Its numbering would collide with `main`'s, and
+  its deploy would apply it to the shared D1. What the MCP Worker stores goes in its own KV
+  namespace; anything that needs D1 is a migration here, on `main`.
+
+### 12.3 Sign-in and tokens
+
+- **Cloudflare Access is the sign-in.** An "Access for SaaS" OIDC application in the owner's Zero
+  Trust account, with the same identity provider and Emails policy as the dashboard. Cloudflare
+  documents this pattern for MCP servers on Workers.
+- **OAuth** comes from Cloudflare's `workers-oauth-provider`: the MCP client follows `/mcp`'s 401
+  to the authorization server, the person signs in through Access, and the client gets a token.
+  The Worker keeps the Access email with the grant. `ALLOWED_LOGINS` applies to it, and the trust
+  model is unchanged: an admitted login is trusted with the whole household (security plan §2).
+- **Tokens:** short access tokens and longer refresh tokens (lifetimes settled in M2), stored
+  hashed in KV by the library. Revoking a grant ends that client's access. Revoking everything
+  means rotating the provider's secret.
+- **Client registration:** claude.ai and Claude Code can register themselves (Dynamic Client
+  Registration). With it on, anyone can register a client, but no client gets a token without an
+  Access sign-in that passes the policy. The alternative is pre-registering one client for
+  claude.ai (its "advanced settings" take a client ID and secret) and turning registration off.
+  ✋ Owner decides in M0; the default proposal is registration on, plus a list of grants the owner
+  can revoke.
+
+### 12.4 Tools (v1)
+
+Reading (all read-only; MCP `readOnlyHint`):
+
+| Tool | Returns |
+|---|---|
+| `describe_household` | people, accounts (display name, bank, mask, type, card members), tags, categories, the date range of the data |
+| `find_merchants` | similar merchant names, with counts and last date |
+| `search_transactions` | §4's filters plus people, card members and left-out handling → a result set id, count, money out and in, the dates used, up to 20 sample rows |
+| `summarize` | a result set's totals by merchant, category, day, month, account, card member or person |
+| `get_rows` | a page of a result set (≤ 50 rows) |
+| `monthly_totals` | CFA's stored totals (spend, income, saving, transfers, by month, person and category), from `monthly_totals`, never the transactions |
+
+Later, each with its own read budget: bills and their paid estimates, ABC credits still open,
+BAM balances, EGG contributions against the limits.
+
+Tagging (changes data):
+
+| Tool | Does |
+|---|---|
+| `preview_tagging` | add and/or remove tags on a result set or ids: what would change (count, a sample, tags that would hit the per-transaction cap). Saves the exact ids in KV; returns a preview id |
+| `apply_tagging` | applies one preview, once, within 15 minutes. At most 500 transactions. Logged in KV for undo |
+| `undo_tagging` | reverts an applied preview from the log (kept 30 days) |
+
+- Claude's own approval prompt is the **Confirm** of decision 3. The write tools aren't marked
+  read-only, so Claude asks before each one unless the owner picks "always allow". The preview
+  step means an apply always names exactly what was shown.
+- Add and remove only: no renaming or deleting a tag everywhere. Same rules as the dashboard
+  (`MAX_TAGS_PER_TXN`, tag length). Sync still never writes tags.
+- **Result sets store the filter, not the rows** (one KV write). This is a change from A1's
+  planned `agent_result_items` table, and it costs no D1 writes. A result set is re-run when it's
+  read, so a sync in between can add rows. A preview pins exact ids for that reason.
+
+Not offered (as §4): SQL, linking or reconnecting banks, sync, secrets, deletes. A
+`request_sync` that only records a request, like tapping the logo (`POST /sync-request`), could
+come later. It never syncs.
+
+### 12.5 Limits and cost
+
+- **Rate limit:** per login, its own Rate Limiting binding, checked before any D1 work.
+- **D1 reads:** the daily read budget is shared with the dashboard (the `app_state` counter in
+  `src/limits.ts`). Past `READ_BUDGET_PER_DAY`, the heavy tools are refused like
+  `GET /transactions`. Every tool has a line in `test/reads.test.ts`, here, and its queries are
+  index-driven.
+- **CPU (10 ms):** a stateless handler (no Durable Objects), small JSON-RPC messages, and capped
+  results. Measured in M2 on the Worker's metrics.
+- **KV (free: 100,000 reads and 1,000 writes a day):** grants, result sets, previews and the undo
+  log, a few writes per question.
+
+### 12.6 Privacy and safety
+
+- What tools return goes to Anthropic (or another client): the fields in §7 only, never Plaid
+  tokens. Chats that use a custom connector follow the Claude account's normal privacy settings,
+  not Personal Finance's no-training rule. ✋ Owner checks "Help improve Claude" is off.
+- Bank text is untrusted (§7). The model can only read and tag; writes are previewed, capped,
+  approved in Claude and undoable.
+- The reachable paths and what a leaked token means are in security-plan §5.
+
+### 12.7 How it relates to A0–A4
+
+- **A1 becomes M1**, built here with the tool layer. Changes: result sets as filters (§12.4);
+  card members, people and left-out items in the filters.
+- **A2's in-app panel** stays the path for forks, later. It calls the same tools. A0's model
+  spike waits until then: the owner's model is Claude.
+- **A3/A4 automations:** not in this plan. Whether Claude's scheduled tasks can use a custom
+  connector is checked in M2, then revisited.
+
+### 12.8 To-do
+
+✋ = needs the owner.
+
+**M0: set-up and decisions** ✋
+- [ ] ✋ Approve this plan, including security-plan §5.
+- [ ] ✋ Create the private repo `rg-code/minty-mcp`. Claude pushes `main` to it and adds the
+      MCP Worker there.
+- [ ] ✋ Cloudflare: a KV namespace, an Access for SaaS (OIDC) application (redirect URL
+      `https://<mcp-host>/callback`, the dashboard's Emails policy), and the MCP Worker's
+      secrets. Claude writes the exact steps into `docs/private/`.
+- [ ] ✋ Workers Builds project for `minty-mcp` on the private repo: production branch only,
+      previews off, a narrow build token.
+- [ ] ✋ Client registration on or off (§12.3).
+- [ ] ✋ Approve the CLAUDE.md rules: the tool layer is the only way an agent reaches data; the
+      MCP Worker lives in the private repo, adds no migrations and has no sync; and the list of
+      paths reachable without Access.
+- [ ] ✋ The demo's "MCP / AI connector, coming soon" button promises forks something they won't
+      get. Relabel it "Ask Minty (coming soon)", or remove it.
+
+**M1: the tool layer, here (public PRs)**
+- [ ] `src/agent/tools/`: input validation, the read tools of §12.4 on local D1, and the
+      tagging function shared with `POST /transactions/tags` (one implementation).
+- [ ] Read budgets for every tool in `test/reads.test.ts`, and the heavy ones in the daily
+      read budget.
+- [ ] Tests: filters, result sets, people, card members, left-out items, tagging caps.
+
+**M2: the MCP Worker, read-only (private repo)**
+- [ ] `createMcpHandler` behind `OAuthResourceServer`, Access for SaaS upstream, email check
+      and `ALLOWED_LOGINS`, the rate limit, and the read tools.
+- [ ] A test that lists every path reachable without a token, and that everything else 404s.
+- [ ] ✋ Connect from Claude Code, then claude.ai and Desktop (and check the phone). §5's
+      example on real data. Check CPU and KV use.
+
+**M3: tagging**
+- [ ] `preview_tagging`, `apply_tagging`, `undo_tagging`, with the KV log.
+- [ ] ✋ A real tagging question: Claude asks before applying, the dashboard shows the tags,
+      and undo restores them.
+
+**M4: more of Minty** (each its own PR)
+- [ ] Bills, ABC credits, BAM balances, EGG, each with a read budget.
