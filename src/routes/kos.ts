@@ -329,3 +329,49 @@ export async function linkTransactions(env: Env, request: Request, id: number): 
   }
   return json({ id, confirmed: confirm.length, dismissed: dismiss.length, removed: remove.length });
 }
+
+// --- the trip journal (docs/trips.md §20) ---------------------------------------------------------
+const MAX_NOTE = 5000, MAX_NOTES = 60;
+/** GET /trips/{id}/journal: the household's notes, by day ('trip' for the journal's own), and when it
+ * was ready and first opened. The rest of a journal is the trip's bookings, drawn by the page. */
+export async function journal(env: Env, id: number): Promise<Response> {
+  const [trip, notes] = await env.DB.batch([
+    env.DB.prepare("SELECT journal_ready_at, journal_seen_at FROM trips WHERE id = ?").bind(id),
+    env.DB.prepare("SELECT day, text FROM trip_journal_notes WHERE trip_id = ?").bind(id),
+  ]);
+  const t = trip.results[0] as { journal_ready_at: string | null; journal_seen_at: string | null } | undefined;
+  if (!t) throw new HttpError(404, "trip not found");
+  return json({ id, ready_at: t.journal_ready_at, seen_at: t.journal_seen_at,
+                notes: Object.fromEntries((notes.results as { day: string; text: string }[]).map((n) => [n.day, n.text])) });
+}
+/** PUT /trips/{id}/journal: {day, text} keeps a note (empty text removes it), or {seen: true}. */
+export async function saveJournal(env: Env, request: Request, id: number): Promise<Response> {
+  if (!(await env.DB.prepare("SELECT 1 FROM trips WHERE id = ?").bind(id).first())) throw new HttpError(404, "trip not found");
+  const b = await body(request);
+  if (b.seen === true) {
+    await env.DB.prepare(`UPDATE trips SET journal_seen_at = coalesce(journal_seen_at, ${NOW}) WHERE id = ?`).bind(id).run();
+    return json({ id, seen: true });
+  }
+  const day = b.day;
+  if (typeof day !== "string" || !(day === "trip" || isDate(day))) throw unprocessable("day must be a date (YYYY-MM-DD) or \"trip\"");
+  if (typeof b.text !== "string") throw unprocessable("text must be a string");
+  const text = b.text.trim();
+  if (text.length > MAX_NOTE) throw unprocessable(`a note is at most ${MAX_NOTE} characters`);
+  if (!text) {
+    await env.DB.prepare("DELETE FROM trip_journal_notes WHERE trip_id = ? AND day = ?").bind(id, day).run();
+    return json({ id, day, removed: true });
+  }
+  const r = await env.DB.prepare(
+    `INSERT INTO trip_journal_notes (trip_id, day, text)
+     SELECT ?1, ?2, ?3 WHERE (SELECT count(*) FROM trip_journal_notes WHERE trip_id = ?1 AND day <> ?2) < ${MAX_NOTES}
+     ON CONFLICT (trip_id, day) DO UPDATE SET text = excluded.text, updated_at = ${NOW}`).bind(id, day, text).run();
+  if (!r.meta.changes) throw unprocessable(`at most ${MAX_NOTES} notes in a journal`);
+  return json({ id, day, saved: true });
+}
+/** The hourly run: a trip that has ended gets its journal marked ready (the day after its last day,
+ * in UTC), so the app can say "Your Tokyo journal is ready". Trips are few: this reads them all. */
+export async function markJournalsReady(env: Env): Promise<number> {
+  const r = await env.DB.prepare(`UPDATE trips SET journal_ready_at = ${NOW} WHERE journal_ready_at IS NULL AND end_date < date('now')`).run();
+  return r.meta.changes ?? 0;
+}
+

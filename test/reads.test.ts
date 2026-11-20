@@ -45,7 +45,7 @@ async function readsOf(path: string, init: RequestInit = {}) {
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["trip_transactions", "trip_items", "trips", "sub_payouts", "sub_requirements", "sub_offers", "investment_txns", "holdings", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["trip_journal_notes", "trip_transactions", "trip_items", "trips", "sub_payouts", "sub_requirements", "sub_offers", "investment_txns", "holdings", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   // The first three are banks ABC's catalog recognises (src/benefits/catalog.ts); the rest are made up.
   const banks = ["American Express", "Citibank Online", "U.S. Bank", "Example Bank A", "Example Bank B", "Example Bank C", "Example Bank D", "Example Bank E"];
   await db.batch(banks.map((b, i) => db.prepare(
@@ -121,7 +121,8 @@ describe("D1 rows read per request (budgets)", () => {
     ["/statements", 100],                // one row per bank
     ["/sub", 350],
     ["/trips", 150],                     // 66 when written. Kos: the trips, their bookings once each, and each trip's links by index
-    ["/trips/1/suggestions", 300],       // about 110 when written: the trip's window by the date index (bounded), and each priced booking by idx_txn_pair (INDEXED BY: the date index read a year)
+    ["/trips/1/suggestions", 300],
+    ["/trips/1/journal", 20],             // the trip by key, and its notes by the primary key's prefix       // about 110 when written: the trip's window by the date index (bounded), and each priced booking by idx_txn_pair (INDEXED BY: the date index read a year)
     ["/transactions?trip_id=1", 350],    // 175 when written: starts from the trip's links (CROSS JOIN), not the date index                       // 218 when written. SUB: 4 offers, each requirement's window by account and date (bounded at both ends), and one payout look-up
     ["/bills", 9000],                    // 28 cards x 12 statements (each window an index range: an OR there read 85,000), plus 40 own bills
     ["/health", 100],

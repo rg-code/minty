@@ -118,7 +118,7 @@ textarea.paste { width: 100%; min-height: 140px; resize: vertical; }
 .trip-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
 .cover .pill.dim { background: rgba(0, 0, 0, .28); color: #fff; } .cover .pill.warn { background: rgba(0, 0, 0, .38); color: #ffd98a; }
-.cover-actions { position: absolute; top: 14px; right: 14px; display: flex; gap: 6px; }
+.cover-actions { position: absolute; top: 14px; right: 14px; display: flex; gap: 6px; z-index: 3; }   /* above the title, which spans the cover */
 .cover-actions .btn { background: rgba(0, 0, 0, .28); border-color: rgba(255, 255, 255, .25); color: #fff; backdrop-filter: blur(6px); }
 
 /* the trip: plan beside the map (desktop), map above the plan (phone) */
@@ -207,3 +207,39 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 .steps .actions { margin-top: 8px; }
 .lock-later { margin-top: 18px; }
 
+
+/* the trip journal (docs/trips.md §20) */
+.j-ready { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; color: var(--ink); text-decoration: none; border-color: var(--accent); }
+.journal { max-width: 860px; margin: 0 auto; }
+.j-hero { position: relative; border-radius: 22px; overflow: hidden; padding: 22px 20px 18px; color: #fff; margin-bottom: 16px;
+          background: radial-gradient(120% 140% at 0% 0%, hsl(var(--h) 85% 62%) 0%, hsl(calc(var(--h) + 40) 70% 42%) 55%, hsl(calc(var(--h) + 80) 60% 22%) 100%); }
+.j-kicker { font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; opacity: .85; }
+.j-hero h1 { margin: 4px 0 2px; font-size: 32px; letter-spacing: -.02em; }
+.j-hero .when { opacity: .9; font-weight: 650; }
+.j-stats { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 16px; }
+.j-stat { display: flex; flex-direction: column; } .j-stat b { font-size: 22px; font-weight: 800; } .j-stat span { font-size: 12px; opacity: .85; }
+.j-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+.j-actions .btn { background: rgba(0, 0, 0, .28); color: #fff; border-color: rgba(255, 255, 255, .35); }
+.j-map { position: relative; height: 380px; border-radius: 18px; overflow: hidden; margin: 14px 0 4px; background: #0b1020; }
+.j-credit { font-size: 11px; margin: 0 0 22px; } .j-credit a { color: inherit; }
+.j-day { margin: 0 0 22px; }
+.j-day .day-head { position: static; }
+.j-lines { margin: 0 0 8px 26px; padding: 0; display: grid; gap: 4px; }
+.j-lines li { line-height: 1.45; }
+.j-free { margin: 0 0 8px 26px; }
+.j-spend { margin: 0 0 8px 26px; font-size: 13px; } .j-spend:empty { display: none; }
+.j-note { position: relative; margin: 0 0 8px 26px; }
+.journal > .j-note { margin-left: 0; }
+.j-text { width: 100%; box-sizing: border-box; resize: none; overflow: hidden; font: inherit; line-height: 1.5; color: var(--ink); background: var(--surface); border: 1px dashed var(--hairline-2); border-radius: 12px; padding: 10px 12px; }
+.j-text:focus { outline: none; border-style: solid; border-color: var(--accent); }
+.j-saved { position: absolute; right: 10px; bottom: -18px; font-size: 11.5px; }
+@media (max-width: 720px) { .j-map { height: 300px; } .j-hero h1 { font-size: 26px; } }
+@media print {
+  header.bar, .fab, .j-actions, .j-saved, .maplibregl-control-container { display: none !important; }
+  body { background: #fff; color: #000; }
+  .journal { max-width: none; }
+  .j-hero { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .j-day { break-inside: avoid; }
+  .j-text { border: 0; padding: 0; background: none; color: #000; }
+  .j-text:placeholder-shown { display: none; }
+}

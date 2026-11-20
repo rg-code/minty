@@ -51,10 +51,10 @@ export function checkItem(b) {
 }
 
 /** The export file: every trip and booking, as JSON. Ids are kept only to tie bookings to trips. */
-export function exportFile(list) {
+export function exportFile(list, notes = []) {
   const trips = list.trips.map(({ items, transactions, spent_cents, ...t }) => t);
   const items = [...list.trips.flatMap((t) => t.items), ...list.unassigned];
-  return { app: "Kos", version: 1, exported_at: new Date().toISOString(), trips, items };
+  return { app: "Kos", version: 1, exported_at: new Date().toISOString(), trips, items, notes };
 }
 /** The trips and bookings in an export file, checked, ready to save (a trip's `items` are its
  * bookings). Throws on a file that isn't Kos's. */
@@ -63,7 +63,10 @@ export function importFile(data) {
   if (data.trips.length > 500 || data.items.length > 5000) throw new Error("That file holds more than Kos takes at once.");
   const trips = data.trips.map((t) => ({ old: t.id, trip: checkTrip(t) }));
   const items = data.items.map((i) => ({ oldTrip: i.trip_id ?? null, item: checkItem({ ...i, trip_id: null }) }));
-  return { trips, items };
+  // the journal's notes (docs/trips.md §20), when the file has them: re-tied to their trips on saving
+  const notes = (Array.isArray(data.notes) ? data.notes : []).filter((n) => n && typeof n.text === "string" && (n.day === "trip" || isDate(n.day)))
+    .slice(0, 5000).map((n) => ({ oldTrip: n.trip_id, day: n.day, text: n.text.slice(0, 5000) }));
+  return notes.length ? { trips, items, notes } : { trips, items };
 }
 
 /** Kos on its own's sample trips (kos/sample.json, written by scripts/build-kos.mjs from the live
@@ -112,6 +115,9 @@ const mintyStore = {
   suggestions: (id) => api("GET", `/trips/${id}/suggestions`),
   transactions: (id) => api("GET", `/transactions?trip_id=${id}&limit=1000`),
   link: (id, b) => api("POST", `/trips/${id}/transactions`, b),
+  journal: (id) => api("GET", `/trips/${id}/journal`),
+  saveJournal: (id, b) => api("PUT", `/trips/${id}/journal`, b),
+  allNotes: async () => [],                              // on a Minty, the journal's notes stay in its database
   tags: () => api("GET", "/tags").catch(() => []),       // the household's tags, to suggest for a trip
   spending: true,
 };
@@ -157,11 +163,13 @@ function fromJet(d) {
 let dbp = null;
 function db() {
   dbp ??= new Promise((ok, fail) => {
-    const req = indexedDB.open("kos", 1);
+    const req = indexedDB.open("kos", 2);                    // v2: the journal's notes (docs/trips.md §20)
     let fresh = false;
-    req.onupgradeneeded = () => {
-      fresh = true;
+    req.onupgradeneeded = (e) => {
       const d = req.result;
+      if (e.oldVersion < 2) d.createObjectStore("notes", { keyPath: ["trip_id", "day"] }).createIndex("trip_id", "trip_id");
+      if (e.oldVersion >= 1) return;
+      fresh = true;
       d.createObjectStore("trips", { keyPath: "id", autoIncrement: true });
       d.createObjectStore("items", { keyPath: "id", autoIncrement: true }).createIndex("trip_id", "trip_id");
     };
@@ -219,10 +227,11 @@ const deviceStore = {
     });
   },
   async deleteTrip(id) {
-    return tx(["trips", "items"], "readwrite", async (x) => {
-      // its bookings stay, with no trip (as on Minty)
-      const items = x.objectStore("items");
+    return tx(["trips", "items", "notes"], "readwrite", async (x) => {
+      // its bookings stay, with no trip (as on Minty); its journal's notes go
+      const items = x.objectStore("items"), notes = x.objectStore("notes");
       for (const i of await req(items.index("trip_id").getAll(id))) await req(items.put({ ...i, trip_id: null }));
+      for (const n of await req(notes.index("trip_id").getAll(id))) await req(notes.delete([n.trip_id, n.day]));
       await req(x.objectStore("trips").delete(id));
       return { id, removed: true };
     });
@@ -237,6 +246,32 @@ const deviceStore = {
       return { id: await req(s.put({ ...(old ?? { created_at: now() }), ...f, updated_at: now(), ...(id ? { id } : {}) })) };
     });
   },
+  /** The trip journal (docs/trips.md §20), answering as Minty's API does: ready once the trip has
+   * ended, first opened as this browser remembers it, and the notes kept in IndexedDB. */
+  async journal(id) {
+    const [t, notes] = await tx(["trips", "notes"], "readonly", async (x) => [await req(x.objectStore("trips").get(id)), await req(x.objectStore("notes").index("trip_id").getAll(id))]);
+    if (!t) throw new Error("trip not found");
+    let seen = [];
+    try { seen = JSON.parse(localStorage.getItem("kos-journal-seen") ?? "[]"); } catch { /* none */ }
+    const today = new Date().toISOString().slice(0, 10);
+    return { id, ready_at: t.end_date < today ? t.end_date : null, seen_at: seen.includes(id) ? "seen" : null,
+             notes: Object.fromEntries(notes.map((n) => [n.day, n.text])) };
+  },
+  async saveJournal(id, b) {
+    if (b.seen === true) {
+      try { const seen = new Set(JSON.parse(localStorage.getItem("kos-journal-seen") ?? "[]")); seen.add(id); localStorage.setItem("kos-journal-seen", JSON.stringify([...seen])); } catch { /* not kept */ }
+      return { id, seen: true };
+    }
+    if (!(b.day === "trip" || isDate(b.day)) || typeof b.text !== "string") throw new Error("a note needs its day and text");
+    const text = b.text.trim().slice(0, 5000);
+    return tx(["trips", "notes"], "readwrite", async (x) => {
+      if (!(await req(x.objectStore("trips").get(id)))) throw new Error("trip not found");
+      if (text) await req(x.objectStore("notes").put({ trip_id: id, day: b.day, text, updated_at: now() }));
+      else await req(x.objectStore("notes").delete([id, b.day]));
+      return { id, day: b.day, saved: true };
+    });
+  },
+  async allNotes() { return tx(["notes"], "readonly", async (x) => req(x.objectStore("notes").getAll())); },
   async deleteItem(id) { return tx(["items"], "readwrite", async (x) => { await req(x.objectStore("items").delete(id)); return { id, removed: true }; }); },
   /** An email file, read in this browser with the same reader Minty runs (src/kos/). Nothing is kept. */
   async readEmail(buf) {
