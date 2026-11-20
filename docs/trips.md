@@ -686,8 +686,10 @@ other rg-code projects and the © line, the same markup (`supportHtml`, `alsoFro
 on its own with no way to read a forwarded booking.
 
 **How it works:**
-- The person forwards a booking to their Gmail with `+kos` before the @. A Gmail filter labels it
-  **Kos** (labelling one by hand counts too).
+- The person forwards a booking to their Gmail with `+kos` before the @ (**`+trip` on a Minty**, beside
+  the planned `+bills` for Bills, owner 2026-11-20). A Gmail filter labels it **Kos** (labelling one by
+  hand counts too, and a filter made for the other tag keeps working). A trip's own `+<code>` (§21)
+  needs no filter.
 - A short Google Apps Script in their Gmail, deployed as a web app, hands Kos the emails with that
   label. `public/kos/gmail.js` writes the script on the set-up page (`#/gmail`).
   - It runs as the person ("Execute as: Me") and is hosted by Google.

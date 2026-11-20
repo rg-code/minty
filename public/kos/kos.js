@@ -759,11 +759,15 @@ function addView(tripId, source) {
     <div id="suggestBox"></div>
     <div id="formBox">${itemForm(draft, tripId)}</div>`;
 }
+/** The address tag Gmail pull's filter uses (docs/trips.md §17.1): "+trip" on a Minty, beside the planned
+ * "+bills" for Bills; "+kos" for Kos on its own. Either way the filter applies the label Kos, so a
+ * filter made for the other one keeps working. Each trip's own +<code> needs no filter. */
+const PLUS = MODE === "minty" ? "trip" : "kos";
 function sourceBox(source) {
   if (source === "gmail") return gmail.config()
     ? `<div class="card"><p class="muted" style="margin-top:0">Bookings you've forwarded to your Gmail's <b>Kos</b> label, read with your Gmail script (<a href="#/gmail">set-up</a>).</p>
         <div class="actions"><button type="button" class="btn primary" data-gmail-pull>Check Gmail</button></div></div>`
-    : `<div class="card"><p style="margin-top:0"><b>Read bookings from your Gmail.</b> Forward confirmations to your Gmail with <b>+kos</b> in the address, and Kos reads them from there, from any device, with no server.</p>
+    : `<div class="card"><p style="margin-top:0"><b>Read bookings from your Gmail.</b> Forward confirmations to your Gmail with <b>+${PLUS}</b> in the address (or a trip's own, +<i>its code</i>), and Kos reads them from there, from any device, with no server.</p>
         <div class="actions"><a class="btn primary" href="#/gmail">Set it up (about 5 minutes)</a></div></div>`;
   if (source === "paste") return `<div class="card"><textarea class="paste" id="pasteText" placeholder="Paste a confirmation: the flight's number, airports, dates and times, or a stay's check-in and check-out"></textarea>
     <div class="actions"><button type="button" class="btn primary" data-read-paste>Find the booking</button></div></div>`;
@@ -932,10 +936,10 @@ function gmailView() {
       <div class="actions"><button type="button" class="btn primary" data-gmail-connect>Connect</button><span class="err" id="connectErr"></span></div><div id="connectResult"></div></div>`;
   return `<div class="section-title"><h2>Read bookings from Gmail</h2><span class="muted">${c ? "connected on this device" : ""}</span></div>
     ${c ? `${phone}<div id="gmailResult"></div>` : ""}
-    <p class="muted">Forward a booking to your Gmail with <b>+kos</b> before the @ (Gmail delivers <b>you+kos@gmail.com</b> to <b>you@gmail.com</b>), and Kos reads it with the same reader Minty uses. A small script in your own Gmail hands Kos the emails with one label; it only reads, and only for this device's key. No server is involved, yours or anyone's.</p>
+    <p class="muted">Forward a booking to your Gmail with <b>+${PLUS}</b> before the @ (Gmail delivers <b>you+${PLUS}@gmail.com</b> to <b>you@gmail.com</b>), and Kos reads it with the same reader Minty uses. Kos works out which trip it belongs to from its dates; to file one in a trip for certain, send it to that trip's own address, <b>you+<i>its code</i>@gmail.com</b> (shown on the trip), which needs no filter. A small script in your own Gmail hands Kos the emails with one label; it only reads, and only for this device's key. No server is involved, yours or anyone's.</p>
     <p class="muted"><b>Recommended:</b> a Gmail account made just for this. Google's read-only permission covers a whole mailbox, so in an account that only gets what you forward, that's all the script can see.</p>
     ${c ? "" : phone}
-    ${step(1, "A label and a filter, in Gmail (on a computer)", `<p>Make a label named <b>Kos</b>. Then Settings → <b>Filters and blocked addresses</b> → Create a new filter: in <b>To</b>, put your address with +kos (e.g. <b>you+kos@gmail.com</b>) → Create filter → <b>Apply the label: Kos</b> → Create filter. Anything you label Kos by hand counts too.</p>`)}
+    ${step(1, "A label and a filter, in Gmail (on a computer)", `<p>Make a label named <b>Kos</b>. Then Settings → <b>Filters and blocked addresses</b> → Create a new filter: in <b>To</b>, put your address with +${PLUS} (e.g. <b>you+${PLUS}@gmail.com</b>) → Create filter → <b>Apply the label: Kos</b> → Create filter. Anything you label Kos by hand counts too${MODE === "minty" ? ", and so does a filter you made earlier for +kos" : ""}.</p>`)}
     ${step(2, "The script", `<p>Signed in to that Gmail, open <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → New project</a>. Replace what's there with this (your key is in it):</p>${copy("gsCode", gmail.script(key), 10)}
       <p>Project Settings (⚙) → tick <b>Show "appsscript.json"</b> → open it in the editor and replace it with:</p>${copy("gsManifest", gmail.MANIFEST, 6)}`)}
     ${step(3, "Deploy it as a web app", `<p><b>Deploy → New deployment</b> → type <b>Web app</b> → Execute as: <b>Me</b>, Who has access: <b>Anyone</b> → Deploy. Allow it: Google says it isn't verified, because it's your own script → Advanced → Go to the project → Allow (it asks only to read Gmail). Copy the <b>Web app URL</b>.</p>
