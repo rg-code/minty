@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SUM_KINDS, cityNames, exportFile, importFile, isWikimediaImage, keepData, shiftSample, store, tripSummary } from "./store.js";
+import { MODE, SUM_KINDS, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, shiftSample, store, tripAddress, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 
@@ -259,7 +259,11 @@ function summaryHtml(t) {
     : (() => { const cur = Object.entries(m.booked); return cur.length
         ? `<div class="sum-amt num">${money(cur[0][1], cur[0][0])}</div><div class="muted sum-sub">booked${cur.length > 1 ? `, plus ${cur.slice(1).map(([c, v]) => money(v, c)).join(", ")}` : ""}, from the bookings' prices</div>`
         : `<div class="sum-amt num muted">—</div><div class="muted sum-sub">add prices to the bookings to see what it costs</div>`; })();
-  return `<div class="summary"><section class="card sum-res"><h3>Reservations</h3><div class="sum-kinds">${kinds}</div></section>
+  const addr = isTripCode(t.code) ? tripAddress(t.code, gmail.gmailAddress()) : "";
+  const mail = addr ? `<div class="sum-mail"><span class="muted">Email bookings to this trip:</span> <code id="tripAddr">${esc(addr)}</code>
+      <button type="button" class="btn small ghost" data-copy-text="${esc(addr)}" data-goatcounter-click="kos-copy-trip-address">Copy</button>
+      ${addr.startsWith("+") ? `<a href="#/gmail">${gmail.config() ? "Add your Gmail address" : "Set up Gmail"}</a>` : ""}</div>` : "";
+  return `<div class="summary"><section class="card sum-res"><h3>Reservations</h3><div class="sum-kinds">${kinds}</div>${mail}</section>
     <section class="card sum-budget"><h3>Budgeting</h3>${budget}</section></div>`;
 }
 
@@ -590,7 +594,7 @@ function sourceBox(source) {
 function suggestionsHtml(list, from) {
   if (!list.length) return `<div class="suggest muted">${from === "gmail" ? "No new bookings in your Kos label." : "Nothing recognisable there: fill the form in yourself."}</div>`;
   return `<div class="suggest"><b>Found ${list.length} booking${list.length === 1 ? "" : "s"}</b> (check each):<div class="list" style="margin-top:8px">${list.map((b, n) => `<div class="row"><span class="grow"><b>${esc(itemTitle(b))}</b>
-      <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at ?? b.start)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
+      <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at ?? b.start)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}${b.tripId && tripById(b.tripId) ? ` · <b>→ ${esc(tripById(b.tripId).name)}</b>` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
       <button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" || from === "gmail" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}</div>`).join("")}</div>
     ${(from === "email" || from === "gmail") && list.length > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${list.length}</button></div>` : ""}</div>`;
 }
@@ -718,7 +722,8 @@ function gmailView() {
       <p>Project Settings (⚙) → tick <b>Show "appsscript.json"</b> → open it in the editor and replace it with:</p>${copy("gsManifest", gmail.MANIFEST, 6)}`)}
     ${step(3, "Deploy it as a web app", `<p><b>Deploy → New deployment</b> → type <b>Web app</b> → Execute as: <b>Me</b>, Who has access: <b>Anyone</b> → Deploy. Allow it: Google says it isn't verified, because it's your own script → Advanced → Go to the project → Allow (it asks only to read Gmail). Copy the <b>Web app URL</b>.</p>
       <p class="muted">"Anyone" lets Kos call it without your Google sign-in; the key in the script is what keeps others out. To stop it, archive the deployment (Deploy → Manage deployments).</p>`)}
-    ${step(4, "Paste the web app's address here", `<form id="gmailForm" class="form"><label class="wide">Web app URL<input name="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c?.url ?? "")}" /></label></form>
+    ${step(4, "Paste the web app's address here", `<form id="gmailForm" class="form"><label class="wide">Web app URL<input name="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c?.url ?? "")}" /></label>
+      <label class="wide">Your Gmail address <small class="muted">(optional: each trip then shows its own address, you+<i>its code</i>@gmail.com; kept on this device)</small><input name="address" type="email" autocomplete="email" placeholder="you@gmail.com" value="${esc(gmail.gmailAddress())}" /></label></form>
       <div class="actions"><button type="button" class="btn primary" data-gmail-save>Save and check</button>${c ? `<button type="button" class="btn danger" data-gmail-forget>Forget on this device</button>` : ""}<span class="err" id="formErr"></span></div>${c ? "" : `<div id="gmailResult"></div>`}`)}`;
 }
 /** The phone link as a QR code (vendored qrcode-generator, drawn as SVG: dark on white, always). */
@@ -740,18 +745,22 @@ let pullSeq = 0;
 async function gmailPull(box, quiet = false) {
   const mine = ++pullSeq;
   if (!quiet) box.innerHTML = `<div class="suggest muted">Asking your Gmail…</div>`;
-  const msgs = await gmail.pull();
+  // the codes of trips still worth mail (coming up, on now, or ended in the last 60 days)
+  const since = addDays(localDay(), -60), byCode = new Map(data.trips.filter((t) => isTripCode(t.code) && t.end_date >= since).map((t) => [t.code, t]));
+  const msgs = await gmail.pull([...byCode.keys()]);
   const got = [], empty = [];
   for (const m of msgs) {
     const r = await store.readEmail(gmail.rawBytes(m.raw).buffer);
     if (!r.bookings.length) empty.push(m);
-    for (const b of r.bookings) got.push({ ...b, sha256: r.sha256, msgId: m.id, quote: m.subject });
+    const trip = m.trip ? byCode.get(m.trip) : null;               // sent to a trip's own address: it goes in that trip
+    for (const b of r.bookings) got.push({ ...b, sha256: r.sha256, msgId: m.id, quote: m.subject, tripId: trip?.id ?? null });
   }
   // the page moved on, a newer check ran, or (quietly) something else is being suggested: leave it
   if (!box.isConnected || mine !== pullSeq || (quiet && (!got.length || (found.length && foundFrom !== "gmail")))) return;
   found = got; foundFrom = "gmail"; pulled = msgs.map((m) => m.id);
   box.innerHTML = (quiet ? `<div class="suggest-head muted">New in your Gmail</div>` : "") + suggestionsHtml(found, "gmail") + (empty.length ? `<div class="suggest muted">${empty.length} email${empty.length === 1 ? "" : "s"} with no booking details Kos can read (${empty.slice(0, 3).map((m) => `“${esc(m.subject)}”`).join(", ")}): paste their text instead.</div>` : "")
-    + (msgs.length ? `<div class="actions"><button type="button" class="btn ghost" data-gmail-skip>Don't show these again</button></div>` : "");
+    + (msgs.length ? `<div class="actions"><button type="button" class="btn ghost" data-gmail-skip>Don't show these again</button></div>` : "")
+    + (gmail.oldScript ? `<div class="suggest muted">Your Gmail script reads only the Kos label. To use each trip's own address, copy the script from <a href="#/gmail">the set-up page</a> into Apps Script again and deploy a new version.</div>` : "");
 }
 
 /** After connecting (the URL, or a phone link): ask the script once, and show what it has. */
@@ -931,13 +940,18 @@ app.addEventListener("click", async (ev) => {
     }
     if (at("[data-gmail-pull]")) { await gmailPull(document.getElementById("suggestBox")); return; }
     if (at("[data-gmail-skip]")) { gmail.markSeen(pulled); document.getElementById("suggestBox").innerHTML = `<div class="suggest muted">Done: those won't show again on this device.</div>`; found = []; return; }
+    if (at("[data-copy-text]")) {
+      const b = at("[data-copy-text]");
+      try { await navigator.clipboard.writeText(b.dataset.copyText); b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy"; }, 1500); } catch { /* the address is shown to copy by hand */ }
+      return;
+    }
     if (at("[data-copy]")) {
       const el = document.getElementById(at("[data-copy]").dataset.copy);
       try { await navigator.clipboard.writeText(el.value); at("[data-copy]").textContent = "Copied"; } catch { el.select(); }
       return;
     }
     if (at("[data-gmail-save]")) {
-      try { gmail.save(app.querySelector("#gmailForm [name=url]").value); } catch (e2) { app.querySelector("#formErr").textContent = e2.message; return; }
+      try { gmail.save(app.querySelector("#gmailForm [name=url]").value); gmail.saveAddress(app.querySelector("#gmailForm [name=address]").value); } catch (e2) { app.querySelector("#formErr").textContent = e2.message; return; }
       app.innerHTML = gmailView();                 // now with "Connect your phone", at the top
       window.scrollTo(0, 0);
       drawQr(document.getElementById("gmailQr"), gmail.phoneLink());
@@ -981,10 +995,12 @@ app.addEventListener("click", async (ev) => {
     if (at("[data-add-now]") || at("[data-add-all]")) {
       const tripId = route().q.get("trip") ? Number(route().q.get("trip")) : null;
       const list = at("[data-add-all]") ? found : [found[Number(at("[data-add-now]").dataset.addNow)]];
-      for (const b of list) await store.saveItem(null, { ...asItem(b, tripId), source: "email", source_sha256: b.sha256 ?? null });
+      // a booking sent to a trip's own address goes in that trip; the rest in the trip being added to, if any
+      for (const b of list) await store.saveItem(null, { ...asItem(b, b.tripId ?? tripId), source: "email", source_sha256: b.sha256 ?? null });
       if (foundFrom === "gmail") gmail.markSeen(list.map((b) => b.msgId).filter(Boolean));
+      const into = [...new Set(list.map((b) => b.tripId ?? tripId))];
       data = null; draft = null; found = [];
-      location.hash = tripId ? `#/trip/${tripId}` : "#/";
+      location.hash = into.length === 1 && into[0] ? `#/trip/${into[0]}` : "#/";
       return;
     }
     if (at("[data-del-item]")) {

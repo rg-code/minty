@@ -157,6 +157,7 @@ there, gitignored here). If that folder exists, read it too.
      spending out of CFA and the dashboard's totals.
    - **Summary strip** (§19): reservations by kind (a tap adds one) and the trip's budgeting; a Lodging tab;
      a city photo from Wikimedia on each trip's cover (§19.1).
+   - **Trip addresses** (§21): each trip has a 10-character code, and mail to you+<code>@gmail.com files into it.
    - **Trip journal** (§20, K1): written from the bookings, with notes, a minimal numbered map and print;
      ready on its own after a trip. **Next: K2**, Immich in the journal (waits on T0).
    - Bookings (and bills) come from a Gmail account made for Minty, by forwarding to

@@ -394,7 +394,8 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   const at = (date: string, time: string, offset: string) => `${date}T${time}${offset}`;
   const trip = (t: Record<string, string | number | null>, tags: string[] = []) => {
     const id = trips.length + 1;
-    trips.push({ id, lat: null, lon: null, notes: null, ...t, tags: JSON.stringify(tags) });
+    const code = Array.from({ length: 10 }, () => "23456789abcdefghjkmnpqrstuvwxyz"[Math.floor(rand() * 31)]).join("");   // its address code (§21)
+    trips.push({ id, lat: null, lon: null, notes: null, ...t, tags: JSON.stringify(tags), code });
     return id;
   };
   const booking = (b: Record<string, string | number | null>) => {

@@ -857,3 +857,30 @@ too busy).
 pins where they were taken, thumbnails through the Worker (only the trip album's), and **Make the
 album now**.
 
+## 21. Each trip's own email address (owner, 2026-11-20)
+
+**Each trip has a code:** 10 characters, lowercase letters and digits without look-alikes (no 0, 1, i,
+l or o): about 50 bits, so codes never clash in practice (a unique index makes sure). It never changes.
+- **On a Minty:** `trips.code` (migration 0028). The trips already there got theirs in the migration;
+  new ones get theirs from the Worker (`newTripCode`), which keeps an imported trip's code when it's free.
+- **On its own:** kept with the trip in IndexedDB; trips made before codes get theirs the first time
+  they're listed. Exports carry the code, and an import keeps it when it's free.
+
+**The address:** the person's Gmail with `+<code>` before the @ (`you+k7f3x9p2ad@gmail.com`), shown under
+the trip's reservations with a Copy button. Kos doesn't know the Gmail address, so the Gmail set-up
+page asks for it (optional, kept on this device); until then the trip shows just `+<code>`.
+
+**Gmail pull files by it:**
+- Each check sends the codes of the trips still worth mail (coming up, on now, or ended in the last 60
+  days) to the person's script, with the address when it's known.
+- The script searches the Kos label **or** those codes (`to:` the exact address too, when known), and
+  says which trip each email was sent to, from its To, Cc, Delivered-To and X-Original-To. A Gmail
+  filter can't match "any +code", so the script does it: no new filter is needed.
+- A booking from an email sent to a trip's address shows "→ the trip", and **Add** puts it in that trip.
+  Mail to `+kos`, or labelled Kos by hand, comes in as before.
+- **Still a tap to add:** a mistyped code, or someone else's mail, never adds anything by itself.
+- **A script made before this** reads only the label; Kos says to copy it again and deploy a new version.
+
+**On a Minty's inbox (T2, to come):** `+mintytrips` and `+mintybills` as planned, and a trip's
+`+<code>` files into that trip.
+

@@ -77,6 +77,35 @@ describe("the page", () => {
   });
 });
 
+describe("trip codes and addresses (docs/trips.md §21)", () => {
+  it("codes are 10 characters without look-alikes; a trip's address is the person's Gmail with +code", async () => {
+    const { newTripCode, isTripCode, tripAddress } = await import("../public/kos/store.js");
+    const many = Array.from({ length: 300 }, () => newTripCode());
+    expect(many.every(isTripCode)).toBe(true);
+    expect(new Set(many).size).toBe(300);
+    expect(many.join("")).not.toMatch(/[01ilo]/);
+    for (const bad of ["k7f3x9p2a", "k7f3x9p2adx", "K7F3X9P2AD", "k7f3x9p2a0", "k7f3x9p2al"]) expect(isTripCode(bad), bad).toBe(false);
+    expect(tripAddress("k7f3x9p2ad", "ourminty@gmail.com")).toBe("ourminty+k7f3x9p2ad@gmail.com");
+    expect(tripAddress("k7f3x9p2ad", "ourminty+kos@gmail.com")).toBe("ourminty+k7f3x9p2ad@gmail.com");   // its own + replaced
+    expect(tripAddress("k7f3x9p2ad", "")).toBe("+k7f3x9p2ad");
+  });
+  it("the Gmail script reads the label or a trip's address, says which trip, and checks the codes it's given", async () => {
+    const g = await import("../public/kos/gmail.js");
+    const code = g.script(g.newKey());
+    expect(code).toContain("const CODE = /^[2-9a-hjkmnp-z]{10}$/;");
+    expect(code).toContain('filter(function (c) { return CODE.test(c); }).slice(0, 40)');
+    expect(code).toContain('sentTo.indexOf("+" + c + "@")');
+    expect(code).toContain("trip: trip");
+    expect(code).not.toMatch(/GmailApp\.(send|move|mark|delete|create)|addLabel|UrlFetchApp|MailApp/);    // still only reads
+  });
+  it("an export keeps each trip's code, and an import brings it back", async () => {
+    const { exportFile, importFile } = await import("../public/kos/store.js");
+    const file = exportFile({ trips: [{ id: 2, name: "Lisbon", start_date: "2027-05-01", end_date: "2027-05-05", travellers: [], code: "k7f3x9p2ad", items: [] }], unassigned: [] });
+    expect(importFile(JSON.parse(JSON.stringify(file))).trips[0].trip.code).toBe("k7f3x9p2ad");
+    expect(importFile({ ...file, trips: [{ ...file.trips[0], code: "bad" }] }).trips[0].trip.code).toBeUndefined();
+  });
+});
+
 describe("Kos was JET (until 2026-11-20)", () => {
   const raw = (p: string) => SELF.fetch(`https://minty.example.workers.dev${p}`, { redirect: "manual" });
   it("the old address redirects, keeping the path (public/_redirects)", async () => {

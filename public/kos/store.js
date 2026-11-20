@@ -19,6 +19,20 @@ const int = (v, max) => (v === null || v === undefined || v === "" || !Number.is
 const code = (v, re) => { const t = text(v, 10)?.toUpperCase() ?? null; return t && re.test(t) ? t : null; };
 
 /** A trip's fields, checked: throws an Error with a plain message when one is wrong. */
+// --- trip codes (docs/trips.md §21): a trip's email address is you+<code>@gmail.com ----------------
+/** 10 characters from 31 (lowercase letters and digits without 0, 1, i, l or o), as the Worker makes them. */
+export const isTripCode = (c) => /^[2-9a-hjkmnp-z]{10}$/.test(String(c ?? ""));
+export function newTripCode() {
+  const chars = "23456789abcdefghjkmnpqrstuvwxyz", out = [];
+  while (out.length < 10) for (const b of crypto.getRandomValues(new Uint8Array(16))) if (b < 248 && out.length < 10) out.push(chars[b % 31]);
+  return out.join("");
+}
+/** A trip's address: the person's Gmail with +code before the @, or just "+code" when it isn't known. */
+export function tripAddress(code, gmailAddress) {
+  const m = /^([^@\s+]+)(?:\+[^@\s]*)?@([^@\s]+)$/.exec(String(gmailAddress ?? "").trim());
+  return m ? `${m[1]}+${code}@${m[2]}` : `+${code}`;
+}
+
 export function checkTrip(b) {
   const t = { name: text(b.name, 100), start_date: b.start_date, end_date: b.end_date, place: text(b.place, 150),
               lat: num(b.lat, 90), lon: num(b.lon, 180), notes: b.notes ? String(b.notes).slice(0, 2000) : null,
@@ -61,7 +75,7 @@ export function exportFile(list, notes = []) {
 export function importFile(data) {
   if (!data || !["Kos", "JET"].includes(data.app) || data.version !== 1 || !Array.isArray(data.trips) || !Array.isArray(data.items)) throw new Error("That isn't a Kos export file.");
   if (data.trips.length > 500 || data.items.length > 5000) throw new Error("That file holds more than Kos takes at once.");
-  const trips = data.trips.map((t) => ({ old: t.id, trip: checkTrip(t) }));
+  const trips = data.trips.map((t) => ({ old: t.id, trip: { ...checkTrip(t), ...(isTripCode(t.code) ? { code: t.code } : {}) } }));   // its code goes with it
   const items = data.items.map((i) => ({ oldTrip: i.trip_id ?? null, item: checkItem({ ...i, trip_id: null }) }));
   // the journal's notes (docs/trips.md §20), when the file has them: re-tied to their trips on saving
   const notes = (Array.isArray(data.notes) ? data.notes : []).filter((n) => n && typeof n.text === "string" && (n.day === "trip" || isDate(n.day)))
@@ -211,7 +225,19 @@ const byStart = (a, b) => ((a.start_at ?? "9999") < (b.start_at ?? "9999") ? -1 
 
 const deviceStore = {
   async list() {
-    const [trips, items] = await tx(["trips", "items"], "readonly", async (t) => [await req(t.objectStore("trips").getAll()), await req(t.objectStore("items").getAll())]);
+    let [trips, items] = await tx(["trips", "items"], "readonly", async (t) => [await req(t.objectStore("trips").getAll()), await req(t.objectStore("items").getAll())]);
+    if (trips.some((t) => !isTripCode(t.code))) {                 // trips made before codes get theirs now, once
+      const used = new Set(trips.map((t) => t.code).filter(isTripCode));
+      trips = await tx(["trips"], "readwrite", async (x) => {
+        const out = [];
+        for (const t of trips) {
+          if (isTripCode(t.code)) { out.push(t); continue; }
+          let code = newTripCode(); while (used.has(code)) code = newTripCode();
+          used.add(code); const row = { ...t, code }; await req(x.objectStore("trips").put(row)); out.push(row);
+        }
+        return out;
+      });
+    }
     items.sort(byStart);
     return {
       trips: trips.sort((a, b) => (a.start_date < b.start_date ? 1 : a.start_date > b.start_date ? -1 : b.id - a.id))
@@ -228,7 +254,13 @@ const deviceStore = {
       const s = x.objectStore("trips");
       const old = id ? await req(s.get(id)) : null;
       if (id && !old) throw new Error("trip not found");
-      const row = { ...(old ?? { created_at: now() }), ...t, updated_at: now(), ...(id ? { id } : {}) };
+      let code = old?.code;
+      if (!isTripCode(code)) {                                     // a new trip: an import's code when it's free, else a new one
+        const used = new Set((await req(s.getAll())).map((x) => x.code));
+        code = isTripCode(b.code) && !used.has(b.code) ? b.code : newTripCode();
+        while (used.has(code)) code = newTripCode();
+      }
+      const row = { ...(old ?? { created_at: now() }), ...t, code, updated_at: now(), ...(id ? { id } : {}) };
       const key = await req(s.put(row));
       if (!id && Array.isArray(b.items)) {
         const items = x.objectStore("items");

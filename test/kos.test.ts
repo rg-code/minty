@@ -235,3 +235,22 @@ describe("the trip journal (docs/trips.md §20)", () => {
   });
 });
 
+describe("trip codes (docs/trips.md §21)", () => {
+  it("each new trip gets its own 10-character code, kept when it's edited; an import's code is kept when it's free", async () => {
+    const a = await trip(), b = await trip({ name: "Kyoto" });
+    const list = (await send("GET", "/trips")).body.trips;
+    const code = (id: number) => list.find((t: any) => t.id === id).code;
+    expect(code(a)).toMatch(/^[2-9a-hjkmnp-z]{10}$/);
+    expect(code(a)).not.toBe(code(b));
+    await send("PUT", `/trips/${a}`, { name: "Tokyo, again", start_date: "2027-03-10", end_date: "2027-03-20", code: "zzzzzzzzzz" });
+    expect((await send("GET", "/trips")).body.trips.find((t: any) => t.id === a).code).toBe(code(a));     // never changes
+    const c = await trip({ name: "Imported", code: "k7f3x9p2ad" });
+    const d = await trip({ name: "Imported again", code: "k7f3x9p2ad" });                                 // taken: a new one
+    const after = (await send("GET", "/trips")).body.trips;
+    expect(after.find((t: any) => t.id === c).code).toBe("k7f3x9p2ad");
+    expect(after.find((t: any) => t.id === d).code).toMatch(/^[2-9a-hjkmnp-z]{10}$/);
+    expect(after.find((t: any) => t.id === d).code).not.toBe("k7f3x9p2ad");
+    await trip({ name: "Bad code", code: "NOT-A-CODE" });                                                  // ignored, a new one made
+  });
+});
+
