@@ -105,6 +105,8 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["POST", /^\/trips\/read-email$/, ({ env, request }) => kos.readEmail(env, request)],
   ["GET", /^\/trips\/(\d+)\/suggestions$/, ({ env, params }) => kos.suggestions(env, Number(params[0]))],
   ["POST", /^\/trips\/(\d+)\/transactions$/, ({ env, request, params }) => kos.linkTransactions(env, request, Number(params[0]))],
+  ["GET", /^\/trips\/(\d+)\/journal$/, ({ env, params }) => kos.journal(env, Number(params[0]))],
+  ["PUT", /^\/trips\/(\d+)\/journal$/, ({ env, request, params }) => kos.saveJournal(env, request, Number(params[0]))],
   // SUB, sign-up bonuses (docs/sub.md)
   ["GET", /^\/sub$/, ({ env, url }) => sub.list(env, url)],
   ["POST", /^\/sub\/offers$/, ({ env, config, request }) => sub.saveOffer(env, config, request)],
@@ -232,6 +234,9 @@ export default {
         return {};
       });
       if (Object.keys(checked).length) console.log("connection check", JSON.stringify(checked));   // item id -> Plaid code or null
+      // Kos: a trip that has ended gets its journal marked ready (docs/trips.md §20).
+      const journals = await kos.markJournalsReady(env).catch((e) => { console.error("journals failed:", e instanceof Error ? e.message : e); return 0; });
+      if (journals) console.log("journals ready", journals);
       // The cron reads what it needs whatever the day's read budget says; it only tidies the counters.
       await pruneReadCounts(env.DB).catch((e) => console.error("pruning read counts failed:", e instanceof Error ? e.message : e));
       await link.pruneLinkSessions(env.DB).catch((e) => console.error("pruning Link sessions failed:", e instanceof Error ? e.message : e));

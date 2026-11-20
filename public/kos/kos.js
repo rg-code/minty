@@ -8,6 +8,7 @@
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
 import { MODE, SUM_KINDS, exportFile, importFile, keepData, shiftSample, store, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
+import { daySpend, lineFor, tripStats } from "./journal.js";
 
 const app = document.getElementById("app");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -99,7 +100,15 @@ function home() {
   if (MODE === "device" && empty) return welcome();                  // a newcomer: how to set Kos up
   // the device lock's offer, once there are trips of the person's own (not only the sample's)
   const own = [...data.trips.map((t) => ["trips", t.id]), ...data.unassigned.map((i) => ["items", i.id])].some(([k, id]) => !(sample?.[k] ?? []).includes(id));
-  return `${sample ? `<div class="card sample-note"><span class="grow"><b>Sample trips.</b> Made up, to show what Kos does: open one, look at its flights and map, change anything. They're only in this browser.
+  // a finished trip's journal, ready and not opened yet (docs/trips.md §20): on Minty the hourly run
+  // marks it; on its own, the trip's end. Only trips that ended in the last 60 days.
+  let seenHere = [];
+  try { seenHere = JSON.parse(localStorage.getItem("kos-journal-seen") ?? "[]"); } catch { /* none */ }
+  const recent = addDays(today, -60);
+  const ready = data.trips.filter((t) => t.end_date < today && t.end_date >= recent
+    && (MODE === "device" ? !seenHere.includes(t.id) : t.journal_ready_at && !t.journal_seen_at)).slice(0, 2);
+  return `${ready.map((t) => `<a class="card j-ready" href="#/trip/${t.id}/journal"><span class="grow"><b>Your ${esc(t.name)} journal is ready.</b> <span class="muted">Its days, its map and room for your notes.</span></span><span class="btn small primary">Open</span></a>`).join("")}
+    ${sample ? `<div class="card sample-note"><span class="grow"><b>Sample trips.</b> Made up, to show what Kos does: open one, look at its flights and map, change anything. They're only in this browser.
       Start your own with <a href="#/new">New trip</a> or <a href="#/add">Add a booking</a>.</span><button type="button" class="btn small" data-sample-remove>Remove them</button></div>` : ""}
     ${flights.length ? `<div class="section-title"><h2>Next flight</h2><span class="muted">${flights.length > 1 ? `${flights.length - 1} more after it` : ""}</span></div>
       <div class="hero">${flightCard(flights[0], { countdown: true })}</div>` : ""}
@@ -214,7 +223,7 @@ function tripView(t, tab) {
     ${p.after.length ? dayHtml({ label: "After the trip", entries: p.after, color: "#8c96ad" }) : ""}
     ${p.unscheduled.length ? dayHtml({ label: "No date yet", entries: p.unscheduled, color: "#8c96ad" }) : ""}`;
   return `<section class="trip-head"><div class="cover" style="--h:${hue(t.name)}">
-      <div class="cover-actions"><a class="btn small" href="#/trip/${t.id}/edit">Edit</a><a class="btn small" href="#/add?trip=${t.id}">Add booking</a></div>
+      <div class="cover-actions"><a class="btn small" href="#/trip/${t.id}/journal">Journal</a><a class="btn small" href="#/trip/${t.id}/edit">Edit</a><a class="btn small" href="#/add?trip=${t.id}">Add booking</a></div>
       <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div>
       ${t.travellers.length ? `<div class="avatars">${t.travellers.map((k) => `<span title="${esc(label(k))}">${esc(label(k).slice(0, 1).toUpperCase())}</span>`).join("")}</div>` : ""}
       ${tagChips(tripTags(t))}</div></section>
@@ -292,6 +301,79 @@ async function spending(t) {
       ${out.length ? `<div class="section-title"><h2>In this trip</h2></div><div class="list">${rows.map((r) => `<div class="row"><span class="grow"><b>${esc(r.merchant_name || r.name)}</b><span class="muted">${esc(fmtDay(r.date))} · ${esc(CAT[r.category] ?? "")}</span></span><span class="amt">${money(Math.round(r.amount * 100), r.currency)}</span><button type="button" class="btn small ghost" data-unlink="${r.id}">Remove</button></div>`).join("")}</div>` : ""}`;
   } catch (e) { box.innerHTML = `<p class="err">Couldn't load the spending: ${esc(e.message)}</p>`; }
 }
+
+// --- the trip journal (docs/trips.md §20): written from the bookings, with the household's notes --
+function journalView(t) {
+  const st = tripStats(t, airports), p = plan(t);
+  const stat = (n, l) => `<div class="j-stat"><b class="num">${n}</b><span>${l}</span></div>`;
+  const note = (day, hint) => `<div class="j-note"><textarea class="j-text" data-note="${day}" rows="2" maxlength="5000" placeholder="${esc(hint)}"></textarea><span class="j-saved muted" data-saved="${day}"></span></div>`;
+  const day = (title, date, entries, color) => {
+    const lines = entries.map((e) => `<li>${esc(lineFor(e, airports))}${e.at ? `<span class="muted"> · ${esc(e.at)}</span>` : ""}</li>`).join("");
+    return `<section class="j-day" style="--day:${color}"><div class="day-head"><span class="day-dot"></span><h3>${esc(title)}</h3>${date ? `<span class="muted">${esc(fmtDay(date))}</span>` : ""}</div>
+      ${lines ? `<ul class="j-lines">${lines}</ul>` : `<p class="muted j-free">Nothing booked: a free day.</p>`}
+      ${date ? `<div class="j-spend muted" data-spend="${date}"></div>${note(date, "What happened today?")}` : ""}</section>`;
+  };
+  return `<article class="journal">
+    <header class="j-hero" style="--h:${hue(t.name)}"><div class="j-kicker">Trip journal</div><h1>${esc(t.name)}</h1>
+      <div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div>
+      <div class="j-stats">${stat(st.days, st.days === 1 ? "day" : "days")}${st.flights ? stat(st.flights, st.flights === 1 ? "flight" : "flights") : ""}${st.km ? stat(st.km.toLocaleString(), "km flown") : ""}${st.countries > 1 ? stat(st.countries, "countries") : ""}${st.places ? stat(st.places, st.places === 1 ? "place" : "places") : ""}<span id="jSpent"></span></div>
+      <div class="j-actions"><a class="btn small" href="#/trip/${t.id}">Back to the trip</a><button type="button" class="btn small" data-print>Print or save as PDF</button></div></header>
+    ${note("trip", "How was it? A few lines to remember it by.")}
+    <div class="j-map"><div id="jmap" class="map"></div><div class="map-note" id="jmapNote" hidden></div></div>
+    <p class="j-credit muted">Satellite: <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2024). Names: OpenFreeMap, OpenMapTiles, OpenStreetMap.</p>
+    ${p.before.length ? day("Getting there", null, p.before, "#8c96ad") : ""}
+    ${p.days.map((d, n) => day(`Day ${n + 1}`, d.date, d.entries, d.color)).join("")}
+    ${p.after.length ? day("Getting home", null, p.after, "#8c96ad") : ""}
+    ${p.unscheduled.length ? day("Also booked", null, p.unscheduled, "#8c96ad") : ""}
+  </article>`;
+}
+const grow = (el) => { el.style.height = "auto"; el.style.height = `${el.scrollHeight + 2}px`; };
+async function journalLoad(t) {
+  // the notes, and the journal marked opened
+  try {
+    const j = await store.journal(t.id);
+    for (const el of app.querySelectorAll("[data-note]")) { el.value = j.notes[el.dataset.note] ?? ""; grow(el); }
+    if (!j.seen_at) { store.saveJournal(t.id, { seen: true }).catch(() => {}); t.journal_seen_at = "now"; }
+  } catch (e) { app.querySelector(".j-hero").insertAdjacentHTML("beforeend", `<p class="err">Couldn't load the notes: ${esc(e.message)}</p>`); }
+  // on a Minty, what each day cost
+  if (store.spending && t.transactions) {
+    store.transactions(t.id).then((rows) => {
+      const total = rows.filter((r) => r.amount > 0).reduce((a, r) => a + Math.round(r.amount * 100), 0);
+      const off = tripTags(t).filter(leftOutTag);
+      document.getElementById("jSpent").outerHTML = `<div class="j-stat"><b class="num">${money(total)}</b><span>spent${off.length ? ", left out of CFA" : ""}</span></div>`;
+      for (const el of app.querySelectorAll("[data-spend]")) {
+        const d = daySpend(rows, el.dataset.spend);
+        if (d.cents) el.textContent = `Spent ${money(d.cents)}${d.top.length ? `: ${d.top.join(", ")}` : ""}`;
+      }
+    }).catch(() => {});
+  }
+  // the map: satellite, the flights, and each day's stops joined in its colour
+  const el = document.getElementById("jmap");
+  map = await createMap(el, { dark: true, satellite: true });
+  if (!document.body.contains(el)) { map?.remove(); map = null; return; }
+  if (!map) { const n = document.getElementById("jmapNote"); n.hidden = false; n.textContent = "The map couldn't load here (it needs WebGL, and the satellite and map tiles)."; return; }
+  const d = mapData(t), paths = [];
+  for (const dd of plan(t).days) {
+    const pts = dd.entries.filter((e) => e.item.kind !== "flight" && !e.repeat && Number.isFinite(e.item.lat) && Number.isFinite(e.item.lon)).map((e) => [e.item.lon, e.item.lat]);
+    if (pts.length > 1) paths.push({ coords: pts, color: dd.color });
+  }
+  drawTrip(map, { ...d, paths }, null, d.pins.length ? "pins" : "all", true);    // the places, like the itinerary; flights only when there are none
+  el.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");   // the credits fold behind ⓘ; EOX's is also under the map
+  mapKey = `journal:${t.id}`;
+}
+let noteTimers = {};
+app.addEventListener("input", (ev) => {
+  const el = ev.target.closest?.("[data-note]");
+  if (!el) return;
+  grow(el);
+  const tid = Number(route().parts[1]), day = el.dataset.note, saved = app.querySelector(`[data-saved="${day}"]`);
+  clearTimeout(noteTimers[day]);
+  if (saved) saved.textContent = "";
+  noteTimers[day] = setTimeout(async () => {
+    try { await store.saveJournal(tid, { day, text: el.value }); if (saved) saved.textContent = "Saved"; }
+    catch (e) { if (saved) saved.textContent = `Not saved: ${e.message}`; }
+  }, 700);
+});
 
 // --- forms --------------------------------------------------------------------------------------
 /** The trip form's tag suggestions: the household's tags (left-out ones first), a tap adds one. */
@@ -460,6 +542,7 @@ async function importData(obj) {
   const ids = new Map(), items = [];
   for (const { old, trip } of parsed.trips) ids.set(old, (await store.saveTrip(null, trip)).id);
   for (const { oldTrip, item } of parsed.items) items.push((await store.saveItem(null, { ...item, trip_id: oldTrip !== null && ids.has(oldTrip) ? ids.get(oldTrip) : null })).id);
+  for (const n of parsed.notes ?? []) if (ids.has(n.oldTrip)) await store.saveJournal(ids.get(n.oldTrip), { day: n.day, text: n.text }).catch(() => {});   // the journal's notes
   return { trips: [...ids.values()], items };
 }
 
@@ -618,6 +701,7 @@ async function render() {
     if (!t) { app.innerHTML = `<p class="pad muted center">That trip isn't here any more. <a href="#/">All trips</a></p>`; return; }
     if (parts[2] === "edit") { app.innerHTML = tripForm(t); tagPicker(); return; }
     if (map) { map.remove(); map = null; mapKey = ""; }
+    if (parts[2] === "journal") { app.innerHTML = journalView(t); window.scrollTo(0, 0); journalLoad(t); return; }
     app.innerHTML = tripView(t, parts[2] ?? "");
     showMap(t, parts[2] ?? "");
     if (parts[2] === "spending") spending(t);
@@ -698,6 +782,7 @@ app.addEventListener("click", async (ev) => {
     }
     if (at("[data-lock-off]")) { window.MintyLock.notHere(); lockOffer(); return; }
     if (at("[data-install]")) { if (installPrompt) { installPrompt.prompt(); installPrompt = null; document.getElementById("installRow").hidden = true; } return; }
+    if (at("[data-print]")) { window.print(); return; }
     if (at("[data-sample]")) {
       at("[data-sample]").disabled = true;
       try { await loadSample(); data = null; await render(); } catch (e2) { at("[data-sample]").disabled = false; document.getElementById("sampleErr").textContent = e2.message; }
@@ -737,7 +822,7 @@ app.addEventListener("click", async (ev) => {
     if (at("[data-share-link]")) { try { await navigator.share({ title: "Kos: connect your phone", url: gmail.phoneLink() }); } catch { /* cancelled */ } return; }
     if (at("[data-gmail-forget]")) { if (confirm("Forget the Gmail script on this device? (Archive its deployment in Apps Script to stop it entirely.)")) { gmail.forget(); render(); } return; }
     if (at("[data-export]")) {
-      const file = new Blob([JSON.stringify(exportFile(data), null, 1)], { type: "application/json" });
+      const file = new Blob([JSON.stringify(exportFile(data, await store.allNotes().catch(() => [])), null, 1)], { type: "application/json" });
       const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(file), download: `kos-trips-${localDay()}.json` });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
       return;
@@ -857,7 +942,7 @@ document.getElementById("themeBtn").addEventListener("click", () => {
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem("kos-theme", next); } catch { /* not remembered */ }
   const { parts } = route();
-  if (parts[0] === "trip" && parts[1] && parts[2] !== "edit") { mapKey = ""; showMap(tripById(Number(parts[1])), parts[2] ?? ""); }
+  if (parts[0] === "trip" && parts[1] && parts[2] !== "edit" && parts[2] !== "journal") { mapKey = ""; showMap(tripById(Number(parts[1])), parts[2] ?? ""); }
 });
 if (MODE === "device") {
   document.getElementById("mintyLink").hidden = true;

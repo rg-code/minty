@@ -179,7 +179,7 @@ Design history and decisions: `docs/serverless-plan.md`.
   and D1. Sync never writes `trips`, `trip_items` or `trip_transactions`. `POST /trips/read-email`
   is the one route past the 16 KiB body cap (2 MB), reads an `.eml` with `src/kos/` and stores
   nothing. The map is vendored MapLibre (CSP build) on OpenFreeMap's tiles: only `/kos/*` and
-  `/vendor/maplibre/*` may reach `tiles.openfreemap.org`. Its look follows Flighty (flights, theme,
+  `/vendor/maplibre/*` may reach `tiles.openfreemap.org` and `tiles.maps.eox.at` (the journal's satellite, §20). Its look follows Flighty (flights, theme,
   map) and Wanderlog (trips). Gmail pull (§17.1, `public/kos/gmail.js`) asks the person's own
   Apps Script (`gmail.readonly`, a key made on the device, shared with a phone by a `#` link and a
   QR code from vendored `public/vendor/qrcode/`) from the browser; only `/kos/*` may reach
