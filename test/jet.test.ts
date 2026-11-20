@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { call, getJson } from "./helpers";
+import { refreshTotals } from "../src/audit/totals";
 
 // JET, trips (docs/trips.md): trips, bookings, reading an email file, and a trip's transactions.
 const db = env.DB;
@@ -120,5 +121,80 @@ describe("a trip's transactions", () => {
     expect((await send("GET", `/transactions?trip_id=${id}`)).body).toHaveLength(2);
     expect((await send("POST", `/trips/${id}/transactions`, { confirm: ["x"] })).status).toBe(422);
     expect((await send("GET", "/transactions?trip_id=0")).status).toBe(422);
+  });
+});
+
+describe("trip tags (docs/trips.md §18)", () => {
+  const tagsOf = async (plaid: string) => (await rows(
+    "SELECT tt.tag, tt.trip_id FROM transaction_tags tt JOIN transactions t ON t.id = tt.transaction_id WHERE t.plaid_txn_id = ? ORDER BY tt.position", plaid))
+    .map((r: any) => `${r.tag}${r.trip_id === null ? "" : "@trip"}`);
+  const ids = async () => Object.fromEntries((await rows("SELECT id, plaid_txn_id FROM transactions")).map((r: any) => [r.plaid_txn_id, r.id]));
+  const dirty = async () => (await rows("SELECT value FROM app_state WHERE key = 'audit_dirty'"))[0]?.value ?? null;
+  beforeEach(async () => { await db.batch([db.prepare("DELETE FROM analytics_exclusions"), db.prepare("DELETE FROM app_state WHERE key = 'audit_dirty'")]); });
+
+  it("a trip's tags go onto its confirmed transactions, and onto new ones as they're added; a tag already there stays the person's", async () => {
+    const id = await trip(), x = await ids();
+    await send("PUT", `/transactions/${x.sushi}/tags`, { tags: ["Reimbursed"] });            // tagged by hand first
+    await send("POST", `/trips/${id}/transactions`, { confirm: [x.sushi, x.air], dismiss: [x.home] });
+    expect((await send("PUT", `/trips/${id}`, { tags: ["reimbursed", "work", "Work"] })).status).toBe(200);
+    expect(await tagsOf("sushi")).toEqual(["Reimbursed", "work@trip"]);
+    expect(await tagsOf("air")).toEqual(["reimbursed@trip", "work@trip"]);
+    expect(await tagsOf("home")).toEqual([]);                                                  // dismissed: not in the trip
+    await send("POST", `/trips/${id}/transactions`, { confirm: [x.suica] });
+    expect(await tagsOf("suica")).toEqual(["reimbursed@trip", "work@trip"]);
+    const g = (await send("GET", "/trips")).body;
+    expect(g.trips[0].tags).toEqual(["reimbursed", "work"]);
+    expect((await send("GET", `/transactions?trip_id=${id}`)).body.find((t: any) => t.plaid_txn_id === "air").tags).toEqual(["reimbursed", "work"]);
+  });
+
+  it("taking a tag off the trip, or a transaction out of it, removes only what the trip added; deleting the trip keeps its tags", async () => {
+    const id = await trip(), x = await ids();
+    await send("PUT", `/transactions/${x.sushi}/tags`, { tags: ["reimbursed"] });
+    await send("POST", `/trips/${id}/transactions`, { confirm: [x.sushi, x.air, x.suica] });
+    await send("PUT", `/trips/${id}`, { tags: ["reimbursed", "work"] });
+    await send("PUT", `/trips/${id}`, { tags: ["work"] });
+    expect(await tagsOf("sushi")).toEqual(["reimbursed", "work@trip"]);                        // the person's stays
+    expect(await tagsOf("air")).toEqual(["work@trip"]);
+    await send("POST", `/trips/${id}/transactions`, { remove: [x.air], dismiss: [x.suica] });
+    expect(await tagsOf("air")).toEqual([]);
+    expect(await tagsOf("suica")).toEqual([]);
+    // editing a row's tags on the dashboard keeps the trip's mark on the tags it keeps
+    await send("PUT", `/transactions/${x.sushi}/tags`, { tags: ["work", "reimbursed", "dinner"] });
+    expect(await tagsOf("sushi")).toEqual(["work@trip", "reimbursed", "dinner"]);
+    await send("DELETE", `/trips/${id}`);
+    expect(await tagsOf("sushi")).toEqual(["work", "reimbursed", "dinner"]);                   // an ordinary tag now
+  });
+
+  it("checks the tags; a left-out tag makes CFA rebuild, from a trip or the dashboard; GET /trips says which tags are left out", async () => {
+    const id = await trip(), x = await ids();
+    expect((await send("PUT", `/trips/${id}`, { tags: "reimbursed" })).status).toBe(422);
+    expect((await send("PUT", `/trips/${id}`, { tags: Array.from({ length: 11 }, (_, i) => `t${i}`) })).status).toBe(422);
+    expect((await send("PUT", `/trips/${id}`, { tags: ["x".repeat(65)] })).status).toBe(422);
+    await db.prepare("INSERT INTO analytics_exclusions (kind, value) VALUES ('tag', 'Reimbursed')").run();
+    await send("POST", `/trips/${id}/transactions`, { confirm: [x.sushi] });
+    await send("PUT", `/trips/${id}`, { tags: ["work"] });
+    expect(await dirty()).toBe(null);                                                          // not a left-out tag
+    await send("PUT", `/trips/${id}`, { tags: ["work", "reimbursed"] });
+    expect(await dirty()).toBe("1");
+    expect((await send("GET", "/trips")).body.left_out_tags).toEqual(["Reimbursed"]);
+    await db.prepare("DELETE FROM app_state WHERE key = 'audit_dirty'").run();
+    await send("POST", "/transactions/tags", { ids: [x.shop], add: ["reimbursed"] });          // the dashboard's own tagging too
+    expect(await dirty()).toBe("1");
+  });
+
+  it("end to end: a trip tagged with a left-out tag drops out of CFA's monthly totals at the next run", async () => {
+    const id = await trip(), x = await ids();
+    await db.prepare("INSERT INTO analytics_exclusions (kind, value) VALUES ('tag', 'reimbursed')").run();
+    await send("POST", `/trips/${id}/transactions`, { confirm: [x.sushi, x.suica] });
+    const march = async () => (await rows("SELECT sum(amount_cents) AS c FROM monthly_totals WHERE month = '2027-03' AND bucket = 'spend'"))[0].c;
+    await refreshTotals(env as any);
+    const before = await march();
+    expect(before).toBe(8500 + 3000 + 4200 + 2000 + 9000);
+    await send("PUT", `/trips/${id}`, { tags: ["Reimbursed"] });
+    await refreshTotals(env as any);
+    expect(await march()).toBe(before - 8500 - 3000);                                         // the trip's two are left out
+    await send("PUT", `/trips/${id}`, { tags: [] });
+    await refreshTotals(env as any);
+    expect(await march()).toBe(before);                                                        // and back in
   });
 });

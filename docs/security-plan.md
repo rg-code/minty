@@ -268,7 +268,7 @@ could be read or changed. Delete the token in Zero Trust and make a new one.
 **Rule update (with T2):** CLAUDE.md's Auth rule gains this one exception, worded as above.
 
 
-## 7. JET's Gmail pull: the person's own script, asked from the browser (for the owner's approval)
+## 7. JET's Gmail pull: the person's own script, asked from the browser (approved by the owner, 2026-11-19)
 
 The design is [trips.md](trips.md) §17.1. Minty's Worker, Access and D1 are unchanged. What's new:
 - **a web app in the person's Gmail** that reads one label;

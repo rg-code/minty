@@ -4,6 +4,8 @@ import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { ACCOUNT_NAME } from "../accounts";
 import { PROGRAM_BY_ID } from "../points/programs";
 import { readMessage, viewOf } from "../jet/mime";
+import { MAX_TAGS_PER_TXN, MAX_TAG_LENGTH, normaliseTags } from "./data";
+import { markIfLeftOutTags } from "../audit/totals";
 import { reservations } from "../jet/reservations";
 
 /** JET, trips (docs/trips.md): trips, their bookings, and the transactions in them. The household
@@ -50,7 +52,7 @@ const codeF = (k: string, re: RegExp, what: string) => (v: unknown) => {
 const oneOf = <T extends string>(k: string, list: readonly T[]) => (v: unknown) => { if (typeof v !== "string" || !list.includes(v as T)) throw unprocessable(`${k} must be one of ${list.join(", ")}`); return v as T; };
 
 // --- trips --------------------------------------------------------------------------------------
-interface TripRow { id: number; name: string; start_date: string; end_date: string; place: string | null; lat: number | null; lon: number | null; travellers: string; notes: string | null }
+interface TripRow { id: number; name: string; start_date: string; end_date: string; place: string | null; lat: number | null; lon: number | null; travellers: string; notes: string | null; tags: string }
 
 function tripFields(config: Config, b: Body, old: TripRow | null) {
   const f = {
@@ -62,6 +64,7 @@ function tripFields(config: Config, b: Body, old: TripRow | null) {
     lon: field(b, "lon", old?.lon, coordF("lon", 180)),
     notes: field(b, "notes", old?.notes, text(2000, "notes")),
     travellers: old?.travellers ?? "[]",
+    tags: old?.tags ?? "[]",
   };
   if (!f.name) throw unprocessable("give the trip a name");
   if (!f.start_date || !f.end_date) throw unprocessable("a trip needs its first and last day");
@@ -71,9 +74,33 @@ function tripFields(config: Config, b: Body, old: TripRow | null) {
     if (!Array.isArray(t) || t.some((k) => typeof k !== "string" || !config.users.has(k))) throw unprocessable("travellers must be the household's people (MINTY_USERS)");
     f.travellers = JSON.stringify([...new Set(t as string[])]);
   }
+  if ("tags" in b) {
+    const t = b.tags ?? [];
+    if (!Array.isArray(t) || t.some((x) => typeof x !== "string")) throw unprocessable("tags must be a list of tags");
+    const clean = normaliseTags(t as string[]);
+    if (clean.length > MAX_TRIP_TAGS) throw unprocessable(`at most ${MAX_TRIP_TAGS} tags on a trip`);
+    if (clean.some((x) => x.length > MAX_TAG_LENGTH)) throw unprocessable(`tags must be at most ${MAX_TAG_LENGTH} characters`);
+    f.tags = JSON.stringify(clean);
+  }
   return f;
 }
-const TRIP_COLS = ["name", "start_date", "end_date", "place", "lat", "lon", "travellers", "notes"] as const;
+const TRIP_COLS = ["name", "start_date", "end_date", "place", "lat", "lon", "travellers", "notes", "tags"] as const;
+const MAX_TRIP_TAGS = 10;
+
+// --- trip tags (docs/trips.md §18) --------------------------------------------------------------
+// A trip's tags are written onto its confirmed transactions as ordinary tags, marked with the trip
+// (transaction_tags.trip_id), so the dashboard's filter and CFA's "Left out of the numbers" follow
+// them. A tag a person already put on a transaction stays theirs (ON CONFLICT DO NOTHING), and
+// taking a tag off the trip, or a transaction out of it, removes only the rows the trip added.
+/** Add one of a trip's tags to its confirmed transactions (or only to `ids`), after their own tags. */
+const addTripTag = (env: Env, tripId: number, tag: string, ids?: number[]) => env.DB.prepare(
+  `INSERT INTO transaction_tags (transaction_id, tag, position, trip_id)
+   SELECT tl.transaction_id, ?2, coalesce((SELECT max(position) + 1 FROM transaction_tags x WHERE x.transaction_id = tl.transaction_id), 0), ?1
+   FROM trip_transactions tl
+   WHERE tl.trip_id = ?1 AND tl.state = 'confirmed'${ids ? " AND tl.transaction_id IN (SELECT value FROM json_each(?3))" : " AND ?3 IS NULL"}
+     AND (SELECT count(*) FROM transaction_tags x WHERE x.transaction_id = tl.transaction_id) < ${MAX_TAGS_PER_TXN}
+   ON CONFLICT (transaction_id, tag) DO NOTHING`).bind(tripId, tag, ids ? JSON.stringify(ids) : null);
+const changes = (rs: D1Result[]) => rs.reduce((n, r) => n + (r.meta.changes ?? 0), 0);
 
 export async function saveTrip(env: Env, config: Config, request: Request, id?: number): Promise<Response> {
   const old = id === undefined ? null : await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(id).first<TripRow>();
@@ -88,7 +115,17 @@ export async function saveTrip(env: Env, config: Config, request: Request, id?: 
     if (Array.isArray(b.items) && b.items.length) await moveItems(env, b.items, tripId);
     return json({ id: tripId }, 201);
   }
-  await env.DB.prepare(`UPDATE trips SET ${TRIP_COLS.map((c) => `${c} = ?`).join(", ")}, updated_at = ${NOW} WHERE id = ?`).bind(...v, id).run();
+  // its tags: the ones added go onto its transactions, the ones taken off come off what the trip added
+  const low = (j: string) => (JSON.parse(j) as string[]);
+  const was = low(old.tags), now = low(f.tags);
+  const added = now.filter((t) => !was.some((w) => w.toLowerCase() === t.toLowerCase()));
+  const removed = was.filter((t) => !now.some((n) => n.toLowerCase() === t.toLowerCase()));
+  const rs = await env.DB.batch([
+    env.DB.prepare(`UPDATE trips SET ${TRIP_COLS.map((c) => `${c} = ?`).join(", ")}, updated_at = ${NOW} WHERE id = ?`).bind(...v, id),
+    ...(removed.length ? [env.DB.prepare("DELETE FROM transaction_tags WHERE trip_id = ? AND tag IN (SELECT value FROM json_each(?))").bind(id, JSON.stringify(removed))] : []),
+    ...added.map((t) => addTripTag(env, id!, t)),
+  ]);
+  if (changes(rs.slice(1))) await markIfLeftOutTags(env, [...added, ...removed]);
   return json({ id });
 }
 
@@ -98,27 +135,33 @@ async function moveItems(env: Env, ids: unknown[], tripId: number | null) {
 }
 
 export async function deleteTrip(env: Env, id: number): Promise<Response> {
-  // its bookings stay, with no trip (ON DELETE SET NULL); its links to transactions go (CASCADE)
-  const r = await env.DB.prepare("DELETE FROM trips WHERE id = ? RETURNING id").bind(id).first();
-  if (!r) throw new HttpError(404, "trip not found");
+  // its bookings stay, with no trip (ON DELETE SET NULL); its links to transactions go (CASCADE);
+  // the tags it put on them stay, as ordinary tags (a reimbursed trip's spending stays left out)
+  const [, r] = await env.DB.batch([
+    env.DB.prepare("UPDATE transaction_tags SET trip_id = NULL WHERE trip_id = ?").bind(id),
+    env.DB.prepare("DELETE FROM trips WHERE id = ? RETURNING id").bind(id),
+  ]);
+  if (!r.results.length) throw new HttpError(404, "trip not found");
   return json({ id, removed: true });
 }
 
 /** GET /trips: every trip with its bookings (and the count of its transactions), and the bookings
  * not in a trip yet. Reads the trips and bookings once each, and the links by index. */
 export async function listTrips(env: Env): Promise<Response> {
-  const [trips, items, counts] = await env.DB.batch([
+  const [trips, items, counts, off] = await env.DB.batch([
     env.DB.prepare("SELECT * FROM trips ORDER BY start_date DESC, id DESC"),
     env.DB.prepare("SELECT * FROM trip_items ORDER BY coalesce(start_at, '9999'), id"),
     env.DB.prepare(`SELECT trip_id, count(*) AS n, sum(t.amount_cents) AS cents FROM trip_transactions tl CROSS JOIN transactions t ON t.id = tl.transaction_id
                     WHERE tl.state = 'confirmed' GROUP BY trip_id`),
+    env.DB.prepare("SELECT value FROM analytics_exclusions WHERE kind = 'tag'"),     // CFA's left-out tags, to say so on a trip
   ]);
   const I = items.results as { trip_id: number | null }[];
   const C = new Map((counts.results as { trip_id: number; n: number; cents: number }[]).map((c) => [c.trip_id, c]));
   return json({
-    trips: (trips.results as TripRow[]).map((t) => ({ ...t, travellers: JSON.parse(t.travellers), items: I.filter((i) => i.trip_id === t.id),
+    trips: (trips.results as TripRow[]).map((t) => ({ ...t, travellers: JSON.parse(t.travellers), tags: JSON.parse(t.tags), items: I.filter((i) => i.trip_id === t.id),
       transactions: C.get(t.id)?.n ?? 0, spent_cents: C.get(t.id)?.cents ?? 0 })),
     unassigned: I.filter((i) => i.trip_id === null),
+    left_out_tags: (off.results as { value: string }[]).map((r) => r.value),
   });
 }
 
@@ -253,7 +296,9 @@ export async function suggestions(env: Env, id: number): Promise<Response> {
 /** POST /trips/{id}/transactions {confirm: [ids], dismiss: [ids], remove: [ids], item_id?}: link,
  * dismiss (not suggested again), or unlink transactions. */
 export async function linkTransactions(env: Env, request: Request, id: number): Promise<Response> {
-  if (!(await env.DB.prepare("SELECT 1 FROM trips WHERE id = ?").bind(id).first())) throw new HttpError(404, "trip not found");
+  const trip = await env.DB.prepare("SELECT tags FROM trips WHERE id = ?").bind(id).first<{ tags: string }>();
+  if (!trip) throw new HttpError(404, "trip not found");
+  const tags = JSON.parse(trip.tags) as string[];
   const b = await body(request);
   const list = (k: string) => {
     const v = b[k] ?? [];
@@ -267,11 +312,20 @@ export async function linkTransactions(env: Env, request: Request, id: number): 
      SELECT ?1, t.id, ?2, ?3 FROM transactions t WHERE t.id IN (SELECT value FROM json_each(?4))
      ON CONFLICT (trip_id, transaction_id) DO UPDATE SET state = excluded.state, item_id = coalesce(excluded.item_id, trip_transactions.item_id)`)
     .bind(id, state, itemId, JSON.stringify(ids));
+  const out = [...dismiss, ...remove];
   const stmts = [
     ...(confirm.length ? [set(confirm, "confirmed")] : []),
     ...(dismiss.length ? [set(dismiss, "dismissed")] : []),
     ...(remove.length ? [env.DB.prepare("DELETE FROM trip_transactions WHERE trip_id = ? AND transaction_id IN (SELECT value FROM json_each(?))").bind(id, JSON.stringify(remove))] : []),
   ];
-  if (stmts.length) await env.DB.batch(stmts);
+  // the trip's tags follow: onto the ones confirmed, off the ones taken out (only what the trip added)
+  const tagStmts = [
+    ...(confirm.length ? tags.map((t) => addTripTag(env, id, t, confirm)) : []),
+    ...(out.length && tags.length ? [env.DB.prepare("DELETE FROM transaction_tags WHERE trip_id = ? AND transaction_id IN (SELECT value FROM json_each(?))").bind(id, JSON.stringify(out))] : []),
+  ];
+  if (stmts.length) {
+    const rs = await env.DB.batch([...stmts, ...tagStmts]);
+    if (changes(rs.slice(stmts.length))) await markIfLeftOutTags(env, tags);
+  }
   return json({ id, confirmed: confirm.length, dismissed: dismiss.length, removed: remove.length });
 }
