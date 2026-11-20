@@ -936,9 +936,16 @@ page asks for it (optional, kept on this device); until then the trip shows just
 - **On a Minty,** the link opens Kos on its own (the household's /kos/ is behind Access); someone with a
   Minty pastes it on Your data (Add a shared trip). **Download file** saves the same trip as a file.
 
-## 24. Send a trip to the Kos developers (owner, 2026-11-20)
+## 24. Share a trip with the Kos team (owner, 2026-11-20)
 
-- **"Send it to the Kos developers"** (a line under a trip's plan, and on its Share page) opens a short
+**Why** (the owner): people share trips with the Kos team (the owner) to have them **featured** (a demo
+or sample trip, a catalog of trips), or as a **bug report**. The page asks which: "Feature it" (the
+email then says, as the person's permission, that Kos may use the trip as a sample trip or in a
+catalog, with its dates moved and nothing personal; subject "Kos trip to feature: …") or "Something's
+wrong" (subject "Kos trip with a problem: …"). Below, what was first built as "Send to the Kos developers":
+
+
+- **"Share it with the Kos team"** (a line under a trip's plan, and on its Share page) opens a short
   page on Kos on its own with the trip in the link (its share string, never with confirmation numbers,
   prices or guests). It shows what goes, takes an optional note, and **Open email** starts an email in
   the person's own mail app (`mailto:`): to the developers' address, "Kos trip: <name>", with the note and

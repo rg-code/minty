@@ -373,5 +373,6 @@ a.photo-credit:hover { color: #fff; text-decoration: underline; }
 
 /* "Send to the Kos developers": a quiet line under a trip's plan */
 .report-line { font-size: 12.5px; margin: 18px 0 4px; }
+.report-why { display: grid; gap: 8px; } .report-why .check { display: flex; gap: 8px; align-items: flex-start; line-height: 1.45; }
 .linklike { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 

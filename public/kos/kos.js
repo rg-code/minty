@@ -295,7 +295,7 @@ function tripView(t, tab) {
     <div class="trip"><div class="plan">
       <div class="tabs"><div class="seg" role="group">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${(tab || "") === k}">${l}</button>`).join("")}</div></div>
       ${body}
-      <p class="report-line muted">Something Kos got wrong in this trip? <button type="button" class="linklike" data-report-trip data-goatcounter-click="kos-report-trip">Send it to the Kos developers</button></p></div>
+      <p class="report-line muted">A trip worth featuring, or something Kos got wrong? <button type="button" class="linklike" data-report-trip data-goatcounter-click="kos-report-trip">Share it with the Kos team</button></p></div>
       <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div></div></div>
     <a class="fab" href="#/add?trip=${t.id}" aria-label="Add a booking" title="Add a booking">+</a>`;
 }
@@ -328,10 +328,11 @@ function shareView(t) {
       <div class="actions">${navigator.share ? `<button type="button" class="btn primary" data-share-trip>Share…</button>` : ""}<button type="button" class="btn${navigator.share ? "" : " primary"}" data-copy="shareText">Copy link</button>
         <button type="button" class="btn ghost" data-share-file>Download file</button><a class="btn ghost" href="#/trip/${t.id}">Back</a></div>
       <p class="muted" id="shareNote" style="margin-bottom:0;font-size:13px"></p></div>
-    <div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px">Send it to the Kos developers</h3><p class="muted" style="margin-top:0">Something read wrong, or missing? Your email app opens with the trip's link in it (never confirmation numbers, prices or guests), to the Kos developers.</p>
-      <button type="button" class="btn" data-report-trip data-goatcounter-click="kos-report-trip-share">Send it to the Kos developers</button></div>`;
+    <div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px">Share it with the Kos team</h3><p class="muted" style="margin-top:0">To be featured as a sample trip or in a catalog, or because something's wrong. Your email app opens with the trip's link in it (never confirmation numbers, prices or guests), to the Kos team.</p>
+      <button type="button" class="btn" data-report-trip data-goatcounter-click="kos-report-trip-share">Share it with the Kos team</button></div>`;
 }
-// --- "Send to the Kos developers" (docs/trips.md §24): an email from the person's own mail app ----------
+// --- "Share with the Kos team" (docs/trips.md §24): an email from the person's own mail app, to be
+// featured (a sample trip, a catalog) or as a bug report ----------------------------------------------
 // Only Kos on its own knows the address (the landing site's build), so from a Minty the report page
 // opens there, with the trip in the link.
 let pendingReport = null;
@@ -342,12 +343,17 @@ async function reportTrip(t) {
 }
 function reportView(f) {
   const to = window.KOS_REPORT_TO;
-  if (!f || f.error) return `<div class="section-title"><h2>Send to the Kos developers</h2></div><div class="card"><p class="err" style="margin-top:0">${esc(f?.error ?? "Open this from a trip's page.")}</p><a class="btn" href="#/">All trips</a></div>`;
+  if (!f || f.error) return `<div class="section-title"><h2>Share with the Kos team</h2></div><div class="card"><p class="err" style="margin-top:0">${esc(f?.error ?? "Open this from a trip's page.")}</p><a class="btn" href="#/">All trips</a></div>`;
   const t = f.trips[0];
-  return `<div class="section-title"><h2>Send to the Kos developers</h2></div>
+  return `<div class="section-title"><h2>Share with the Kos team</h2></div>
     <div class="card"><p style="margin-top:0"><b>${esc(t.name)}</b> <span class="muted">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))} · ${f.items.length} booking${f.items.length === 1 ? "" : "s"}</span></p>
+      <form class="form" id="reportForm">
+        <div class="wide report-why" role="radiogroup" aria-label="Why">
+          <label class="check"><input type="radio" name="why" value="feature" checked /> <span><b>Feature it.</b> Kos may use this trip as a sample trip or in a catalog, with its dates moved and nothing personal.</span></label>
+          <label class="check"><input type="radio" name="why" value="problem" /> <span><b>Something's wrong.</b> A booking read wrong, missing, or shown oddly.</span></label>
+        </div>
+        <label class="wide">A note <small class="muted">(optional)</small><textarea name="note" rows="4" maxlength="1200" placeholder="What makes it a good trip, or what went wrong?"></textarea></label></form>
       <p class="muted">What goes: the trip's days, bookings and places, as a link. Not its confirmation numbers, prices or guests. Your email app opens with it written in; nothing is sent until you send that email.</p>
-      <form class="form" id="reportForm"><label class="wide">What's wrong, or what should Kos have read differently? <small class="muted">(optional)</small><textarea name="note" rows="4" maxlength="1200"></textarea></label></form>
       ${to ? `<div class="actions"><button type="button" class="btn primary" data-report-mail>Open email</button><button type="button" class="btn ghost" data-copy="reportLink">Copy the trip's link</button></div>
         <p class="muted" id="reportNote" style="font-size:13px;margin-bottom:0">To: ${esc(to)}</p>`
       : `<p class="muted">This Kos has no address for the Kos developers. Copy the trip's link and send it by any means you like.</p><div class="actions"><button type="button" class="btn" data-copy="reportLink">Copy the trip's link</button></div>`}
@@ -1135,7 +1141,8 @@ app.addEventListener("click", async (ev) => {
     }
     if (at("[data-report-trip]")) { const t = tripById(Number(route().parts[1])); if (t) await reportTrip(t); return; }
     if (at("[data-report-mail]")) {
-      const f = pendingReport, m = reportMail({ to: window.KOS_REPORT_TO, trip: f.trips[0], link: f.link, note: app.querySelector("#reportForm [name=note]").value });
+      const form = app.querySelector("#reportForm");
+      const f = pendingReport, m = reportMail({ to: window.KOS_REPORT_TO, trip: f.trips[0], link: f.link, note: form.elements.note.value, why: form.elements.why.value });
       if (m.tooLong) {
         try { await navigator.clipboard.writeText(f.link); } catch { /* the Copy button is there */ }
         document.getElementById("reportNote").textContent = "The trip's link is long, so it's copied: paste it into the email.";
