@@ -77,7 +77,9 @@ Design history and decisions: `docs/serverless-plan.md`.
 - Plaid amount sign: POSITIVE = money out. Stored as integer cents (`amount_cents`); the
   dashboard flips the sign for display.
 - Tags live in `transaction_tags` rows. Sync never writes them, so user labels survive
-  re-syncs. Keep it that way. The same goes for an account's own name (`accounts.display_name`,
+  re-syncs. Keep it that way. A JET trip's tags are written onto its confirmed transactions, marked with
+  `transaction_tags.trip_id` (`docs/trips.md` §18): taking a tag off the trip, or a transaction out of it, removes only
+  those rows, and a tag change that involves a left-out tag marks CFA for a rebuild (`markIfLeftOutTags`). The same goes for an account's own name (`accounts.display_name`,
   `PUT /accounts/{id}/name`): pages show `ACCOUNT_NAME()` (`src/accounts.ts`: the household's
   name, else Plaid's, tidied), while card recognition (ABC, BAM) keeps matching on Plaid's
   `accounts.name`.

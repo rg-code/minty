@@ -147,6 +147,11 @@ there, gitignored here). If that folder exists, read it too.
    `/jet/` (§16): trips, bookings, itinerary, flight cards, the map, the trip's spending.
    - **JET on its own** (§17): the same app with trips in the browser, for people without Minty,
      at minty.milesmaximizer.com/jet/ (built by `scripts/build-jet.mjs`, deployed by minty-site).
+   - **Gmail pull and Share to JET** (§17.1, §17.2, live 2026-11-19): JET reads a Gmail label with the
+     person's own Apps Script, on a phone too (phone link and QR); Android's share menu. Security
+     plan §7 approved.
+   - **Trip tags** (§18): a trip's tags go onto its transactions, so "reimbursed" leaves a trip's
+     spending out of CFA and the dashboard's totals.
    - Bookings (and bills) come from a Gmail account made for Minty, by forwarding to
      `+mintytrips` / `+mintybills` or labeling by hand, or by forwarding to the domain's address.
      No mailbox is connected to Minty.

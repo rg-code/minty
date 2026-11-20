@@ -133,6 +133,10 @@ function entryHtml(e) {
     <div class="row1"><span class="what"><span class="kind">${esc(e.role || KIND[i.kind])}</span> ${esc(i.name || KIND[i.kind])}</span><span class="at">${esc(e.at)}</span></div>
     ${where ? `<div class="sub">${esc(where)}</div>` : ""}${!e.repeat && (i.price_cents || i.points) ? `<div class="sub">${i.points ? `${i.points.toLocaleString()} pts` : money(i.price_cents, i.currency)}</div>` : ""}</button></div>`;
 }
+/** Trip tags (docs/trips.md §18): whether a tag is one CFA leaves out of the numbers. */
+const leftOutTag = (tag) => (data?.left_out_tags ?? []).some((x) => x.toLowerCase() === tag.toLowerCase());
+const tripTags = (t) => (store.spending ? t.tags ?? [] : []);
+const tagChips = (tags) => tags.length ? `<div class="trip-tags">${tags.map((g) => `<span class="pill ${leftOutTag(g) ? "warn" : "dim"}" title="${leftOutTag(g) ? "Left out of CFA and the dashboard's totals" : "Its transactions have this tag"}">${esc(g)}${leftOutTag(g) ? " · left out" : ""}</span>`).join("")}</div>` : "";
 function tripView(t, tab) {
   const p = plan(t);
   const tabs = [["", "Itinerary"], ["flights", "Flights"], ...(store.spending ? [["spending", "Spending"]] : [])];
@@ -147,7 +151,8 @@ function tripView(t, tab) {
   return `<section class="trip-head"><div class="cover" style="--h:${hue(t.name)}">
       <div class="cover-actions"><a class="btn small" href="#/trip/${t.id}/edit">Edit</a><a class="btn small" href="#/add?trip=${t.id}">Add booking</a></div>
       <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div>
-      ${t.travellers.length ? `<div class="avatars">${t.travellers.map((k) => `<span title="${esc(label(k))}">${esc(label(k).slice(0, 1).toUpperCase())}</span>`).join("")}</div>` : ""}</div></section>
+      ${t.travellers.length ? `<div class="avatars">${t.travellers.map((k) => `<span title="${esc(label(k))}">${esc(label(k).slice(0, 1).toUpperCase())}</span>`).join("")}</div>` : ""}
+      ${tagChips(tripTags(t))}</div></section>
     <div class="trip"><div class="plan">
       <div class="tabs"><div class="seg" role="group">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${(tab || "") === k}">${l}</button>`).join("")}</div></div>
       ${body}</div>
@@ -213,6 +218,7 @@ async function spending(t) {
     const any = s.during.length + s.also.length + booked.length;
     box.innerHTML = `<div class="card"><div class="muted">Spent on this trip</div><div class="total num">${money(total)}</div>
         <div class="muted">${out.length} transactions · ${money(Math.round(total / days))} a day</div>
+        ${(() => { const off = tripTags(t).filter(leftOutTag); return off.length ? `<p class="pill warn" style="white-space:normal;display:inline-block;margin:10px 0 0">Tagged ${off.map((g) => `“${esc(g)}”`).join(", ")}: these are left out of CFA and the dashboard's totals.</p>` : ""; })()}
         ${cats.length ? `<div class="bars" style="margin-top:14px">${cats.map(([c, v]) => `<div class="b"><span>${esc(CAT[c] ?? c.replace(/_/g, " ").toLowerCase())}</span><i style="width:${Math.max(4, Math.round((v / top) * 100))}%"></i><span class="num">${money(v)}</span></div>`).join("")}</div>` : ""}
         <div class="actions"><a class="btn small" href="/?trip=${t.id}">Open in Minty</a></div></div>
       ${any ? `${sug(s.during, "Suggested", "travel, food, transport and activities during the trip")}${sug(booked, "Booked before", "charges matching a booking's price")}${sug(s.also, "Also during the trip", "everything else on those days")}
@@ -222,6 +228,15 @@ async function spending(t) {
 }
 
 // --- forms --------------------------------------------------------------------------------------
+/** The trip form's tag suggestions: the household's tags (left-out ones first), a tap adds one. */
+async function tagPicker() {
+  const box = document.getElementById("tagPick");
+  if (!box) return;
+  const all = await store.tags();
+  const list = [...new Set([...(data?.left_out_tags ?? []), ...all])].slice(0, 30);
+  box.innerHTML = list.map((g) => `<button type="button" class="pill ${leftOutTag(g) ? "warn" : "dim"}" data-add-tag="${esc(g)}">+ ${esc(g)}${leftOutTag(g) ? " · left out" : ""}</button>`).join("");
+}
+const splitTags = (v) => [...new Map(String(v ?? "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => [x.toLowerCase(), x])).values()];
 function tripForm(t, picked = []) {
   return `<div class="section-title"><h2>${t ? "Edit trip" : "New trip"}</h2></div>
     <form class="card" id="tripForm" data-id="${t?.id ?? ""}" data-items="${picked.join(",")}"><div class="form">
@@ -230,6 +245,9 @@ function tripForm(t, picked = []) {
       <label>Last day<input name="end_date" type="date" required value="${esc(t?.end_date ?? "")}" /></label>
       <label class="wide">Where<input name="place" maxlength="150" value="${esc(t?.place ?? "")}" placeholder="Tokyo, Japan" /></label>
       ${users.length ? `<div class="wide"><div class="muted" style="font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Who's going</div>${users.map((u) => `<label class="check"><input type="checkbox" name="trav" value="${esc(u.key)}"${(t?.travellers ?? users.map((x) => x.key)).includes(u.key) ? " checked" : ""} /> ${esc(u.label)}</label>`).join("")}</div>` : ""}
+      ${store.spending ? `<div class="wide"><label>Tags<input name="tags" maxlength="400" value="${esc((t?.tags ?? []).join(", "))}" placeholder="reimbursed, work" autocomplete="off" /></label>
+        <p class="muted" style="margin:6px 0 0;font-size:13px">The trip's transactions get these tags too, and new ones as you add them. A tag CFA leaves out of the numbers (like “reimbursed”) leaves the trip's spending out of CFA and the dashboard's totals. Taking a tag off takes it off what the trip tagged; a tag you added yourself stays.</p>
+        <div class="trip-tags" id="tagPick"></div></div>` : ""}
       <label class="wide">Notes<textarea name="notes" rows="3" maxlength="2000">${esc(t?.notes ?? "")}</textarea></label>
     </div><div class="actions"><button class="btn primary" type="submit">${t ? "Save" : "Make the trip"}</button><a class="btn ghost" href="${t ? `#/trip/${t.id}` : "#/"}">Cancel</a>
       ${t ? `<button type="button" class="btn danger" data-del-trip="${t.id}">Delete trip</button>` : ""}<span class="err" id="formErr"></span></div></form>`;
@@ -510,14 +528,14 @@ async function render() {
   if (parts[0] === "trip" && parts[1]) {
     const t = tripById(Number(parts[1]));
     if (!t) { app.innerHTML = `<p class="pad muted center">That trip isn't here any more. <a href="#/">All trips</a></p>`; return; }
-    if (parts[2] === "edit") { app.innerHTML = tripForm(t); return; }
+    if (parts[2] === "edit") { app.innerHTML = tripForm(t); tagPicker(); return; }
     if (map) { map.remove(); map = null; mapKey = ""; }
     app.innerHTML = tripView(t, parts[2] ?? "");
     showMap(t, parts[2] ?? "");
     if (parts[2] === "spending") spending(t);
     return;
   }
-  if (parts[0] === "new") { app.innerHTML = tripForm(null, (q.get("items") ?? "").split(",").filter(Boolean)); return; }
+  if (parts[0] === "new") { app.innerHTML = tripForm(null, (q.get("items") ?? "").split(",").filter(Boolean)); tagPicker(); return; }
   if (parts[0] === "data") { app.innerHTML = dataView(); return; }
   if (parts[0] === "gmail") {
     const code = q.get("connect");
@@ -584,6 +602,11 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-add-tag]")) {
+      const input = app.querySelector("#tripForm [name=tags]"), tag = at("[data-add-tag]").dataset.addTag;
+      input.value = splitTags(`${input.value},${tag}`).join(", ");
+      return;
+    }
     if (at("[data-gmail-pull]")) { await gmailPull(document.getElementById("suggestBox")); return; }
     if (at("[data-gmail-skip]")) { gmail.markSeen(pulled); document.getElementById("suggestBox").innerHTML = `<div class="suggest muted">Done: those won't show again on this device.</div>`; found = []; return; }
     if (at("[data-copy]")) {
@@ -710,6 +733,7 @@ app.addEventListener("submit", async (ev) => {
       const e = f.elements;
       const body = { name: e.name.value, start_date: e.start_date.value, end_date: e.end_date.value, place: e.place.value, notes: e.notes.value,
                      travellers: [...f.querySelectorAll("[name=trav]:checked")].map((x) => x.value) };
+      if (e.tags) body.tags = splitTags(e.tags.value);
       if (!f.dataset.id && f.dataset.items) body.items = f.dataset.items.split(",").map(Number);
       const r = await store.saveTrip(f.dataset.id ? Number(f.dataset.id) : null, body);
       data = null; location.hash = `#/trip/${r.id}`; return;

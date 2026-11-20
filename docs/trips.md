@@ -688,3 +688,41 @@ on its own with no way to read a forwarded booking.
   - text, or a link, goes to the paste parser;
   - a screenshot goes to `/sub-scan?for=jet&shared=1`, which reads it with Tesseract straight away.
 - **iPhones have no share targets for web apps.** There, Gmail pull (§17.1) is the way in, or paste.
+
+## 18. Trip tags (Minty only, built 2026-11-19)
+
+**Owner's ask:** tag a trip (say "reimbursed", a tag CFA leaves out of the numbers) and have the
+trip's spending left out too.
+
+**How it works:** a trip's tags become real tags on its transactions.
+- `trips.tags` holds the trip's tags (at most 10, each up to 64 characters, as typed; one per
+  spelling, whatever the case).
+- Each tag the trip puts on a transaction is an ordinary `transaction_tags` row marked with the trip
+  (`transaction_tags.trip_id`, migration 0026). A row a person added has no mark.
+- So everything that reads tags follows, unchanged: the dashboard's tag filter, its "shown" totals,
+  and CFA's "Left out of the numbers".
+
+**What happens when:**
+
+| | |
+|---|---|
+| A tag is added to the trip | every confirmed transaction in it gets the tag, after its own tags |
+| A transaction is confirmed into the trip | it gets the trip's tags |
+| A tag is taken off the trip | it comes off the rows the trip added; a tag the person added stays |
+| A transaction is removed or dismissed | the trip's rows on it go |
+| The trip is deleted | its rows stay, as ordinary tags (a reimbursed trip stays left out) |
+| A row's tags are edited on the dashboard | the tags it keeps keep their mark (`setTags` updates in place) |
+
+- **A tag already on a transaction stays the person's** (`ON CONFLICT DO NOTHING`), so taking the
+  tag off the trip never removes it.
+- **CFA follows within minutes:** a tag change (from a trip or the dashboard) that involves a tag
+  left out of the numbers marks CFA for a rebuild (`markIfLeftOutTags`, `audit_dirty`), which the
+  next cron run does. Before, a hand-tagged left-out tag waited for the weekly rebuild.
+- **Reads:** a trip's changes touch only its own transactions, through `trip_transactions`'s key;
+  `GET /trips` also reads `analytics_exclusions` (a few rows) to say which tags are left out.
+- **The page:** the trip form has Tags, with the household's tags to tap (left-out ones marked). The
+  trip's cover shows its tags, and the Spending tab says when they're left out.
+- **Not on its own:** JET on its own has no transactions, so it has no trip tags.
+- **One edge:** a transaction in two trips with the same tag carries one row, the first trip's.
+  Taking the tag off that trip takes it off the transaction, even though the other trip has it.
+

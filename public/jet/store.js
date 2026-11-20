@@ -86,6 +86,7 @@ const mintyStore = {
   suggestions: (id) => api("GET", `/trips/${id}/suggestions`),
   transactions: (id) => api("GET", `/transactions?trip_id=${id}&limit=1000`),
   link: (id, b) => api("POST", `/trips/${id}/transactions`, b),
+  tags: () => api("GET", "/tags").catch(() => []),       // the household's tags, to suggest for a trip
   spending: true,
 };
 
@@ -135,6 +136,7 @@ const deviceStore = {
   },
   users: async () => [],
   programs: async () => [],
+  tags: async () => [],
   async saveTrip(id, b) {
     const t = checkTrip(b);
     return tx(["trips", "items"], "readwrite", async (x) => {

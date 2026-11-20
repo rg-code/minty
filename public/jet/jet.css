@@ -113,6 +113,10 @@ textarea.paste { width: 100%; min-height: 140px; resize: vertical; }
 .trip-head .cover h1 { font-size: 30px; font-weight: 850; text-shadow: 0 2px 12px rgba(0, 0, 0, .3); }
 .avatars { display: flex; margin-top: 10px; }
 .avatars span { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; color: #fff; border: 2px solid rgba(255, 255, 255, .85); margin-right: -8px; background: rgba(0, 0, 0, .25); }
+/* trip tags (docs/trips.md §18): on the cover they sit on the trip's colour */
+.trip-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+.cover .pill.dim { background: rgba(0, 0, 0, .28); color: #fff; } .cover .pill.warn { background: rgba(0, 0, 0, .38); color: #ffd98a; }
 .cover-actions { position: absolute; top: 14px; right: 14px; display: flex; gap: 6px; }
 .cover-actions .btn { background: rgba(0, 0, 0, .28); border-color: rgba(255, 255, 255, .25); color: #fff; backdrop-filter: blur(6px); }
 

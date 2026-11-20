@@ -5,7 +5,7 @@ import { HttpError, dateParam, intParam, json, jsonBody, unprocessable } from ".
 import { bankHealth, bankRows, syncHealth } from "../health";
 import { RESERVED } from "./link";
 import { ACCOUNT_NAME, LEFT_OUT, PLAID_ITEM } from "../accounts";
-import { IN_NET_WORTH } from "../audit/totals";
+import { IN_NET_WORTH, markIfLeftOutTags } from "../audit/totals";
 
 /** Read API for the pages in public/, plus tag editing. */
 
@@ -15,8 +15,8 @@ const MAX_FILTER_CATEGORIES = 30;   // bound as one JSON list
 // 2 for q, the categories (one JSON list) and limit = 88 bound parameters, under D1's 100.
 const MAX_FILTER_IDS = 60;    // a card member counts as 2 (account id + name)
 const MAX_CARD_MEMBER_LENGTH = 200;
-const MAX_TAGS_PER_TXN = 50;
-const MAX_TAG_LENGTH = 64;
+export const MAX_TAGS_PER_TXN = 50;
+export const MAX_TAG_LENGTH = 64;
 // D1 allows 50 bytes in a LIKE pattern, and the search adds a % on each side: longer text failed
 // with "LIKE or GLOB pattern too complex". The dashboard's search box stops there too (maxlength).
 export const MAX_SEARCH_BYTES = 48;
@@ -329,6 +329,7 @@ export async function bulkTags(env: Env, request: Request): Promise<Response> {
        ON CONFLICT (transaction_id, tag) DO NOTHING`).bind(ids, tag)),
   ]);
   const changed = results.reduce((n, r) => n + (r.meta.changes ?? 0), 0);
+  if (changed) await markIfLeftOutTags(env, [...add, ...remove]);   // CFA follows a left-out tag within minutes
   const { results: rows } = await env.DB.prepare(
     `SELECT t.id, (SELECT json_group_array(tag) FROM (SELECT tag FROM transaction_tags tt WHERE tt.transaction_id = t.id ORDER BY tt.position)) AS tags
      FROM json_each(?1) j JOIN transactions t ON t.id = j.value`).bind(ids).all<{ id: number; tags: string }>();
@@ -353,12 +354,18 @@ export async function setTags(env: Env, request: Request, txnId: number): Promis
 
   const exists = await env.DB.prepare("SELECT id FROM transactions WHERE id = ?").bind(txnId).first();
   if (!exists) throw new HttpError(404, "transaction not found");
+  const before = (await env.DB.prepare("SELECT tag FROM transaction_tags WHERE transaction_id = ?").bind(txnId).all<{ tag: string }>()).results.map((r) => r.tag);
 
-  // One batch = one transaction: replace the row's tags atomically.
+  // One batch = one transaction: replace the row's tags atomically. Tags it keeps keep their row
+  // (and so a trip's mark, transaction_tags.trip_id: docs/trips.md §18); tag is COLLATE NOCASE.
   await env.DB.batch([
-    env.DB.prepare("DELETE FROM transaction_tags WHERE transaction_id = ?").bind(txnId),
+    env.DB.prepare("DELETE FROM transaction_tags WHERE transaction_id = ? AND tag NOT IN (SELECT value FROM json_each(?))").bind(txnId, JSON.stringify(clean)),
     ...clean.map((tag, i) =>
-      env.DB.prepare("INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (?, ?, ?)").bind(txnId, tag, i)),
+      env.DB.prepare(`INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (?, ?, ?)
+                      ON CONFLICT (transaction_id, tag) DO UPDATE SET tag = excluded.tag, position = excluded.position`).bind(txnId, tag, i)),
   ]);
+  const low = (l: string[]) => new Set(l.map((t) => t.toLowerCase()));
+  const was = low(before), now = low(clean);
+  await markIfLeftOutTags(env, [...before.filter((t) => !now.has(t.toLowerCase())), ...clean.filter((t) => !was.has(t.toLowerCase()))]);
   return json({ id: txnId, tags: clean });
 }

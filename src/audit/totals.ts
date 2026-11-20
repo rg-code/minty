@@ -202,6 +202,15 @@ const setState = (env: Env, key: string, value: string | null) => env.DB.prepare
 
 /** A correction changed: the next hourly run rebuilds every month. */
 export const markAuditDirty = (env: Env) => setState(env, "audit_dirty", "1").run();
+/** Tags were added to or taken off transactions: when one of them is left out of the numbers, the
+ * next run rebuilds every month (CFA reads the tagged transactions once, at a rebuild). */
+export async function markIfLeftOutTags(env: Env, tags: string[]): Promise<boolean> {
+  if (!tags.length) return false;
+  const hit = await env.DB.prepare("SELECT 1 FROM analytics_exclusions WHERE kind = 'tag' AND lower(value) IN (SELECT lower(value) FROM json_each(?)) LIMIT 1")
+    .bind(JSON.stringify(tags)).first();
+  if (hit) await markAuditDirty(env);
+  return Boolean(hit);
+}
 /** A manual account was removed, or changed kind, currency or person: net worth's history is rebuilt. */
 export const markNetWorthDirty = (env: Env) => setState(env, "networth_dirty", "1");
 /** What's left out changed: every month, and net worth's history, are rebuilt at the next run. */
