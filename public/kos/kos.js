@@ -167,8 +167,8 @@ function welcome() {
         <a href="https://graze.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-graze">GRAZE</a>, for free EV charging;
         and <a href="https://minty.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-minty">Minty</a>, for private money tracking.
         On a Minty, Kos also shows what each trip cost, and live flight tracking like Flighty's, with gate, delay and landing updates, is on its way.</p>
-      <p id="countNote" hidden>Visits and taps on this page are counted with GoatCounter: no cookies, nothing about you or your trips.</p>
-    </footer></section>`;
+    </footer>
+    <p class="w-copy">© rg-code, ${new Date().getFullYear()}</p></section>`;
 }
 /** The set-up's pill navigation (after EasyUI's Pill navigation, MIT, as Minty's header and GRAZE's
  * theme switch): one track, a thumb that slides to the step chosen, its panel under it. */
@@ -819,7 +819,6 @@ async function render() {
   }
   app.innerHTML = home();
   setupTabs();
-  const cn = document.getElementById("countNote"); if (cn) cn.hidden = !document.querySelector("script[data-goatcounter]");
   lockOffer();
 }
 async function loadPrograms() {
