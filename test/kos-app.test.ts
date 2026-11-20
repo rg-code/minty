@@ -103,6 +103,15 @@ describe("Kos on its own: set-up first, the device lock last (docs/trips.md §17
     const kos = await (await SELF.fetch("https://minty.example.workers.dev/kos/kos.js")).text();
     expect(kos).toContain(`<section class="welcome">`);                                     // a newcomer's first screen
     expect(kos).toContain("Set it up in four steps");
+    expect(kos).toContain("Every trip,<br />in one place.");
+    expect(kos).toContain('Kos <span>by</span> <a href="https://minty.milesmaximizer.com/');
+    expect(kos).toContain('href="https://ko-fi.com/mintyme"');
+    expect(kos).toContain('href="https://github.com/rg-code/minty"');
+    // taps are counted only where GoatCounter is on the page (the landing site's build); a Minty has none
+    expect(kos).toContain("if (el && window.goatcounter?.count)");
+    const page = await (await SELF.fetch("https://minty.example.workers.dev/kos/")).text();
+    expect(page).not.toMatch(/goatcounter|gc\.zgo\.at/);
+    expect((await SELF.fetch("https://minty.example.workers.dev/kos/")).headers.get("content-security-policy")).not.toContain("goatcounter");
     expect(kos).toContain("Last: lock Kos on this device.");
   });
 });

@@ -3,7 +3,7 @@
 // browser (IndexedDB) instead of Minty's API. Builds it as static files for any host, laid out as
 // served (the site's root holds /kos/ and the shared files Kos loads by absolute path):
 //
-//   node scripts/build-kos.mjs --out ../minty-site/public
+//   node scripts/build-kos.mjs --out ../minty-site/public [--goatcounter https://<code>.goatcounter.com/count]
 //
 // Writes <out>/kos/ (with mode.js set to "device", and the email reader as plain JS in kos/mail/),
 // <out>/vendor/{maplibre,pdfjs,tesseract,qrcode}/, the screenshot reader (/sub-scan) and what it and Kos
@@ -17,6 +17,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const arg = (name) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : null; };
 const out = arg("out") ? resolve(arg("out")) : join(root, "dist/kos-standalone");
+// --goatcounter https://<code>.goatcounter.com/count: count visits and taps on the landing site's Kos
+// (no cookies, no personal data), as its demo does. Only this build: Kos on a Minty never has it.
+const goatcounter = arg("goatcounter") ?? "";
+if (goatcounter && !/^https:\/\/[a-z0-9-]+\.goatcounter\.com\/count$/.test(goatcounter)) throw new Error(`--goatcounter: not a GoatCounter count URL: ${goatcounter}`);
 
 async function copyDir(from, to, skip = () => false) {
   await mkdir(to, { recursive: true });
@@ -44,6 +48,12 @@ await writeFile(join(out, "kos/sw.js"), sw.replace(`"/kos/store.js",`, `"/kos/st
 // the Minty link in the header goes; "Your data" says where the trips are
 const html = await readFile(join(out, "kos/index.html"), "utf8");
 if (!html.includes('id="mintyLink"')) throw new Error("build-kos: kos/index.html lost its Minty link; update the edit here");
+if (goatcounter) {
+  // its settings in a file (the policy allows no inline script), then GoatCounter's own script
+  await writeFile(join(out, "kos/gc.js"), `// GoatCounter's settings for Kos on its own (scripts/build-kos.mjs): the host goes in the path.\nwindow.goatcounter = { path: (p) => location.host + p };\n`);
+  if (!/^<\/body>$/m.test(html)) throw new Error("build-kos: kos/index.html has no </body> line; update the edit here");
+  await writeFile(join(out, "kos/index.html"), html.replace(/^<\/body>$/m, `<script src="/kos/gc.js"></script>\n<script data-goatcounter="${goatcounter}" async src="https://gc.zgo.at/count.js"></script>\n</body>`));
+}
 
 // the sample trips ("Try a sample trip" on an empty Kos): the live demo's made-up trips (demo/data.ts),
 // as a Kos export dated from a fixed day; the page moves them to the visitor's today (shiftSample).
@@ -70,9 +80,14 @@ const block = (path) => {
 };
 const base = /^\/\*\n((?:  .*\n?)+)/m.exec(headers)[1].split("\n").filter((l) => l.trim() && !/^\s*!/.test(l)).map((l) => l.replace(/^\s*/, "  "));
 const others = base.filter((l) => !/Content-Security-Policy/.test(l)).join("\n");
+// with GoatCounter, the Kos page's policy also lets in its script and its counting address
+const gcHost = goatcounter ? new URL(goatcounter).origin : "";
+const kosPolicy = gcHost ? block("/kos/*").replace("script-src 'self';", "script-src 'self' https://gc.zgo.at;")
+  .replace(/img-src ([^;]*);/, `img-src $1 ${gcHost};`).replace(/connect-src ([^;]*);/, `connect-src $1 ${gcHost};`) : block("/kos/*");
+if (gcHost && !kosPolicy.includes("https://gc.zgo.at")) throw new Error("build-kos: the /kos/* policy's script-src changed; update the edit here");
 await writeFile(join(out, "_headers.kos"), `# Kos on its own (from rg-code/minty's public/_headers, by scripts/build-kos.mjs)
 /kos/*
-${block("/kos/*")}
+${kosPolicy}
 ${others}
 /vendor/maplibre/*
 ${block("/vendor/maplibre/*")}

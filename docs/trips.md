@@ -644,7 +644,10 @@ Kos's own:
 - **A newcomer's first screen** (`welcome()` in `kos.js`, redesigned 2026-11-20 after Inkling, GRAZE and Minty: a
   narrow column, a big tight headline, raised pills and one solid button, the icon's saffron and teal
   as accents, a made-up flight drawn by the real flight card, and EasyUI's pill navigation, with its
-  sliding thumb, for the set-up's steps) is Kos's set-up, not the device lock:
+  sliding thumb, for the set-up's steps) is Kos's set-up, not the device lock. "Kos by Minty" heads it; it ends
+  with Support on Ko-fi and Star Minty on GitHub, and the rg-code footer. On the landing site only,
+  `build-kos.mjs --goatcounter` counts visits and taps (GoatCounter: no cookies, nothing about the
+  trips; `kos/gc.js` and the counting hosts in its policy); Kos on a Minty never has it. The set-up:
   1. add a trip or a booking (or try the sample);
   2. bookings from email (Gmail pull, or sharing to Kos on Android);
   3. put Kos on the home screen (Install Kos when the browser offers it);

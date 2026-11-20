@@ -130,16 +130,16 @@ function welcome() {
   const demo = { id: 0, kind: "flight", airline: "UA", flight_number: "837", dep_airport: "SFO", arr_airport: "NRT", name: "United",
                  start_at: `${out}T11:05:00-08:00`, end_at: `${addDays(out, 1)}T15:00:00+09:00`, dep_terminal: "I", seat: "34K", confirmation: "KOS837" };
   const feature = (k, title, line) => `<li><span class="w-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${GLYPH[k]}</svg></span><b>${title}</b><span>${line}</span></li>`;
-  const step = (n, id, label) => `<button type="button" role="tab" class="w-tab" data-wstep="${id}" aria-selected="${n === 1}"><i>${n}</i>${label}</button>`;
+  const step = (n, id, label) => `<button type="button" role="tab" class="w-tab" data-wstep="${id}" data-goatcounter-click="kos-setup-${id}" aria-selected="${n === 1}"><i>${n}</i>${label}</button>`;
   return `<section class="welcome">
     <header class="w-hero">
-      <p class="w-kicker">Trips <i></i> Flights <i></i> Journal</p>
-      <h1>Every trip,<br />in one calm place.</h1>
+      <p class="w-kicker">Kos <span>by</span> <a href="https://minty.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-by-minty">Minty</a></p>
+      <h1>Every trip,<br />in one place.</h1>
       <p class="w-lede">Flights like Flighty, days like Wanderlog, and a journal written for you when you're home.
         Kept in this browser: no account, and your trips go nowhere you don't send them.</p>
-      <div class="w-cta"><button type="button" class="w-primary" data-sample>Try a sample trip</button>
-        <a class="w-pill" href="#/new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>New trip</a>
-        <a class="w-pill" href="#/add"><svg viewBox="0 0 24 24" aria-hidden="true">${GLYPH.flight}</svg>Add a booking</a></div>
+      <div class="w-cta"><button type="button" class="w-primary" data-sample data-goatcounter-click="kos-sample">Try a sample trip</button>
+        <a class="w-pill" href="#/new" data-goatcounter-click="kos-new-trip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>New trip</a>
+        <a class="w-pill" href="#/add" data-goatcounter-click="kos-add-booking"><svg viewBox="0 0 24 24" aria-hidden="true">${GLYPH.flight}</svg>Add a booking</a></div>
       <span class="err" id="sampleErr"></span>
     </header>
     <div class="w-visual" aria-hidden="true"><div class="w-card">${flightCard(demo, { compact: true })}</div>
@@ -153,18 +153,25 @@ function welcome() {
       <h2>Set it up in four steps</h2>
       <div class="w-tabs" role="tablist"><span class="w-thumb" aria-hidden="true"></span>${step(1, "add", "Add")}${step(2, "email", "Email")}${step(3, "home", "Install")}${step(4, "lock", "Lock")}</div>
       <div class="w-panel" role="tabpanel" data-wpanel="add"><b>Add a trip, or a booking.</b> Type it in, paste a confirmation, or read a PDF or an email file. Bookings without a trip wait until you make one.</div>
-      <div class="w-panel" role="tabpanel" data-wpanel="email" hidden><b>Bookings from your email.</b> Forward confirmations to your Gmail with <b>+kos</b> in the address, and Kos reads them, on your phone too: <a href="#/gmail">set up Gmail</a>. Once Kos is installed on Android, you can also share a PDF or a screenshot to it.</div>
+      <div class="w-panel" role="tabpanel" data-wpanel="email" hidden><b>Bookings from your email.</b> Forward confirmations to your Gmail with <b>+kos</b> in the address, and Kos reads them, on your phone too: <a href="#/gmail" data-goatcounter-click="kos-setup-gmail">set up Gmail</a>. Once Kos is installed on Android, you can also share a PDF or a screenshot to it.</div>
       <div class="w-panel" role="tabpanel" data-wpanel="home" hidden><b>Put Kos on your home screen.</b> iPhone: Safari's Share button → <b>Add to Home Screen</b>. Android: Chrome's ⋮ menu → <b>Install app</b>.
-        <div class="actions" id="installRow" hidden><button type="button" class="w-pill" data-install>Install Kos</button></div></div>
+        <div class="actions" id="installRow" hidden><button type="button" class="w-pill" data-install data-goatcounter-click="kos-install">Install Kos</button></div></div>
       <div class="w-panel" role="tabpanel" data-wpanel="lock" hidden><div id="lockStep"><b>Last: lock Kos on this device.</b> <span class="muted">Checking what this device can do…</span></div></div>
     </section>
+    <section class="w-support" aria-label="Support Kos">
+      <p>Free, with no ads. If Kos helps:</p>
+      <div class="w-cta"><a class="w-pill" href="https://ko-fi.com/mintyme" target="_blank" rel="noopener" data-goatcounter-click="kos-kofi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Support on Ko-fi</a>
+        <a class="w-pill" href="https://github.com/rg-code/minty" target="_blank" rel="noopener" data-goatcounter-click="kos-star"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>Star Minty on GitHub</a></div>
+    </section>
     <footer class="w-foot">
-      <p>Free, with no ads. Trips stay in this browser only, so export a copy now and then (<a href="#/data">Your data</a>). The maps' tiles come from OpenFreeMap and EOX.</p>
-      <p>Also from rg-code: <a href="https://milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener">Miles Maximizer</a>, for point transfers;
-        <a href="https://milesmaximizer.com/inkling/?utm_source=kos" target="_blank" rel="noopener">Inkling</a>, for inKind restaurants;
-        the <a href="https://milesmaximizer.com/museum_problem/?utm_source=kos" target="_blank" rel="noopener">museum finder</a>, for free museum entry;
-        <a href="https://graze.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener">GRAZE</a>, for free EV charging;
-        and <a href="https://minty.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener">Minty</a>, for private money tracking, where Kos also shows what each trip cost.</p>
+      <p>Trips stay in this browser only, so export a copy now and then (<a href="#/data" data-goatcounter-click="kos-your-data">Your data</a>). The maps' tiles come from OpenFreeMap and EOX.</p>
+      <p>Also from rg-code: <a href="https://milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-miles">Miles Maximizer</a>, for point transfers;
+        <a href="https://milesmaximizer.com/inkling/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-inkling">Inkling</a>, for inKind restaurants;
+        the <a href="https://milesmaximizer.com/museum_problem/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-museums">museum finder</a>, for free museum entry;
+        <a href="https://graze.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-graze">GRAZE</a>, for free EV charging;
+        and <a href="https://minty.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-minty">Minty</a>, for private money tracking.
+        On a Minty, Kos also shows what each trip cost, and live flight tracking like Flighty's, with gate, delay and landing updates, is on its way.</p>
+      <p id="countNote" hidden>Visits and taps on this page are counted with GoatCounter: no cookies, nothing about you or your trips.</p>
     </footer></section>`;
 }
 /** The set-up's pill navigation (after EasyUI's Pill navigation, MIT, as Minty's header and GRAZE's
@@ -181,6 +188,12 @@ function setupTabs(pick) {
   requestAnimationFrame(() => thumb.setAttribute("data-ready", ""));
 }
 addEventListener("resize", () => setupTabs());
+// Taps on what Kos draws (data-goatcounter-click), counted when GoatCounter is on the page: only Kos
+// on its own, on the landing site (scripts/build-kos.mjs --goatcounter). Never on a Minty.
+document.addEventListener("click", (e) => {
+  const el = e.target.closest?.("[data-goatcounter-click]");
+  if (el && window.goatcounter?.count) window.goatcounter.count({ path: el.dataset.goatcounterClick, title: el.textContent.trim().slice(0, 80), event: true });
+}, true);
 let installPrompt = null;
 addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; const r = document.getElementById("installRow"); if (r) r.hidden = false; });
 /** The lock's step in the set-up, or its card on the home screen once there are trips: what this
@@ -795,6 +808,7 @@ async function render() {
   }
   app.innerHTML = home();
   setupTabs();
+  const cn = document.getElementById("countNote"); if (cn) cn.hidden = !document.querySelector("script[data-goatcounter]");
   lockOffer();
 }
 async function loadPrograms() {
