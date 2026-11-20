@@ -31,14 +31,21 @@ describe("the page", () => {
     const m = await (await raw("/jet/manifest.webmanifest")).json() as any;
     expect(m).toMatchObject({ id: "/jet/", start_url: "/jet/", scope: "/jet/", name: "JET" });
     const sw = await (await raw("/jet/sw.js")).text();
-    expect(sw).toContain('const CACHE = "jet-v2"');
+    expect(sw).toContain('const CACHE = "jet-v3"');
+    expect(sw).toContain('"/jet/gmail.js"');
+    // Share to JET (Android's share menu, once installed): sw.js takes the POST and keeps it on the device
+    expect(m.share_target).toMatchObject({ action: "/jet/share", method: "POST", enctype: "multipart/form-data" });
+    expect(m.share_target.params.files[0].accept).toEqual(expect.arrayContaining(["application/pdf", "image/*", "message/rfc822"]));
+    expect(sw).toContain('url.pathname === "/jet/share"');
     expect(sw).toContain('k.startsWith("jet-")');                               // never deletes Minty's cache
     expect(await (await raw("/sw.js")).text()).toContain('k.startsWith("minty-")'); // and Minty's never deletes JET's
   });
-  it("its policy allows OpenFreeMap and nothing else; the dashboard's doesn't", async () => {
+  it("its policy allows OpenFreeMap (and, for JET's pages, the person's own Gmail script) and nothing else; the dashboard's doesn't", async () => {
     for (const p of ["/jet/", "/jet/jet.js", "/vendor/maplibre/maplibre-gl-csp-worker.js"]) {
       const csp = (await raw(p)).headers.get("content-security-policy") ?? "";
-      expect(csp, p).toContain("connect-src 'self' https://tiles.openfreemap.org;");
+      expect(csp, p).toContain(p.startsWith("/jet/")
+        ? "connect-src 'self' https://tiles.openfreemap.org https://script.google.com https://script.googleusercontent.com;"
+        : "connect-src 'self' https://tiles.openfreemap.org;");
       expect(csp, p).toContain("script-src 'self';");
       expect(csp.match(/default-src/g), p).toHaveLength(1);
     }
@@ -49,6 +56,27 @@ describe("the page", () => {
     expect(Object.keys(a).length).toBeGreaterThan(2500);
     expect(a.NRT[2]).toBe("JP");
     expect(a.SFO[3]).toBeCloseTo(37.62, 1);
+  });
+});
+
+describe("Gmail pull (public/jet/gmail.js)", () => {
+  it("takes only an Apps Script web app's address, and writes the key into a read-only script", async () => {
+    const g = await import("../public/jet/gmail.js");
+    expect(g.isWebApp("https://script.google.com/macros/s/AKfycbx1234567890abcdefghij/exec")).toBe(true);
+    for (const bad of ["http://script.google.com/macros/s/AKfycbx1234567890abcdefghij/exec", "https://script.google.com.evil.example/macros/s/AKfycbx1234567890abcdefghij/exec",
+      "https://script.google.com/macros/s/AKfycbx1234567890abcdefghij/dev", "https://example.com/exec", ""]) expect(g.isWebApp(bad), bad).toBe(false);
+    const key = g.newKey();
+    expect(key).toMatch(/^[0-9a-f]{48}$/);
+    const code = g.script(key);
+    expect(code).toContain(`const KEY = "${key}";`);
+    expect(code).toContain('e.parameter.key !== KEY');
+    expect(code).not.toMatch(/GmailApp\.(send|move|mark|delete|create)|addLabel|UrlFetchApp|MailApp/);  // it only reads
+    expect(JSON.parse(g.MANIFEST).oauthScopes).toEqual(["https://www.googleapis.com/auth/gmail.readonly"]);
+  });
+  it("a raw message becomes its bytes: one per character, or UTF-8 when there's a wide one", async () => {
+    const { rawBytes } = await import("../public/jet/gmail.js");
+    expect([...rawBytes("A\u00e9")]).toEqual([65, 0xe9]);
+    expect([...rawBytes("A\u2192")]).toEqual([65, 0xe2, 0x86, 0x92]);
   });
 });
 

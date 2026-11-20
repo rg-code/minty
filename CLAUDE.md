@@ -177,7 +177,10 @@ Design history and decisions: `docs/serverless-plan.md`.
   is the one route past the 16 KiB body cap (2 MB), reads an `.eml` with `src/jet/` and stores
   nothing. The map is vendored MapLibre (CSP build) on OpenFreeMap's tiles: only `/jet/*` and
   `/vendor/maplibre/*` may reach `tiles.openfreemap.org`. Its look follows Flighty (flights, theme,
-  map) and Wanderlog (trips). It also runs on its own (§17): `public/jet/store.js` is the only
+  map) and Wanderlog (trips). Gmail pull (§17.1, `public/jet/gmail.js`) asks the person's own
+  Apps Script (`gmail.readonly`, a key made on the device) from the browser; only `/jet/*` may reach
+  `script.google.com` / `script.googleusercontent.com`. Share to JET is the manifest's `share_target`,
+  kept on the device by `jet/sw.js` until the add page reads it. It also runs on its own (§17): `public/jet/store.js` is the only
   thing that knows where trips live (Minty's API, or IndexedDB when `mode.js` says `device`);
   `scripts/build-jet.mjs` builds that for the landing site. Keep both stores answering the same
   calls, and `src/jet/` free of runtime imports (the build strips its types for the browser).

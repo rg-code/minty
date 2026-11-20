@@ -7,6 +7,7 @@
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
 import { MODE, exportFile, importFile, keepData, store } from "./store.js";
+import * as gmail from "./gmail.js";
 
 const app = document.getElementById("app");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -271,7 +272,7 @@ function itemForm(i, tripId) {
 const offsetOf = (s) => (s ? (/(Z|[+-]\d{2}:?\d{2})$/.exec(s)?.[1] ?? "") : "");
 
 function addView(tripId, source) {
-  const sources = [["type", "Type it"], ["paste", "Paste"], ["pdf", "PDF"], ["shot", "Screenshot"], ["email", "Email file"]];
+  const sources = [["type", "Type it"], ["gmail", "Gmail"], ["paste", "Paste"], ["pdf", "PDF"], ["shot", "Screenshot"], ["email", "Email file"]];
   return `<div class="section-title"><h2>Add a booking</h2><span class="muted">${tripId ? esc(tripById(tripId)?.name ?? "") : ""}</span></div>
     <div class="seg" role="group" style="margin-bottom:14px">${sources.map(([k, l]) => `<button type="button" data-source="${k}" aria-pressed="${source === k}">${l}</button>`).join("")}</div>
     <div id="sourceBox">${sourceBox(source)}</div>
@@ -279,6 +280,11 @@ function addView(tripId, source) {
     <div id="formBox">${itemForm(draft, tripId)}</div>`;
 }
 function sourceBox(source) {
+  if (source === "gmail") return gmail.config()
+    ? `<div class="card"><p class="muted" style="margin-top:0">Bookings you've forwarded to your Gmail's <b>JET</b> label, read with your Gmail script (<a href="#/gmail">set-up</a>).</p>
+        <div class="actions"><button type="button" class="btn primary" data-gmail-pull>Check Gmail</button></div></div>`
+    : `<div class="card"><p style="margin-top:0"><b>Read bookings from your Gmail.</b> Forward confirmations to your Gmail with <b>+jet</b> in the address, and JET reads them from there, from any device, with no server.</p>
+        <div class="actions"><a class="btn primary" href="#/gmail">Set it up (about 5 minutes)</a></div></div>`;
   if (source === "paste") return `<div class="card"><textarea class="paste" id="pasteText" placeholder="Paste a confirmation: the flight's number, airports, dates and times, or a stay's check-in and check-out"></textarea>
     <div class="actions"><button type="button" class="btn primary" data-read-paste>Find the booking</button></div></div>`;
   if (source === "pdf") return `<div class="card"><p class="muted" style="margin-top:0">The PDF is read here, on this device; nothing is uploaded.</p><input type="file" accept="application/pdf,.pdf" id="pdfFile" /></div>`;
@@ -288,13 +294,13 @@ function sourceBox(source) {
   return "";
 }
 function suggestionsHtml(list, from) {
-  if (!list.length) return `<div class="suggest muted">Nothing recognisable there: fill the form in yourself.</div>`;
+  if (!list.length) return `<div class="suggest muted">${from === "gmail" ? "No new bookings in your JET label." : "Nothing recognisable there: fill the form in yourself."}</div>`;
   return `<div class="suggest"><b>Found ${list.length} booking${list.length === 1 ? "" : "s"}</b> (check each):<div class="list" style="margin-top:8px">${list.map((b, n) => `<div class="row"><span class="grow"><b>${esc(itemTitle(b))}</b>
-      <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
-      <button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}</div>`).join("")}</div>
-    ${from === "email" && list.length > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${list.length}</button></div>` : ""}</div>`;
+      <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at ?? b.start)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
+      <button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" || from === "gmail" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}</div>`).join("")}</div>
+    ${(from === "email" || from === "gmail") && list.length > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${list.length}</button></div>` : ""}</div>`;
 }
-let found = [], foundFrom = "";
+let found = [], foundFrom = "", pulled = [];
 /** A suggestion (from the email reader or jet-parse.js) as the booking API's fields. */
 function asItem(b, tripId) {
   const out = { kind: b.kind, trip_id: tripId ?? null, name: b.name ?? null, confirmation: b.confirmation ?? null, guest: b.guest ?? null,
@@ -368,6 +374,82 @@ async function doImport(file) {
   return { trips: parsed.trips.length, items: parsed.items.length };
 }
 
+// --- Gmail pull: its set-up (docs/trips.md §17.1) ---------------------------------------------
+function gmailView() {
+  const c = gmail.config(), key = c?.key ?? gmail.pendingKey();
+  const step = (n, title, body) => `<div class="card" style="margin-bottom:12px"><div class="muted" style="font-size:12px;font-weight:750;letter-spacing:.06em;text-transform:uppercase">Step ${n}</div><h3 style="margin:4px 0 8px">${title}</h3>${body}</div>`;
+  const copy = (id, text, rows) => `<textarea class="paste" id="${id}" rows="${rows}" readonly>${esc(text)}</textarea><div class="actions"><button type="button" class="btn small" data-copy="${id}">Copy</button></div>`;
+  return `<div class="section-title"><h2>Read bookings from Gmail</h2><span class="muted">${c ? "set up on this device" : ""}</span></div>
+    <p class="muted">Forward a booking to your Gmail with <b>+jet</b> before the @ (Gmail delivers <b>you+jet@gmail.com</b> to <b>you@gmail.com</b>), and JET reads it with the same reader Minty uses. A small script in your own Gmail hands JET the emails with one label; it only reads, and only for this device's key. No server is involved, yours or anyone's.</p>
+    <p class="muted"><b>Recommended:</b> a Gmail account made just for this. Google's read-only permission covers a whole mailbox, so in an account that only gets what you forward, that's all the script can see.</p>
+    ${step(1, "A label and a filter, in Gmail (on a computer)", `<p>Make a label named <b>JET</b>. Then Settings → <b>Filters and blocked addresses</b> → Create a new filter: in <b>To</b>, put your address with +jet (e.g. <b>you+jet@gmail.com</b>) → Create filter → <b>Apply the label: JET</b> → Create filter. Anything you label JET by hand counts too.</p>`)}
+    ${step(2, "The script", `<p>Signed in to that Gmail, open <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → New project</a>. Replace what's there with this (your key is in it):</p>${copy("gsCode", gmail.script(key), 10)}
+      <p>Project Settings (⚙) → tick <b>Show "appsscript.json"</b> → open it in the editor and replace it with:</p>${copy("gsManifest", gmail.MANIFEST, 6)}`)}
+    ${step(3, "Deploy it as a web app", `<p><b>Deploy → New deployment</b> → type <b>Web app</b> → Execute as: <b>Me</b>, Who has access: <b>Anyone</b> → Deploy. Allow it: Google says it isn't verified, because it's your own script → Advanced → Go to the project → Allow (it asks only to read Gmail). Copy the <b>Web app URL</b>.</p>
+      <p class="muted">"Anyone" lets JET call it without your Google sign-in; the key in the script is what keeps others out. To stop it, archive the deployment (Deploy → Manage deployments).</p>`)}
+    ${step(4, "Paste the web app's address here", `<form id="gmailForm" class="form"><label class="wide">Web app URL<input name="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c?.url ?? "")}" /></label></form>
+      <div class="actions"><button type="button" class="btn primary" data-gmail-save>Save and check</button>${c ? `<button type="button" class="btn danger" data-gmail-forget>Forget on this device</button>` : ""}<span class="err" id="formErr"></span></div><div id="gmailResult"></div>`)}`;
+}
+/** New emails from the JET label, each read with the email reader, as suggestions. */
+async function gmailPull(box) {
+  box.innerHTML = `<div class="suggest muted">Asking your Gmail…</div>`;
+  const msgs = await gmail.pull();
+  found = []; foundFrom = "gmail"; pulled = msgs.map((m) => m.id);
+  const empty = [];
+  for (const m of msgs) {
+    const r = await store.readEmail(gmail.rawBytes(m.raw).buffer);
+    if (!r.bookings.length) empty.push(m);
+    for (const b of r.bookings) found.push({ ...b, sha256: r.sha256, msgId: m.id, quote: m.subject });
+  }
+  box.innerHTML = suggestionsHtml(found, "gmail") + (empty.length ? `<div class="suggest muted">${empty.length} email${empty.length === 1 ? "" : "s"} with no booking details JET can read (${empty.slice(0, 3).map((m) => `“${esc(m.subject)}”`).join(", ")}): paste their text instead.</div>` : "")
+    + (msgs.length ? `<div class="actions"><button type="button" class="btn ghost" data-gmail-skip>Don't show these again</button></div>` : "");
+}
+
+/** What was shared to JET (Android's share menu, the installed app): kept by sw.js in IndexedDB. */
+function takeShared(key = "latest") {
+  return new Promise((ok) => {
+    const req = indexedDB.open("jet-share", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("shared");
+    req.onerror = () => ok(null);
+    req.onsuccess = () => {
+      const t = req.result.transaction("shared", "readwrite"), st = t.objectStore("shared"), g = st.get(key);
+      g.onsuccess = () => { st.delete(key); ok(g.result ?? null); };
+      g.onerror = () => ok(null);
+    };
+  });
+}
+function putShared(key, value) {
+  return new Promise((ok) => {
+    const req = indexedDB.open("jet-share", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("shared");
+    req.onerror = () => ok(false);
+    req.onsuccess = () => { const t = req.result.transaction("shared", "readwrite"); t.objectStore("shared").put(value, key); t.oncomplete = () => ok(true); t.onerror = () => ok(false); };
+  });
+}
+async function readShared() {
+  const s = await takeShared();
+  const box = document.getElementById("suggestBox");
+  if (!s) { box.innerHTML = `<div class="suggest muted">Nothing was shared, or it was already read.</div>`; return; }
+  const file = s.files?.[0];
+  if (file && /^image\//.test(file.type)) {                         // a screenshot: read on /sub-scan
+    await putShared("image", { at: Date.now(), files: [file] });
+    location.href = "/sub-scan?for=jet&shared=1"; return;
+  }
+  if (file && (/pdf/.test(file.type) || /\.pdf$/i.test(file.name))) {
+    const { readPdfs } = await import("/pdf-read.js");
+    const { rows } = await readPdfs([new File([file.blob], file.name || "shared.pdf", { type: "application/pdf" })], { view: "jet", known: async () => [], parse: (text) => ({ text }), max: 1 });
+    if (rows[0]?.text) { await readText(rows[0].text, "pdf"); found = found.map((b) => ({ ...b, sha256: rows[0].sha })); return; }
+  }
+  if (file && (/rfc822/.test(file.type) || /\.eml$/i.test(file.name))) {
+    const r = await store.readEmail(await file.blob.arrayBuffer());
+    found = r.bookings.map((b) => ({ ...b, sha256: r.sha256 })); foundFrom = "email";
+    box.innerHTML = suggestionsHtml(found, "email"); return;
+  }
+  const text = [s.title, s.text, s.url, file && /^text\//.test(file.type) ? await file.blob.text() : ""].filter(Boolean).join("\n");
+  if (text.trim()) { await readText(text, "paste"); return; }
+  box.innerHTML = `<div class="suggest muted">JET can't read that kind of file. Share a PDF, a screenshot, an email file or text.</div>`;
+}
+
 // --- routing ------------------------------------------------------------------------------------
 function route() {
   const [path, query] = location.hash.replace(/^#/, "").split("?");
@@ -390,6 +472,7 @@ async function render() {
   }
   if (parts[0] === "new") { app.innerHTML = tripForm(null, (q.get("items") ?? "").split(",").filter(Boolean)); return; }
   if (parts[0] === "data") { app.innerHTML = dataView(); return; }
+  if (parts[0] === "gmail") { app.innerHTML = gmailView(); return; }
   if (parts[0] === "item" && parts[1]) {
     const i = itemById(Number(parts[1]));
     app.innerHTML = i ? `<div class="section-title"><h2>${esc(itemTitle(i))}</h2></div>${i.kind === "flight" ? `<div style="margin-bottom:14px">${flightCard(i)}</div>` : ""}${itemForm(i, i.trip_id)}` : `<p class="pad muted center">That booking isn't here any more.</p>`;
@@ -403,9 +486,12 @@ async function render() {
     try { scan = JSON.parse(sessionStorage.getItem("minty.jet.scan") ?? "null"); if (scan?.text !== undefined) sessionStorage.removeItem("minty.jet.scan"); } catch { /* none */ }
     const tid = scan?.trip ?? tripId;
     if (scan?.text !== undefined) source = "shot";
+    if (q.get("shared") !== null) source = "type";
     app.innerHTML = addView(tid, source);
     loadPrograms();
     if (scan?.text) await readText(scan.text, "screenshot");
+    if (q.get("shared") === "1") await readShared();
+    if (q.get("shared") === "0") document.getElementById("suggestBox").innerHTML = `<div class="suggest err">The shared file couldn't be kept on this device.</div>`;
     return;
   }
   app.innerHTML = home();
@@ -434,6 +520,21 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-gmail-pull]")) { await gmailPull(document.getElementById("suggestBox")); return; }
+    if (at("[data-gmail-skip]")) { gmail.markSeen(pulled); document.getElementById("suggestBox").innerHTML = `<div class="suggest muted">Done: those won't show again on this device.</div>`; found = []; return; }
+    if (at("[data-copy]")) {
+      const el = document.getElementById(at("[data-copy]").dataset.copy);
+      try { await navigator.clipboard.writeText(el.value); at("[data-copy]").textContent = "Copied"; } catch { el.select(); }
+      return;
+    }
+    if (at("[data-gmail-save]")) {
+      gmail.save(app.querySelector("#gmailForm [name=url]").value);
+      const box = document.getElementById("gmailResult");
+      try { await gmailPull(box); app.querySelector("#formErr").textContent = ""; box.insertAdjacentHTML("afterbegin", `<p class="pill good" style="white-space:normal;display:inline-block">Connected. Check Gmail from "Add a booking" any time.</p>`); }
+      catch (e2) { app.querySelector("#formErr").textContent = e2.message; }
+      return;
+    }
+    if (at("[data-gmail-forget]")) { if (confirm("Forget the Gmail script on this device? (Archive its deployment in Apps Script to stop it entirely.)")) { gmail.forget(); render(); } return; }
     if (at("[data-export]")) {
       const file = new Blob([JSON.stringify(exportFile(data), null, 1)], { type: "application/json" });
       const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(file), download: `jet-trips-${localDay()}.json` });
@@ -463,6 +564,7 @@ app.addEventListener("click", async (ev) => {
       const tripId = route().q.get("trip") ? Number(route().q.get("trip")) : null;
       const list = at("[data-add-all]") ? found : [found[Number(at("[data-add-now]").dataset.addNow)]];
       for (const b of list) await store.saveItem(null, { ...asItem(b, tripId), source: "email", source_sha256: b.sha256 ?? null });
+      if (foundFrom === "gmail") gmail.markSeen(list.map((b) => b.msgId).filter(Boolean));
       data = null; draft = null; found = [];
       location.hash = tripId ? `#/trip/${tripId}` : "#/";
       return;

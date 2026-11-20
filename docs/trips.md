@@ -593,7 +593,8 @@ JET's own:
 | Email files | read by the Worker (`POST /trips/read-email`) | read in the browser by the same code (`src/jet/` with its types stripped, `jet/mail/`) |
 | The trip's spending | yes | no (no transactions); the tab isn't shown |
 | Travellers, BAM's programs | from `MINTY_USERS`, `/points` | none |
-| Gmail inbox, Immich, live status (later) | yes | no: each needs a server |
+| Gmail pull (§17.1), Share to JET (§17.2) | yes | yes |
+| The Gmail inbox on Minty (§6), Immich, live status (later) | yes | no: each needs a server |
 
 - **Both stores answer the same calls,** with the same shapes as Minty's API, so `jet.js` doesn't
   care which it has.
@@ -624,3 +625,53 @@ JET's own:
 - **A JET bug:** saving a booking from a pasted suggestion did nothing. The form has a
   `data-source` attribute, so a click on it also hit the source tabs, which re-rendered the page.
 
+### 17.1 Gmail pull (both modes)
+
+**Why:** on a phone, the Gmail app can't save a message as an `.eml`, so "Email file" alone left JET
+on its own with no way to read a forwarded booking.
+
+**How it works:**
+- The person forwards a booking to their Gmail with `+jet` before the @. A Gmail filter labels it
+  **JET** (labelling one by hand counts too).
+- A short Google Apps Script in their Gmail, deployed as a web app, hands JET the emails with that
+  label. `public/jet/gmail.js` writes the script on the set-up page (`#/gmail`).
+  - It runs as the person ("Execute as: Me") and is hosted by Google.
+  - It asks only for `gmail.readonly`, in the manifest JET gives (`appsscript.json`). It never
+    changes, moves or sends mail (a test checks the script's text).
+  - It answers only a request with the key written into it: 48 random hex characters, made on
+    this device. Access is "Anyone", so JET can call it without a Google sign-in; the key is what
+    keeps others out.
+  - It returns the label's emails from the last 60 days: at most 20 messages from 30 threads,
+    skipping any over 1.5 MB, and skipping the ids JET says it has already read.
+- **JET reads each email** with `store.readEmail`, the same reader as "Email file". It shows the
+  bookings found, with Add and Add all.
+- **Read emails are remembered** on this device (localStorage `jet-gmail-seen`, the last 1,000 ids).
+  An email counts as read once one of its bookings is added, or after "Don't show these again".
+- **The web app's address and the key stay in this browser** (localStorage `jet-gmail`). Each
+  device sets up its own key, by pasting the script again, or the same script on both.
+- **The policy:** `/jet/*`'s `connect-src` allows `https://script.google.com` and
+  `https://script.googleusercontent.com`. Apps Script answers from the first by redirecting to the
+  second. Nothing else gets those hosts.
+- **Recommended:** a Gmail account made just for this, as for Minty's inbox (§6). Google's read-only
+  permission covers the whole mailbox, so in an account that only gets what's forwarded, that's all
+  the script can see.
+- **To stop it:** archive the deployment in Apps Script. "Forget on this device" drops the address
+  and the key from JET.
+
+**How it differs from Minty's inbox (§6):**
+- Minty's inbox is a script that sends mail to the Worker, through an Access service token.
+- Gmail pull is JET asking the person's own script from the browser.
+- It needs no server, so it works for JET on its own too.
+
+### 17.2 Share to JET (both modes)
+
+- **The installed app is a share target** (`share_target` in `jet/manifest.webmanifest`): on Android,
+  "Share" from Gmail, Files or the gallery lists JET. It takes a PDF, an image, an email file or text.
+- **The service worker takes the POST** to `/jet/share`. It keeps what was shared in IndexedDB
+  `jet-share` (at most 5 files, 20 MB each) and opens `#/add?shared=1`. Nothing leaves the device.
+- **The add page reads it once, then deletes it:**
+  - a PDF is read with pdf.js;
+  - an email file goes to the email reader;
+  - text, or a link, goes to the paste parser;
+  - a screenshot goes to `/sub-scan?for=jet&shared=1`, which reads it with Tesseract straight away.
+- **iPhones have no share targets for web apps.** There, Gmail pull (§17.1) is the way in, or paste.
