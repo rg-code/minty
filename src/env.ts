@@ -34,6 +34,16 @@ export interface Env {
   TOKEN_ENC_KEY_PREVIOUS?: string;
   /** "off": never ask irs.gov for the contribution limits (src/retirement/irs.ts). Default on. */
   IRS_LIMITS?: string;
+  /** Kos K2 (src/immich.ts): the household's Immich, as the Worker reaches it (a public address, e.g. a
+   * Cloudflare Tunnel's hostname). Unset: no photos in Kos, and nothing about Immich runs. */
+  IMMICH_URL?: string;
+  /** Where people open Immich in a browser (e.g. its tailnet address), for the album's link. Default IMMICH_URL. */
+  IMMICH_LINK_URL?: string;
+  /** Secret: an Immich API key with asset.read, asset.view, album.read, album.create, albumAsset.create. */
+  IMMICH_API_KEY?: string;
+  /** Secrets, only when Immich's address is behind Cloudflare Access: a service token's id and secret. */
+  IMMICH_ACCESS_CLIENT_ID?: string;
+  IMMICH_ACCESS_CLIENT_SECRET?: string;
 
   [key: string]: unknown;
 }

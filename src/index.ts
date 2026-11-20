@@ -24,6 +24,7 @@ import { refreshIrsLimits } from "./retirement/irs";
 import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 import { runStatementSync } from "./statements";
+import { requestAlbum, runImmichSync, thumb, tripPhotos } from "./immich";
 import { rekeyTokens } from "./token-key";
 import { refreshTotals, snapshotBalances } from "./audit/totals";
 import { isPending, markSwept, syncState } from "./routes/syncrequest";
@@ -108,6 +109,9 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["GET", /^\/trips\/(\d+)\/journal$/, ({ env, params }) => kos.journal(env, Number(params[0]))],
   ["POST", /^\/trips\/place-link$/, ({ request }) => kos.resolvePlaceLink(request)],
   ["PUT", /^\/trips\/(\d+)\/journal$/, ({ env, request, params }) => kos.saveJournal(env, request, Number(params[0]))],
+  ["GET", /^\/trips\/(\d+)\/photos$/, ({ env, params }) => tripPhotos(env, Number(params[0]))],
+  ["POST", /^\/trips\/(\d+)\/photos$/, ({ env, params }) => requestAlbum(env, Number(params[0]))],
+  ["GET", /^\/trips\/(\d+)\/photos\/([0-9a-fA-F-]{36})$/, ({ env, params }) => thumb(env, Number(params[0]), params[1])],
   // SUB, sign-up bonuses (docs/sub.md)
   ["GET", /^\/sub$/, ({ env, url }) => sub.list(env, url)],
   ["POST", /^\/sub\/offers$/, ({ env, config, request }) => sub.saveOffer(env, config, request)],
@@ -227,6 +231,10 @@ export default {
         return null;
       });
       if (totals?.from) console.log("monthly totals", JSON.stringify(totals));
+      // Kos K2, last (so it never costs the steps above): one trip's Immich album, if one is due
+      // (docs/trips.md §25). Nothing at all when Immich isn't set up.
+      const photos = await runImmichSync(env).catch((e) => ({ failed: e instanceof Error ? e.message : String(e) }));
+      if (Object.keys(photos).length) console.log("immich", JSON.stringify(photos));   // trip id -> what happened; no photo data
     }
     if (!catchUp) {
       // After sync, so a failed check never costs a sync; each bank about once a day.

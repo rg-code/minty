@@ -54,6 +54,15 @@ Claude (a `!` command would put the keys in the conversation).
    those days have with GPS and a city, whether a partner's are included, and whether making an
    album works. The key can't delete albums, so delete "Minty T0 test" in Immich afterwards (the
    photo stays).
+5. **For K2** (docs/trips.md §25), once Immich has an address Cloudflare can reach (a Cloudflare
+   Tunnel's hostname, behind Access with the service token), run it once more against **that**
+   address, with `--k2` instead of `--album-test` (the key needs `asset.view` too):
+   ```
+   IMMICH_URL=https://<the tunnel's hostname> IMMICH_API_KEY=... IMMICH_ACCESS_CLIENT_ID=... IMMICH_ACCESS_CLIENT_SECRET=... \
+   node scripts/kos-t0/immich.ts 2026-06-10 2026-06-17 --k2
+   ```
+   It adds three lines: how many photos carry their local time, that a thumbnail comes back as an
+   image, and what Immich says for an album that isn't there. It makes and deletes nothing.
 
 ## 5. Live flight status (AeroAPI)
 

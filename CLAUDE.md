@@ -188,7 +188,10 @@ Design history and decisions: `docs/serverless-plan.md`.
   kept on the device by `kos/sw.js` until the add page reads it. It also runs on its own (§17): `public/kos/store.js` is the only
   thing that knows where trips live (Minty's API, or IndexedDB when `mode.js` says `device`);
   `scripts/build-kos.mjs` builds that for the landing site. Keep both stores answering the same
-  calls, and `src/kos/` free of runtime imports (the build strips its types for the browser).
+  calls, and `src/kos/` free of runtime imports (the build strips its types for the browser). K2 (§25, `src/immich.ts`): a trip's Immich album, made only by a quiet
+  catch-up cron run (one trip each; trips that ended over 7 days ago only when asked; never an empty
+  album), Immich's search pages unpacked by SQLite; thumbnails only through
+  `GET /trips/{id}/photos/{asset}`, only for that trip's photos (security plan §9). Nothing runs without `IMMICH_URL`.
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

@@ -568,7 +568,7 @@ function journalView(t) {
     const lines = entries.map((e) => `<li>${esc(lineFor(e, airports))}${e.at ? `<span class="muted"> · ${esc(e.at)}</span>` : ""}</li>`).join("");
     return `<section class="j-day" style="--day:${color}"><div class="day-head"><span class="day-dot"></span><h3>${esc(title)}</h3>${date ? `<span class="muted">${esc(fmtDay(date))}</span>` : ""}</div>
       ${lines ? `<ul class="j-lines">${lines}</ul>` : `<p class="muted j-free">Nothing booked: a free day.</p>`}
-      ${date ? `<div class="j-spend muted" data-spend="${date}"></div>${note(date, "What happened today?")}` : ""}</section>`;
+      ${date ? `<div class="j-spend muted" data-spend="${date}"></div><div class="j-strip" data-photos="${date}" hidden></div>${note(date, "What happened today?")}` : ""}</section>`;
   };
   return `<article class="journal">
     <header class="j-hero" style="--h:${hue(t.name)}"><div class="j-kicker">Trip journal</div><h1>${esc(t.name)}</h1>
@@ -578,6 +578,7 @@ function journalView(t) {
     ${note("trip", "How was it? A few lines to remember it by.")}
     <div class="j-map"><div id="jmap" class="map"></div><div class="map-note" id="jmapNote" hidden></div></div>
     <p class="j-credit muted">Map: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · © OpenMapTiles · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
+    <section class="card j-photos" id="jPhotos" hidden></section>
     ${p.before.length ? day("Getting there", null, p.before, "#8c96ad") : ""}
     ${p.days.map((d, n) => day(`Day ${n + 1}`, d.date, d.entries, d.color)).join("")}
     ${p.after.length ? day("Getting home", null, p.after, "#8c96ad") : ""}
@@ -604,9 +605,47 @@ async function journalLoad(t) {
       }
     }).catch(() => {});
   }
+  // on a Minty with Immich (K2): the trip's album, and a few of each day's photos
+  const ph = store.photos ? await store.photos(t.id).catch(() => null) : null;
+  if (ph?.set_up) journalPhotos(t, ph);
+  photoPins = (ph?.photos ?? []).filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lon));
   await journalMap(t);
 }
+/** K2 (docs/trips.md §25): the album's card, the photos stat, and each day's strip (the cron's picks, up
+ * to 6 a day; thumbnails through the Worker, never from Immich's own host). */
+function journalPhotos(t, ph) {
+  const box = document.getElementById("jPhotos");
+  if (!box) return;
+  const today = localDay(), ended = t.end_date < today;
+  const album = ph.album_url ? `<a class="btn small primary" href="${esc(ph.album_url)}" target="_blank" rel="noopener" data-goatcounter-click="kos-open-album">Open the album in Immich ↗</a>` : "";
+  const make = (label) => `<button type="button" class="btn small${album ? "" : " primary"}" data-make-album="${t.id}" data-goatcounter-click="kos-make-album">${label}</button>`;
+  const what = ph.requested ? `<b>Making the album.</b> <span class="muted">Kos asks Immich in the next few minutes; come back soon.</span>`
+    : ph.state === "ready" ? `<b>${ph.count === 1 ? "1 photo" : `${ph.count.toLocaleString()} photos and videos`}</b> <span class="muted">from these days, in an album in Immich.</span>`
+    : ph.state === "empty" ? `<b>No photos in Immich from these days.</b> <span class="muted">${make("Look again")}</span>`
+    : ph.state === "gone" ? `<b>The trip's album was deleted in Immich.</b> <span class="muted">Kos won't make it again by itself.</span>`
+    : ended && t.end_date >= addDays(today, -7) ? `<b>Photos:</b> <span class="muted">Kos makes an album of these days in Immich within the hour.</span>`
+    : `<b>Photos:</b> <span class="muted">an album in Immich of everything taken during the trip.</span>`;
+  const button = ph.requested ? "" : ph.state === "gone" ? make("Make it again") : !ph.state ? make("Make the album now") : ph.state === "ready" && !ended ? make("Add new photos now") : "";
+  box.innerHTML = `<div class="j-photos-row"><span class="j-cam" aria-hidden="true">${CAMERA}</span><div class="grow">${what}</div><div class="j-photos-act">${album}${button}</div></div>
+    ${ph.error ? `<p class="err j-photos-err">Immich: ${esc(ph.error)} Kos tries again within the hour.</p>` : ""}`;
+  box.hidden = false;
+  const stat = `<div class="j-stat"><b class="num">${ph.count.toLocaleString()}</b><span>photos</span></div>`;
+  if (ph.count) { const spent = document.getElementById("jSpent"); if (spent) spent.insertAdjacentHTML("beforebegin", stat); else app.querySelector(".j-stats")?.insertAdjacentHTML("beforeend", stat); }
+  const byDay = {};
+  for (const p of ph.photos) (byDay[p.day] ??= []).push(p);
+  for (const el of app.querySelectorAll("[data-photos]")) {
+    const list = byDay[el.dataset.photos] ?? [];
+    if (!list.length) continue;
+    const more = (ph.days[el.dataset.photos] ?? list.length) - list.length;
+    const open = (inner, cls = "j-thumb") => ph.album_url ? `<a class="${cls}" href="${esc(ph.album_url)}" target="_blank" rel="noopener">${inner}</a>` : `<span class="${cls}">${inner}</span>`;
+    el.innerHTML = list.map((p) => open(`<img loading="lazy" decoding="async" alt="A photo from ${esc(fmtDay(p.day))}${p.taken ? `, ${esc(p.taken.slice(11, 16))}` : ""}" src="${esc(store.photoUrl(t.id, p.id))}" />${p.video ? `<span class="j-video" aria-label="video">▶</span>` : ""}`)).join("")
+      + (more > 0 ? open(`+${more}`, "j-thumb j-more") : "");
+    el.hidden = false;
+  }
+}
+const CAMERA = `<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M9 3 7.17 5H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2h-3.17L15 3H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8.2A3.2 3.2 0 1 0 12 16.2 3.2 3.2 0 0 0 12 9.8z"/></svg>`;
 /** The journal's map: minimal, in the page's theme; the trip's places numbered in order and joined. */
+let photoPins = [];                                       // the open journal's photos with a place (K2)
 async function journalMap(t) {
   const el = document.getElementById("jmap");
   if (!el) return;
@@ -623,8 +662,11 @@ async function journalMap(t) {
     if (i.kind === "flight" || e.repeat || !Number.isFinite(i.lat) || !Number.isFinite(i.lon)) continue;
     stops.push({ lon: i.lon, lat: i.lat, kind: i.kind, num: String(stops.length + 1), label: i.name ?? "", id: String(i.id), color: dd.color });
   }
+  // K2: where photos were taken, when Immich knows (small grey dots, under the numbered stops)
+  stops.unshift(...photoPins.slice(0, 300).map((p) => ({ lon: p.lon, lat: p.lat, kind: "photo", label: "", id: `photo:${p.id}`, color: "#8c96ad" })));
   const d = mapData(t);
-  const paths = stops.length > 1 ? [{ coords: stops.map((p) => [p.lon, p.lat]), color: "#ffffff" }] : [];
+  const numbered = stops.filter((p) => p.num);
+  const paths = numbered.length > 1 ? [{ coords: numbered.map((p) => [p.lon, p.lat]), color: "#ffffff" }] : [];
   drawTrip(map, stops.length ? { arcs: d.arcs, pins: stops, paths: paths.map((x) => ({ ...x, color: dark ? "#ffffff" : "#11162a" })) } : d, null, stops.length ? "pins" : "all", dark);
   el.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");   // the credits fold behind ⓘ, and are also under the map
   mapKey = `journal:${t.id}`;
@@ -1120,6 +1162,13 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-make-album]")) {
+      const id = Number(at("[data-make-album]").dataset.makeAlbum), btn = at("[data-make-album]");
+      btn.disabled = true;
+      try { await store.makeAlbum(id); journalPhotos(tripById(id), await store.photos(id)); }
+      catch (e2) { btn.disabled = false; btn.insertAdjacentHTML("afterend", `<span class="err"> ${esc(e2.message)}</span>`); }
+      return;
+    }
     if (at("[data-wstep]")) { setupTabs(at("[data-wstep]").dataset.wstep); return; }
     if (at("[data-lock-on]")) {
       try { await window.MintyLock.turnOn(); } catch { const e2 = document.getElementById("lockErr"); if (e2) e2.textContent = "It wasn't turned on. Try again."; return; }
