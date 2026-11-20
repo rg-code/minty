@@ -1,4 +1,4 @@
-// JET's map style (docs/trips.md §13): OpenFreeMap's "liberty" by day, and at night the same style
+// Kos's map style (docs/trips.md §13): OpenFreeMap's "liberty" by day, and at night the same style
 // recoloured at load into a readable night palette. The night palette and rules are GRAZE's
 // (rg-code/graze, assets/js/map-style.js, by the same author), kept as they are so both apps look alike.
 // Layer ids are liberty's; any layer not matched keeps its colours.

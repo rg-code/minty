@@ -34,7 +34,7 @@ export interface DemoData {
   subOffers: Record<string, string | number | null>[];       // SUB (docs/sub.md): two made-up offers
   subRequirements: Record<string, string | number | null>[];
   subPayouts: Record<string, string | number | null>[];
-  trips: Record<string, string | number | null>[];            // JET (docs/trips.md): two past trips and one coming up
+  trips: Record<string, string | number | null>[];            // Kos (docs/trips.md): two past trips and one coming up
   tripItems: Record<string, string | number | null>[];
   tripTransactions: Record<string, string | number | null>[];
   tripTags: [number, string, number, number][];               // transaction_id, tag, position, trip_id (a trip's tag, §18)
@@ -381,7 +381,7 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   ];
   const subPayouts: DemoData["subPayouts"] = [{ id: 1, offer_id: 2, date: daysAgo(95), amount_cents: 30000 }];
 
-  // JET (docs/trips.md): a holiday in Lisbon last month, a work trip to Chicago tagged "reimbursed"
+  // Kos (docs/trips.md): a holiday in Lisbon last month, a work trip to Chicago tagged "reimbursed"
   // (a tag CFA leaves out of the numbers, so the trip's spending is left out: §18), and Tokyo coming
   // up, with its flights paid for. Hotels and restaurants are invented; airlines and flight numbers
   // are real-looking, as the rest of the demo's big names are. Their charges are the demo's own

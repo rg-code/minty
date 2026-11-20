@@ -1,13 +1,13 @@
-// JET T0 (docs/trips.md §14): what a flight-status provider returns for one flight, with your key.
+// Kos T0 (docs/trips.md §14): what a flight-status provider returns for one flight, with your key.
 // Run it in YOUR terminal, with the key in the environment (never in a file in this repo):
 //
-//   AEROAPI_KEY=... node scripts/jet-t0/flight.ts UA837 [2026-11-20]
-//   AIRLABS_KEY=... node scripts/jet-t0/flight.ts UA837
+//   AEROAPI_KEY=... node scripts/kos-t0/flight.ts UA837 [2026-11-20]
+//   AIRLABS_KEY=... node scripts/kos-t0/flight.ts UA837
 //
 // It prints the fields Minty would show (status, times, gates, delay, aircraft), never the key.
 // One call each. Check AeroAPI's usage page afterwards for what the call cost.
 const [ident, day] = process.argv.slice(2);
-if (!ident) { console.error("usage: node scripts/jet-t0/flight.ts <flight, e.g. UA837> [YYYY-MM-DD]"); process.exit(1); }
+if (!ident) { console.error("usage: node scripts/kos-t0/flight.ts <flight, e.g. UA837> [YYYY-MM-DD]"); process.exit(1); }
 const pick = (o: Record<string, unknown>, keys: string[]) => Object.fromEntries(keys.filter((k) => o[k] !== undefined && o[k] !== null).map((k) => [k, o[k]]));
 
 if (process.env.AEROAPI_KEY) {

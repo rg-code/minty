@@ -1,0 +1,3 @@
+# Kos was JET until 2026-11-20 (docs/trips.md): its old address, and everything under it, goes to the new one.
+/jet /kos/ 301
+/jet/* /kos/:splat 301

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { SELF } from "cloudflare:test";
-import { greatCircle, latinLabels } from "../public/jet/map.js";
-import { nightStyle } from "../public/jet/map-style.js";
+import { greatCircle, latinLabels } from "../public/kos/map.js";
+import { nightStyle } from "../public/kos/map-style.js";
 
-// The JET app (public/jet/, docs/trips.md): its map helpers, and the page as served.
+// The Kos app (public/kos/, docs/trips.md): its map helpers, and the page as served.
 describe("the map", () => {
   it("a great circle across the date line is one unbroken line", () => {
     const line = greatCircle([-122.375, 37.62], [140.389, 35.769], 32);
@@ -23,27 +23,27 @@ describe("the map", () => {
 describe("the page", () => {
   const raw = (p: string) => SELF.fetch(`https://minty.example.workers.dev${p}`);
   it("is its own installable app, with no inline scripts", async () => {
-    const html = await (await raw("/jet/")).text();
-    expect(html).toContain('<link rel="manifest" href="/jet/manifest.webmanifest" crossorigin="use-credentials" />');
+    const html = await (await raw("/kos/")).text();
+    expect(html).toContain('<link rel="manifest" href="/kos/manifest.webmanifest" crossorigin="use-credentials" />');
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
     expect(html).not.toMatch(/\son[a-z]+="/);
     expect(html).toContain('<script src="/lock.js"></script>');                 // the device lock, as on every page with data
-    const m = await (await raw("/jet/manifest.webmanifest")).json() as any;
-    expect(m).toMatchObject({ id: "/jet/", start_url: "/jet/", scope: "/jet/", name: "JET" });
-    const sw = await (await raw("/jet/sw.js")).text();
-    expect(sw).toContain('const CACHE = "jet-v3"');
-    expect(sw).toContain('"/jet/gmail.js"');
-    // Share to JET (Android's share menu, once installed): sw.js takes the POST and keeps it on the device
-    expect(m.share_target).toMatchObject({ action: "/jet/share", method: "POST", enctype: "multipart/form-data" });
+    const m = await (await raw("/kos/manifest.webmanifest")).json() as any;
+    expect(m).toMatchObject({ id: "/kos/", start_url: "/kos/", scope: "/kos/", name: "Kos" });
+    const sw = await (await raw("/kos/sw.js")).text();
+    expect(sw).toContain('const CACHE = "kos-v1"');
+    expect(sw).toContain('"/kos/gmail.js"');
+    // Share to Kos (Android's share menu, once installed): sw.js takes the POST and keeps it on the device
+    expect(m.share_target).toMatchObject({ action: "/kos/share", method: "POST", enctype: "multipart/form-data" });
     expect(m.share_target.params.files[0].accept).toEqual(expect.arrayContaining(["application/pdf", "image/*", "message/rfc822"]));
-    expect(sw).toContain('url.pathname === "/jet/share"');
-    expect(sw).toContain('k.startsWith("jet-")');                               // never deletes Minty's cache
-    expect(await (await raw("/sw.js")).text()).toContain('k.startsWith("minty-")'); // and Minty's never deletes JET's
+    expect(sw).toContain('url.pathname === "/kos/share"');
+    expect(sw).toContain('k.startsWith("kos-")');                               // never deletes Minty's cache
+    expect(await (await raw("/sw.js")).text()).toContain('k.startsWith("minty-")'); // and Minty's never deletes Kos's
   });
-  it("its policy allows OpenFreeMap (and, for JET's pages, the person's own Gmail script) and nothing else; the dashboard's doesn't", async () => {
-    for (const p of ["/jet/", "/jet/jet.js", "/vendor/maplibre/maplibre-gl-csp-worker.js"]) {
+  it("its policy allows OpenFreeMap (and, for Kos's pages, the person's own Gmail script) and nothing else; the dashboard's doesn't", async () => {
+    for (const p of ["/kos/", "/kos/kos.js", "/vendor/maplibre/maplibre-gl-csp-worker.js"]) {
       const csp = (await raw(p)).headers.get("content-security-policy") ?? "";
-      expect(csp, p).toContain(p.startsWith("/jet/")
+      expect(csp, p).toContain(p.startsWith("/kos/")
         ? "connect-src 'self' https://tiles.openfreemap.org https://script.google.com https://script.googleusercontent.com;"
         : "connect-src 'self' https://tiles.openfreemap.org;");
       expect(csp, p).toContain("script-src 'self';");
@@ -57,19 +57,51 @@ describe("the page", () => {
     const js = await r.text();
     expect(js).toContain("export const qrcode");
     expect(js).not.toMatch(/\beval\(|new Function\(/);
-    expect(await (await raw("/jet/jet.js")).text()).toContain('import("/vendor/qrcode/qrcode.mjs")');
+    expect(await (await raw("/kos/kos.js")).text()).toContain('import("/vendor/qrcode/qrcode.mjs")');
   });
   it("airports are there, by IATA code", async () => {
-    const a = await (await raw("/jet/airports.json")).json() as Record<string, [string, string, string, number, number]>;
+    const a = await (await raw("/kos/airports.json")).json() as Record<string, [string, string, string, number, number]>;
     expect(Object.keys(a).length).toBeGreaterThan(2500);
     expect(a.NRT[2]).toBe("JP");
     expect(a.SFO[3]).toBeCloseTo(37.62, 1);
   });
 });
 
-describe("Gmail pull (public/jet/gmail.js)", () => {
+describe("Kos was JET (until 2026-11-20)", () => {
+  const raw = (p: string) => SELF.fetch(`https://minty.example.workers.dev${p}`, { redirect: "manual" });
+  it("the old address redirects, keeping the path (public/_redirects)", async () => {
+    for (const [from, to] of [["/jet", "/kos/"], ["/jet/", "/kos/"], ["/jet/kos.js", "/kos/kos.js"]]) {
+      const r = await raw(from);
+      expect(r.status, from).toBe(301);
+      expect(new URL(r.headers.get("location")!, "https://x").pathname, from).toBe(to);
+    }
+  });
+  it("what a browser kept under the old names comes across once; an old export still imports", async () => {
+    const { carryOverOldNames, importFile } = await import("../public/kos/store.js");
+    const m = new Map<string, string>([["jet-gmail", "{\"url\":1}"], ["jet-gmail-seen", "[\"m1\"]"], ["kos-sample", "new"], ["jet-sample", "old"]]);
+    const ls = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
+    carryOverOldNames(ls);
+    expect(Object.fromEntries(m)).toEqual({ "kos-gmail": "{\"url\":1}", "kos-gmail-seen": "[\"m1\"]", "kos-sample": "new" });   // a newer kos- one wins
+    expect(importFile({ app: "JET", version: 1, trips: [], items: [] })).toEqual({ trips: [], items: [] });
+  });
+});
+
+describe("the trip's summary strip", () => {
+  it("counts each kind (a bus as a train, anything else as other), and the money: spending on a Minty, prices on its own", async () => {
+    const { tripSummary } = await import("../public/kos/store.js");
+    const t = { spent_cents: 79256, transactions: 6, items: [
+      { kind: "flight", price_cents: 41260, currency: "USD" }, { kind: "flight" }, { kind: "lodging", price_cents: 53800, currency: "USD" },
+      { kind: "bus" }, { kind: "train", price_cents: 4200, currency: "EUR" }, { kind: "car" }, { kind: "boat" }] };
+    const m = tripSummary(t, true);
+    expect(m.count).toEqual({ flight: 2, lodging: 1, car: 1, train: 2, restaurant: 0, event: 0, other: 1 });
+    expect(m.money).toEqual({ spent: 79256, transactions: 6 });
+    expect(tripSummary(t, false).money).toEqual({ booked: { USD: 95060, EUR: 4200 } });
+  });
+});
+
+describe("Gmail pull (public/kos/gmail.js)", () => {
   it("takes only an Apps Script web app's address, and writes the key into a read-only script", async () => {
-    const g = await import("../public/jet/gmail.js");
+    const g = await import("../public/kos/gmail.js");
     expect(g.isWebApp("https://script.google.com/macros/s/AKfycbx1234567890abcdefghij/exec")).toBe(true);
     for (const bad of ["http://script.google.com/macros/s/AKfycbx1234567890abcdefghij/exec", "https://script.google.com.evil.example/macros/s/AKfycbx1234567890abcdefghij/exec",
       "https://script.google.com/macros/s/AKfycbx1234567890abcdefghij/dev", "https://example.com/exec", ""]) expect(g.isWebApp(bad), bad).toBe(false);
@@ -82,26 +114,26 @@ describe("Gmail pull (public/jet/gmail.js)", () => {
     expect(JSON.parse(g.MANIFEST).oauthScopes).toEqual(["https://www.googleapis.com/auth/gmail.readonly"]);
   });
   it("the phone link carries the address and the key after a #, and reads back; anything else is refused", async () => {
-    const g = await import("../public/jet/gmail.js");
+    const g = await import("../public/kos/gmail.js");
     const url = "https://script.google.com/macros/s/AKfycbx1234567890abcdefghij/exec", key = g.newKey();
-    const link = g.linkFor("https://jet.example", url, key);
-    expect(link).toMatch(/^https:\/\/jet\.example\/jet\/#\/gmail\?connect=[\w-]+$/);   // nothing before the # but the page
+    const link = g.linkFor("https://kos.example", url, key);
+    expect(link).toMatch(/^https:\/\/kos\.example\/kos\/#\/gmail\?connect=[\w-]+$/);   // nothing before the # but the page
     expect(g.readLink(link)).toEqual({ url, key });
     expect(g.readLink(link.split("connect=")[1])).toEqual({ url, key });                 // the code alone
-    expect(g.readLink(g.linkFor("https://jet.example", "https://evil.example/exec", key))).toBe(null);
-    expect(g.readLink(g.linkFor("https://jet.example", url, "short"))).toBe(null);
+    expect(g.readLink(g.linkFor("https://kos.example", "https://evil.example/exec", key))).toBe(null);
+    expect(g.readLink(g.linkFor("https://kos.example", url, "short"))).toBe(null);
     expect(g.readLink("not a link")).toBe(null);
   });
   it("a raw message becomes its bytes: one per character, or UTF-8 when there's a wide one", async () => {
-    const { rawBytes } = await import("../public/jet/gmail.js");
+    const { rawBytes } = await import("../public/kos/gmail.js");
     expect([...rawBytes("A\u00e9")]).toEqual([65, 0xe9]);
     expect([...rawBytes("A\u2192")]).toEqual([65, 0xe2, 0x86, 0x92]);
   });
 });
 
-describe("JET on its own (public/jet/store.js)", () => {
+describe("Kos on its own (public/kos/store.js)", () => {
   it("checks a trip and a booking as the server does", async () => {
-    const { checkItem, checkTrip } = await import("../public/jet/store.js");
+    const { checkItem, checkTrip } = await import("../public/kos/store.js");
     expect(checkTrip({ name: " Lisbon ", start_date: "2027-05-01", end_date: "2027-05-05" })).toMatchObject({ name: "Lisbon", travellers: [] });
     expect(() => checkTrip({ name: "x", start_date: "2027-05-05", end_date: "2027-05-01" })).toThrow(/can't be before/);
     expect(checkItem({ kind: "flight", airline: "tp", dep_airport: "ewr", arr_airport: "LIS", start_at: "2027-05-01T21:20" }))
@@ -110,22 +142,22 @@ describe("JET on its own (public/jet/store.js)", () => {
     expect(() => checkItem({ kind: "flight", dep_airport: "LISBON" })).toThrow(/airport/);
     expect(() => checkItem({ kind: "event", start_at: "soon" })).toThrow(/date and time/);
   });
-  it("exports every trip and booking, and imports only JET's own files, re-tying bookings to their trips", async () => {
-    const { exportFile, importFile } = await import("../public/jet/store.js");
+  it("exports every trip and booking, and imports only Kos's own files, re-tying bookings to their trips", async () => {
+    const { exportFile, importFile } = await import("../public/kos/store.js");
     const list = { trips: [{ id: 7, name: "Lisbon", start_date: "2027-05-01", end_date: "2027-05-05", travellers: [], items: [{ id: 3, trip_id: 7, kind: "lodging", name: "Hotel" }], transactions: 0, spent_cents: 0 }],
                    unassigned: [{ id: 4, trip_id: null, kind: "event", name: "Later" }] };
     const file = exportFile(list);
-    expect(file).toMatchObject({ app: "JET", version: 1 });
+    expect(file).toMatchObject({ app: "Kos", version: 1 });
     expect(file.trips[0]).not.toHaveProperty("items");
     expect(file.items.map((i: any) => i.id)).toEqual([3, 4]);
     const back = importFile(JSON.parse(JSON.stringify(file)));
     expect(back.trips.map((t: any) => t.old)).toEqual([7]);
     expect(back.items.map((i: any) => [i.oldTrip, i.item.name, i.item.trip_id])).toEqual([[7, "Hotel", null], [null, "Later", null]]);
-    expect(() => importFile({ app: "Other", version: 1, trips: [], items: [] })).toThrow(/isn't a JET export/);
+    expect(() => importFile({ app: "Other", version: 1, trips: [], items: [] })).toThrow(/isn't a Kos export/);
   });
   it("the sample trips move to today: dates and times shift by whole days, keeping their time and offset", async () => {
-    const { shiftSample, importFile } = await import("../public/jet/store.js");
-    const file = { app: "JET", version: 1, sample_from: "2026-01-15",
+    const { shiftSample, importFile } = await import("../public/kos/store.js");
+    const file = { app: "Kos", version: 1, sample_from: "2026-01-15",
       trips: [{ id: 3, name: "Tokyo", start_date: "2026-02-08", end_date: "2026-02-16", travellers: [] }],
       items: [{ id: 9, trip_id: 3, kind: "flight", airline: "UA", start_at: "2026-02-07T11:05-08:00", end_at: "2026-02-08T15:00+09:00" }, { id: 10, trip_id: null, kind: "event", start_at: null }] };
     const moved = shiftSample(file, "2026-11-19");                                        // 308 days later
@@ -136,9 +168,9 @@ describe("JET on its own (public/jet/store.js)", () => {
   });
   it("on a Minty it's in Minty mode; the standalone build sets device mode", async () => {
     const raw = (p: string) => SELF.fetch(`https://minty.example.workers.dev${p}`);
-    expect(await (await raw("/jet/mode.js")).text()).toContain('window.JET_MODE = "minty";');
-    const html = await (await raw("/jet/")).text();
-    expect(html.indexOf('/jet/mode.js')).toBeGreaterThan(-1);
-    expect(html.indexOf('/jet/mode.js')).toBeLessThan(html.indexOf('/jet/jet.js'));
+    expect(await (await raw("/kos/mode.js")).text()).toContain('window.KOS_MODE = "minty";');
+    const html = await (await raw("/kos/")).text();
+    expect(html.indexOf('/kos/mode.js')).toBeGreaterThan(-1);
+    expect(html.indexOf('/kos/mode.js')).toBeLessThan(html.indexOf('/kos/kos.js'));
   });
 });

@@ -1,12 +1,12 @@
-// JET (docs/trips.md): the household's trips, as an app of its own at /jet/. Served by Minty's
+// Kos (docs/trips.md): the household's trips, as an app of its own at /kos/. Served by Minty's
 // Worker, behind Minty's sign-in, on Minty's data: trips and bookings (GET /trips…), the trip's
 // transactions (GET /transactions?trip_id=, suggestions to confirm), BAM's programs for award
 // bookings. Bookings come typed, pasted, from a PDF (pdf.js, read on the device), a screenshot
-// (/sub-scan?for=jet, read on the device) or an email file (POST /trips/read-email, read on the
+// (/sub-scan?for=kos, read on the device) or an email file (POST /trips/read-email, read on the
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, exportFile, importFile, keepData, shiftSample, store } from "./store.js";
+import { MODE, SUM_KINDS, exportFile, importFile, keepData, shiftSample, store, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 
 const app = document.getElementById("app");
@@ -32,8 +32,8 @@ const CAT = { FOOD_AND_DRINK: "Food & drink", TRAVEL: "Travel", TRANSPORTATION: 
 
 let data = null, users = [], airports = {}, programs = null, map = null, mapKey = "", focused = null;
 
-// Trips and bookings come from the store (store.js): Minty's API at /jet/ on a Minty, this
-// browser's IndexedDB when JET runs on its own.
+// Trips and bookings come from the store (store.js): Minty's API at /kos/ on a Minty, this
+// browser's IndexedDB when Kos runs on its own.
 async function load() {
   const [t, u, a] = await Promise.all([store.list(), store.users(), loadAirports()]);
   data = t; users = Array.isArray(u) ? u : []; airports = a;
@@ -96,11 +96,11 @@ function home() {
       ${t.transactions ? `<span class="pill dim">${money(t.spent_cents)} spent</span>` : ""}</div></a>`;
   const sample = MODE === "device" && sampleIds();
   const empty = !data.trips.length && !data.unassigned.length;
-  return `${sample ? `<div class="card sample-note"><span class="grow"><b>Sample trips.</b> Made up, to show what JET does: open one, look at its flights and map, change anything. They're only in this browser.</span><button type="button" class="btn small" data-sample-remove>Remove them</button></div>` : ""}
+  return `${sample ? `<div class="card sample-note"><span class="grow"><b>Sample trips.</b> Made up, to show what Kos does: open one, look at its flights and map, change anything. They're only in this browser.</span><button type="button" class="btn small" data-sample-remove>Remove them</button></div>` : ""}
     ${flights.length ? `<div class="section-title"><h2>Next flight</h2><span class="muted">${flights.length > 1 ? `${flights.length - 1} more after it` : ""}</span></div>
       <div class="hero">${flightCard(flights[0], { countdown: true })}</div>` : ""}
     <div class="section-title"><h2>Trips</h2><a class="btn small" href="#/new">New trip</a></div>
-    ${upcoming.length ? `<div class="trips">${upcoming.map(tripCard).join("")}</div>` : `<div class="card muted">No trips coming up. Make one, or add a booking and JET will hold it until you do.${MODE === "device" && empty ? `
+    ${upcoming.length ? `<div class="trips">${upcoming.map(tripCard).join("")}</div>` : `<div class="card muted">No trips coming up. Make one, or add a booking and Kos will hold it until you do.${MODE === "device" && empty ? `
       <div class="actions"><button type="button" class="btn primary" data-sample>Try a sample trip</button><span class="err" id="sampleErr"></span></div>` : ""}</div>`}
     ${data.unassigned.length ? `<div class="section-title"><h2>Bookings waiting for a trip</h2><span class="muted">${data.unassigned.length}</span></div>
       <div class="list">${data.unassigned.map((i) => `<label class="row"><input type="checkbox" data-pick="${i.id}" /><span class="grow"><b>${esc(itemTitle(i))}</b><span class="muted">${esc(KIND[i.kind])} · ${esc(fmtDay(dateOf(i.start_at)) || "no date")}</span></span><a href="#/item/${i.id}" class="btn small ghost">Edit</a></label>`).join("")}</div>
@@ -137,6 +137,32 @@ function entryHtml(e) {
     <div class="row1"><span class="what"><span class="kind">${esc(e.role || KIND[i.kind])}</span> ${esc(i.name || KIND[i.kind])}</span><span class="at">${esc(e.at)}</span></div>
     ${where ? `<div class="sub">${esc(where)}</div>` : ""}${!e.repeat && (i.price_cents || i.points) ? `<div class="sub">${i.points ? `${i.points.toLocaleString()} pts` : money(i.price_cents, i.currency)}</div>` : ""}</button></div>`;
 }
+// --- the trip's summary strip (Wanderlog's "Reservations" and "Budgeting"): a count per kind of
+// booking, each a way to add one, and what the trip cost. Icons: Material Icons (Apache 2.0).
+const GLYPH = {
+  flight: `<path transform="rotate(90 12 12)" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>`,
+  lodging: `<path d="M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4z"/>`,
+  car: `<path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>`,
+  train: `<path d="M12 2c-4 0-8 .5-8 4v9.5C4 17.43 5.57 19 7.5 19L6 20.5v.5h2.23l2-2H14l2 2h2v-.5L16.5 19c1.93 0 3.5-1.57 3.5-3.5V6c0-3.5-3.58-4-8-4zM7.5 17c-.83 0-1.5-.67-1.5-1.5S6.67 14 7.5 14s1.5.67 1.5 1.5S8.33 17 7.5 17zm3.5-7H6V6h5v4zm2 0V6h5v4h-5zm3.5 7c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>`,
+  restaurant: `<path d="M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z"/>`,
+  event: `<path d="M20 12c0-1.1.9-2 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-1.99.9-1.99 2v4c1.1 0 1.99.9 1.99 2s-.89 2-2 2v4c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-4c-1.1 0-2-.9-2-2zm-4.42 4.8L12 14.5l-3.58 2.3 1.08-4.12-3.29-2.69 4.24-.25L12 5.8l1.54 3.95 4.24.25-3.29 2.69 1.09 4.11z"/>`,
+  other: `<path d="M6 10c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm12 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm-6 0c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>`,
+};
+function summaryHtml(t) {
+  const { count, money: m } = tripSummary(t, store.spending);
+  const kinds = SUM_KINDS.map(([k, label]) => `<a class="sum-kind" href="#/add?trip=${t.id}&kind=${k}" title="Add a ${label.toLowerCase()} booking">
+      <span class="sum-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${GLYPH[k]}</svg>${count[k] ? `<b class="sum-n">${count[k]}</b>` : ""}</span><span class="sum-label">${label}</span></a>`).join("");
+  const off = tripTags(t).filter(leftOutTag);
+  const budget = m.spent !== undefined
+    ? `<div class="sum-amt num">${money(m.spent)}</div><div class="muted sum-sub">${m.transactions ? `${m.transactions} transaction${m.transactions === 1 ? "" : "s"}${off.length ? ", left out of CFA" : ""}` : "no transactions linked yet"}</div>
+       <a class="sum-more" href="#/trip/${t.id}/spending">View details</a>`
+    : (() => { const cur = Object.entries(m.booked); return cur.length
+        ? `<div class="sum-amt num">${money(cur[0][1], cur[0][0])}</div><div class="muted sum-sub">booked${cur.length > 1 ? `, plus ${cur.slice(1).map(([c, v]) => money(v, c)).join(", ")}` : ""}, from the bookings' prices</div>`
+        : `<div class="sum-amt num muted">—</div><div class="muted sum-sub">add prices to the bookings to see what it costs</div>`; })();
+  return `<div class="summary"><section class="card sum-res"><h3>Reservations</h3><div class="sum-kinds">${kinds}</div></section>
+    <section class="card sum-budget"><h3>Budgeting</h3>${budget}</section></div>`;
+}
+
 /** Trip tags (docs/trips.md §18): whether a tag is one CFA leaves out of the numbers. */
 const leftOutTag = (tag) => (data?.left_out_tags ?? []).some((x) => x.toLowerCase() === tag.toLowerCase());
 const tripTags = (t) => (store.spending ? t.tags ?? [] : []);
@@ -157,6 +183,7 @@ function tripView(t, tab) {
       <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div>
       ${t.travellers.length ? `<div class="avatars">${t.travellers.map((k) => `<span title="${esc(label(k))}">${esc(label(k).slice(0, 1).toUpperCase())}</span>`).join("")}</div>` : ""}
       ${tagChips(tripTags(t))}</div></section>
+    ${summaryHtml(t)}
     <div class="trip"><div class="plan">
       <div class="tabs"><div class="seg" role="group">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${(tab || "") === k}">${l}</button>`).join("")}</div></div>
       ${body}</div>
@@ -177,7 +204,7 @@ function mapData(t) {
         const a = airport(i.dep_airport), b = airport(i.arr_airport);
         if (a && b && !e.repeat) arcs.push({ from: [a.lon, a.lat], to: [b.lon, b.lat], id: String(i.id), label: `${i.dep_airport}→${i.arr_airport}` });
         if (a && !e.repeat) pins.push({ lon: a.lon, lat: a.lat, kind: "flight", label: `${e.n} ${i.dep_airport}`, id: String(i.id), color: d.color });
-      } else if (i.lat !== null && i.lon !== null && !e.repeat) pins.push({ lon: i.lon, lat: i.lat, kind: i.kind, label: `${e.n} ${i.name ?? ""}`.trim(), id: String(i.id), color: d.color });
+      } else if (Number.isFinite(i.lat) && Number.isFinite(i.lon) && !e.repeat) pins.push({ lon: i.lon, lat: i.lat, kind: i.kind, label: `${e.n} ${i.name ?? ""}`.trim(), id: String(i.id), color: d.color });
     }
   });
   // flights outside the trip's days (the flight home after the last day, say) still draw
@@ -185,7 +212,7 @@ function mapData(t) {
     const i = e.item, a = airport(i.dep_airport), b = airport(i.arr_airport);
     if (i.kind === "flight" && a && b) arcs.push({ from: [a.lon, a.lat], to: [b.lon, b.lat], id: String(i.id) });
   }
-  if (!arcs.length && !pins.length && t.lat !== null && t.lon !== null) pins.push({ lon: t.lon, lat: t.lat, kind: "other", label: t.place ?? t.name });
+  if (!arcs.length && !pins.length && Number.isFinite(t.lat) && Number.isFinite(t.lon)) pins.push({ lon: t.lon, lat: t.lat, kind: "other", label: t.place ?? t.name });
   return { arcs, pins };
 }
 async function showMap(t, tab = "") {
@@ -303,9 +330,9 @@ function addView(tripId, source) {
 }
 function sourceBox(source) {
   if (source === "gmail") return gmail.config()
-    ? `<div class="card"><p class="muted" style="margin-top:0">Bookings you've forwarded to your Gmail's <b>JET</b> label, read with your Gmail script (<a href="#/gmail">set-up</a>).</p>
+    ? `<div class="card"><p class="muted" style="margin-top:0">Bookings you've forwarded to your Gmail's <b>Kos</b> label, read with your Gmail script (<a href="#/gmail">set-up</a>).</p>
         <div class="actions"><button type="button" class="btn primary" data-gmail-pull>Check Gmail</button></div></div>`
-    : `<div class="card"><p style="margin-top:0"><b>Read bookings from your Gmail.</b> Forward confirmations to your Gmail with <b>+jet</b> in the address, and JET reads them from there, from any device, with no server.</p>
+    : `<div class="card"><p style="margin-top:0"><b>Read bookings from your Gmail.</b> Forward confirmations to your Gmail with <b>+kos</b> in the address, and Kos reads them from there, from any device, with no server.</p>
         <div class="actions"><a class="btn primary" href="#/gmail">Set it up (about 5 minutes)</a></div></div>`;
   if (source === "paste") return `<div class="card"><textarea class="paste" id="pasteText" placeholder="Paste a confirmation: the flight's number, airports, dates and times, or a stay's check-in and check-out"></textarea>
     <div class="actions"><button type="button" class="btn primary" data-read-paste>Find the booking</button></div></div>`;
@@ -316,14 +343,14 @@ function sourceBox(source) {
   return "";
 }
 function suggestionsHtml(list, from) {
-  if (!list.length) return `<div class="suggest muted">${from === "gmail" ? "No new bookings in your JET label." : "Nothing recognisable there: fill the form in yourself."}</div>`;
+  if (!list.length) return `<div class="suggest muted">${from === "gmail" ? "No new bookings in your Kos label." : "Nothing recognisable there: fill the form in yourself."}</div>`;
   return `<div class="suggest"><b>Found ${list.length} booking${list.length === 1 ? "" : "s"}</b> (check each):<div class="list" style="margin-top:8px">${list.map((b, n) => `<div class="row"><span class="grow"><b>${esc(itemTitle(b))}</b>
       <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at ?? b.start)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
       <button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" || from === "gmail" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}</div>`).join("")}</div>
     ${(from === "email" || from === "gmail") && list.length > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${list.length}</button></div>` : ""}</div>`;
 }
 let found = [], foundFrom = "", pulled = [], tabSwitch = false;
-/** A suggestion (from the email reader or jet-parse.js) as the booking API's fields. */
+/** A suggestion (from the email reader or kos-parse.js) as the booking API's fields. */
 function asItem(b, tripId) {
   const out = { kind: b.kind, trip_id: tripId ?? null, name: b.name ?? null, confirmation: b.confirmation ?? null, guest: b.guest ?? null,
     start_at: b.start ?? b.start_at ?? null, end_at: b.end ?? b.end_at ?? null, place: b.place ?? null, lat: b.lat ?? null, lon: b.lon ?? null,
@@ -338,7 +365,7 @@ function asItem(b, tripId) {
   return out;
 }
 async function readText(text, source) {
-  const { parseBookings } = await import("./jet-parse.js");
+  const { parseBookings } = await import("./kos-parse.js");
   const year = new Date().getFullYear();
   found = parseBookings(text, { year, isAirport: (c) => Boolean(airports[c]) }).bookings.map((b) => ({ ...b, source }));
   foundFrom = source;
@@ -368,7 +395,7 @@ async function itemBody(f) {
 function ics(f) {
   const stamp = (s) => { const t = instant(s); return t ? new Date(t).toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "") : (s ?? "").replace(/[-:]/g, "").slice(0, 15) + (s && s.length >= 16 ? "00" : ""); };
   const title = `${[f.airline, f.flight_number].filter(Boolean).join(" ")} ${f.dep_airport ?? ""} → ${f.arr_airport ?? ""}`.trim();
-  const body = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Minty//JET//EN", "BEGIN:VEVENT", `UID:jet-${f.id}@minty`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "")}`,
+  const body = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Minty//Kos//EN", "BEGIN:VEVENT", `UID:kos-${f.id}@minty`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "")}`,
     `DTSTART:${stamp(f.start_at)}`, ...(f.end_at ? [`DTEND:${stamp(f.end_at)}`] : []), `SUMMARY:${title.replace(/[,;]/g, " ")}`,
     `DESCRIPTION:${["Confirmation " + (f.confirmation ?? "—"), f.seat ? `Seat ${f.seat}` : ""].filter(Boolean).join(" · ")}`, "END:VEVENT", "END:VCALENDAR"].join("\r\n");
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([body], { type: "text/calendar" })), download: `${title.replace(/\W+/g, "-") || "flight"}.ics` });
@@ -380,10 +407,10 @@ function dataView() {
   const n = data.trips.length, b = data.trips.reduce((s, t) => s + t.items.length, 0) + data.unassigned.length;
   return `<div class="section-title"><h2>Your data</h2></div>
     <div class="card">${MODE === "device"
-      ? `<p style="margin-top:0"><b>JET on its own.</b> Your trips are kept in this browser on this device, and nothing is sent anywhere. The map's tiles come from OpenFreeMap.</p>
-         <p class="muted">Clearing this site's data, or a private window, loses them. Export a copy now and then. To use JET on another device, export here and import there.</p>
-         <p class="muted">With a <a href="https://minty.milesmaximizer.com/">Minty</a> of your own, JET also shows each trip's spending, and an import brings these trips across.</p>`
-      : `<p style="margin-top:0"><b>JET on your Minty.</b> Trips are kept in your Minty's database. Import brings in trips exported from JET on another device or from JET on its own.</p>`}
+      ? `<p style="margin-top:0"><b>Kos on its own.</b> Your trips are kept in this browser on this device, and nothing is sent anywhere. The map's tiles come from OpenFreeMap.</p>
+         <p class="muted">Clearing this site's data, or a private window, loses them. Export a copy now and then. To use Kos on another device, export here and import there.</p>
+         <p class="muted">With a <a href="https://minty.milesmaximizer.com/">Minty</a> of your own, Kos also shows each trip's spending, and an import brings these trips across.</p>`
+      : `<p style="margin-top:0"><b>Kos on your Minty.</b> Trips are kept in your Minty's database. Import brings in trips exported from Kos on another device or from Kos on its own.</p>`}
       <p class="muted">${n} trip${n === 1 ? "" : "s"} and ${b} booking${b === 1 ? "" : "s"} here.</p>
       <div class="actions"><button type="button" class="btn primary" data-export>Export (a JSON file)</button>
         <label class="btn">Import…<input type="file" accept="application/json,.json" id="importFile" hidden /></label><span class="err" id="formErr"></span></div></div>`;
@@ -392,7 +419,7 @@ async function doImport(file) {
   const r = await importData(JSON.parse(await file.text()));
   return { trips: r.trips.length, items: r.items.length };
 }
-/** A JET export's trips and bookings into this store, bookings re-tied to their trips; the new ids. */
+/** A Kos export's trips and bookings into this store, bookings re-tied to their trips; the new ids. */
 async function importData(obj) {
   const parsed = importFile(obj);
   const ids = new Map(), items = [];
@@ -401,11 +428,11 @@ async function importData(obj) {
   return { trips: [...ids.values()], items };
 }
 
-// --- JET on its own: the sample trips (docs/trips.md §17.3) -----------------------------------
-const SAMPLE = "jet-sample";
+// --- Kos on its own: the sample trips (docs/trips.md §17.3) -----------------------------------
+const SAMPLE = "kos-sample";
 const sampleIds = () => { try { return JSON.parse(localStorage.getItem(SAMPLE) ?? "null"); } catch { return null; } };
 async function loadSample() {
-  const r = await fetch("/jet/sample.json");
+  const r = await fetch("/kos/sample.json");
   if (!r.ok) throw new Error("The sample trips couldn't load.");
   const ids = await importData(shiftSample(await r.json(), localDay()));
   try { localStorage.setItem(SAMPLE, JSON.stringify(ids)); } catch { /* they stay; removed by hand */ }
@@ -426,25 +453,25 @@ function gmailView() {
   const link = gmail.phoneLink();
   const phone = c ? `<div class="card" style="margin-bottom:12px"><h3 style="margin:0 0 8px">Connect your phone</h3>
       <div class="qr-row"><div id="gmailQr" class="qr" aria-label="QR code of the phone link"></div>
-      <div class="grow"><p style="margin-top:0">Scan this with the phone's camera, or send yourself the link and open it in JET on the phone. It connects the phone to the same script.</p>
-      <p class="muted"><b>iPhone:</b> paste the link into the set-up page <i>inside the installed JET app</i> (its storage is separate from Safari's).</p></div></div>
+      <div class="grow"><p style="margin-top:0">Scan this with the phone's camera, or send yourself the link and open it in Kos on the phone. It connects the phone to the same script.</p>
+      <p class="muted"><b>iPhone:</b> paste the link into the set-up page <i>inside the installed Kos app</i> (its storage is separate from Safari's).</p></div></div>
       <textarea class="paste" id="phoneLink" rows="3" readonly>${esc(link)}</textarea>
       <div class="actions"><button type="button" class="btn small" data-copy="phoneLink">Copy the link</button>${navigator.share ? `<button type="button" class="btn small" data-share-link>Send…</button>` : ""}</div>
-      <p class="muted" style="margin-bottom:0">Anyone with this link can read your JET label: send it only to yourself.</p></div>`
+      <p class="muted" style="margin-bottom:0">Anyone with this link can read your Kos label: send it only to yourself.</p></div>`
     : `<div class="card" style="margin-bottom:12px"><h3 style="margin:0 0 8px">Set up on another device already?</h3>
       <p style="margin-top:0">Open its set-up page, and scan the QR code with this phone, or paste its phone link here:</p>
-      <form id="connectForm" class="form"><label class="wide">Phone link<input name="link" placeholder="…/jet/#/gmail?connect=…" autocomplete="off" /></label></form>
+      <form id="connectForm" class="form"><label class="wide">Phone link<input name="link" placeholder="…/kos/#/gmail?connect=…" autocomplete="off" /></label></form>
       <div class="actions"><button type="button" class="btn primary" data-gmail-connect>Connect</button><span class="err" id="connectErr"></span></div><div id="connectResult"></div></div>`;
   return `<div class="section-title"><h2>Read bookings from Gmail</h2><span class="muted">${c ? "connected on this device" : ""}</span></div>
     ${c ? `${phone}<div id="gmailResult"></div>` : ""}
-    <p class="muted">Forward a booking to your Gmail with <b>+jet</b> before the @ (Gmail delivers <b>you+jet@gmail.com</b> to <b>you@gmail.com</b>), and JET reads it with the same reader Minty uses. A small script in your own Gmail hands JET the emails with one label; it only reads, and only for this device's key. No server is involved, yours or anyone's.</p>
+    <p class="muted">Forward a booking to your Gmail with <b>+kos</b> before the @ (Gmail delivers <b>you+kos@gmail.com</b> to <b>you@gmail.com</b>), and Kos reads it with the same reader Minty uses. A small script in your own Gmail hands Kos the emails with one label; it only reads, and only for this device's key. No server is involved, yours or anyone's.</p>
     <p class="muted"><b>Recommended:</b> a Gmail account made just for this. Google's read-only permission covers a whole mailbox, so in an account that only gets what you forward, that's all the script can see.</p>
     ${c ? "" : phone}
-    ${step(1, "A label and a filter, in Gmail (on a computer)", `<p>Make a label named <b>JET</b>. Then Settings → <b>Filters and blocked addresses</b> → Create a new filter: in <b>To</b>, put your address with +jet (e.g. <b>you+jet@gmail.com</b>) → Create filter → <b>Apply the label: JET</b> → Create filter. Anything you label JET by hand counts too.</p>`)}
+    ${step(1, "A label and a filter, in Gmail (on a computer)", `<p>Make a label named <b>Kos</b>. Then Settings → <b>Filters and blocked addresses</b> → Create a new filter: in <b>To</b>, put your address with +kos (e.g. <b>you+kos@gmail.com</b>) → Create filter → <b>Apply the label: Kos</b> → Create filter. Anything you label Kos by hand counts too.</p>`)}
     ${step(2, "The script", `<p>Signed in to that Gmail, open <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → New project</a>. Replace what's there with this (your key is in it):</p>${copy("gsCode", gmail.script(key), 10)}
       <p>Project Settings (⚙) → tick <b>Show "appsscript.json"</b> → open it in the editor and replace it with:</p>${copy("gsManifest", gmail.MANIFEST, 6)}`)}
     ${step(3, "Deploy it as a web app", `<p><b>Deploy → New deployment</b> → type <b>Web app</b> → Execute as: <b>Me</b>, Who has access: <b>Anyone</b> → Deploy. Allow it: Google says it isn't verified, because it's your own script → Advanced → Go to the project → Allow (it asks only to read Gmail). Copy the <b>Web app URL</b>.</p>
-      <p class="muted">"Anyone" lets JET call it without your Google sign-in; the key in the script is what keeps others out. To stop it, archive the deployment (Deploy → Manage deployments).</p>`)}
+      <p class="muted">"Anyone" lets Kos call it without your Google sign-in; the key in the script is what keeps others out. To stop it, archive the deployment (Deploy → Manage deployments).</p>`)}
     ${step(4, "Paste the web app's address here", `<form id="gmailForm" class="form"><label class="wide">Web app URL<input name="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c?.url ?? "")}" /></label></form>
       <div class="actions"><button type="button" class="btn primary" data-gmail-save>Save and check</button>${c ? `<button type="button" class="btn danger" data-gmail-forget>Forget on this device</button>` : ""}<span class="err" id="formErr"></span></div>${c ? "" : `<div id="gmailResult"></div>`}`)}`;
 }
@@ -461,7 +488,7 @@ async function drawQr(el, text) {
   } catch { el.hidden = true; }
 }
 
-/** New emails from the JET label, each read with the email reader, as suggestions. quiet: the
+/** New emails from the Kos label, each read with the email reader, as suggestions. quiet: the
  * Add page's own check when it opens; it shows only bookings, never "nothing new" or an error. */
 let pullSeq = 0;
 async function gmailPull(box, quiet = false) {
@@ -477,7 +504,7 @@ async function gmailPull(box, quiet = false) {
   // the page moved on, a newer check ran, or (quietly) something else is being suggested: leave it
   if (!box.isConnected || mine !== pullSeq || (quiet && (!got.length || (found.length && foundFrom !== "gmail")))) return;
   found = got; foundFrom = "gmail"; pulled = msgs.map((m) => m.id);
-  box.innerHTML = (quiet ? `<div class="suggest-head muted">New in your Gmail</div>` : "") + suggestionsHtml(found, "gmail") + (empty.length ? `<div class="suggest muted">${empty.length} email${empty.length === 1 ? "" : "s"} with no booking details JET can read (${empty.slice(0, 3).map((m) => `“${esc(m.subject)}”`).join(", ")}): paste their text instead.</div>` : "")
+  box.innerHTML = (quiet ? `<div class="suggest-head muted">New in your Gmail</div>` : "") + suggestionsHtml(found, "gmail") + (empty.length ? `<div class="suggest muted">${empty.length} email${empty.length === 1 ? "" : "s"} with no booking details Kos can read (${empty.slice(0, 3).map((m) => `“${esc(m.subject)}”`).join(", ")}): paste their text instead.</div>` : "")
     + (msgs.length ? `<div class="actions"><button type="button" class="btn ghost" data-gmail-skip>Don't show these again</button></div>` : "");
 }
 
@@ -487,7 +514,7 @@ async function checkConnected(box, errSel = "#formErr") {
   try {
     await gmailPull(box);
     if (err) err.textContent = "";
-    box.insertAdjacentHTML("afterbegin", `<p class="pill good" style="white-space:normal;display:inline-block">Connected. JET checks Gmail when you open "Add a booking".</p>`);
+    box.insertAdjacentHTML("afterbegin", `<p class="pill good" style="white-space:normal;display:inline-block">Connected. Kos checks Gmail when you open "Add a booking".</p>`);
     return true;
   } catch (e) {
     if (err) err.textContent = e.message;
@@ -496,10 +523,10 @@ async function checkConnected(box, errSel = "#formErr") {
   }
 }
 
-/** What was shared to JET (Android's share menu, the installed app): kept by sw.js in IndexedDB. */
+/** What was shared to Kos (Android's share menu, the installed app): kept by sw.js in IndexedDB. */
 function takeShared(key = "latest") {
   return new Promise((ok) => {
-    const req = indexedDB.open("jet-share", 1);
+    const req = indexedDB.open("kos-share", 1);
     req.onupgradeneeded = () => req.result.createObjectStore("shared");
     req.onerror = () => ok(null);
     req.onsuccess = () => {
@@ -511,7 +538,7 @@ function takeShared(key = "latest") {
 }
 function putShared(key, value) {
   return new Promise((ok) => {
-    const req = indexedDB.open("jet-share", 1);
+    const req = indexedDB.open("kos-share", 1);
     req.onupgradeneeded = () => req.result.createObjectStore("shared");
     req.onerror = () => ok(false);
     req.onsuccess = () => { const t = req.result.transaction("shared", "readwrite"); t.objectStore("shared").put(value, key); t.oncomplete = () => ok(true); t.onerror = () => ok(false); };
@@ -524,11 +551,11 @@ async function readShared() {
   const file = s.files?.[0];
   if (file && /^image\//.test(file.type)) {                         // a screenshot: read on /sub-scan
     await putShared("image", { at: Date.now(), files: [file] });
-    location.href = "/sub-scan?for=jet&shared=1"; return;
+    location.href = "/sub-scan?for=kos&shared=1"; return;
   }
   if (file && (/pdf/.test(file.type) || /\.pdf$/i.test(file.name))) {
     const { readPdfs } = await import("/pdf-read.js");
-    const { rows } = await readPdfs([new File([file.blob], file.name || "shared.pdf", { type: "application/pdf" })], { view: "jet", known: async () => [], parse: (text) => ({ text }), max: 1 });
+    const { rows } = await readPdfs([new File([file.blob], file.name || "shared.pdf", { type: "application/pdf" })], { view: "kos", known: async () => [], parse: (text) => ({ text }), max: 1 });
     if (rows[0]?.text) { await readText(rows[0].text, "pdf"); found = found.map((b) => ({ ...b, sha256: rows[0].sha })); return; }
   }
   if (file && (/rfc822/.test(file.type) || /\.eml$/i.test(file.name))) {
@@ -538,7 +565,7 @@ async function readShared() {
   }
   const text = [s.title, s.text, s.url, file && /^text\//.test(file.type) ? await file.blob.text() : ""].filter(Boolean).join("\n");
   if (text.trim()) { await readText(text, "paste"); return; }
-  box.innerHTML = `<div class="suggest muted">JET can't read that kind of file. Share a PDF, a screenshot, an email file or text.</div>`;
+  box.innerHTML = `<div class="suggest muted">Kos can't read that kind of file. Share a PDF, a screenshot, an email file or text.</div>`;
 }
 
 // --- routing ------------------------------------------------------------------------------------
@@ -548,7 +575,7 @@ function route() {
 }
 let source = "type";
 async function render() {
-  if (!data) { try { await load(); } catch (e) { app.innerHTML = `<p class="err pad">Couldn't load JET: ${esc(e.message)}</p>`; return; } }
+  if (!data) { try { await load(); } catch (e) { app.innerHTML = `<p class="err pad">Couldn't load Kos: ${esc(e.message)}</p>`; return; } }
   const { parts, q } = route();
   if (map && parts[0] !== "trip") { map.remove(); map = null; mapKey = ""; }
   if (parts[0] === "trip" && parts[1]) {
@@ -587,10 +614,11 @@ async function render() {
     const tripId = q.get("trip") ? Number(q.get("trip")) : null;
     // back from /sub-scan with a screenshot's text
     let scan = null;
-    try { scan = JSON.parse(sessionStorage.getItem("minty.jet.scan") ?? "null"); if (scan?.text !== undefined) sessionStorage.removeItem("minty.jet.scan"); } catch { /* none */ }
+    try { scan = JSON.parse(sessionStorage.getItem("minty.kos.scan") ?? "null"); if (scan?.text !== undefined) sessionStorage.removeItem("minty.kos.scan"); } catch { /* none */ }
     const tid = scan?.trip ?? tripId;
     if (scan?.text !== undefined) source = "shot";
     if (q.get("shared") !== null) source = "type";
+    if (KIND[q.get("kind")]) { draft = { ...(draft ?? {}), kind: q.get("kind") }; source = "type"; }   // from the trip's summary strip
     app.innerHTML = addView(tid, source);
     loadPrograms();
     if (scan?.text) await readText(scan.text, "screenshot");
@@ -623,7 +651,7 @@ app.addEventListener("click", async (ev) => {
     if (at("button.item[data-item]")) {
       // Wanderlog: the first tap shows it on the map, a second opens it; no place on the map opens it at once
       const id = Number(at("[data-item]").dataset.item), i = itemById(id);
-      if (map && i && i.lat !== null && i.lon !== null && focused !== id) { focus(map, i.lon, i.lat); focused = id; return; }
+      if (map && i && Number.isFinite(i.lat) && Number.isFinite(i.lon) && focused !== id) { focus(map, i.lon, i.lat); focused = id; return; }
       location.hash = `#/item/${id}`;
       return;
     }
@@ -664,11 +692,11 @@ app.addEventListener("click", async (ev) => {
       await checkConnected(document.getElementById("gmailResult"));
       return;
     }
-    if (at("[data-share-link]")) { try { await navigator.share({ title: "JET: connect your phone", url: gmail.phoneLink() }); } catch { /* cancelled */ } return; }
+    if (at("[data-share-link]")) { try { await navigator.share({ title: "Kos: connect your phone", url: gmail.phoneLink() }); } catch { /* cancelled */ } return; }
     if (at("[data-gmail-forget]")) { if (confirm("Forget the Gmail script on this device? (Archive its deployment in Apps Script to stop it entirely.)")) { gmail.forget(); render(); } return; }
     if (at("[data-export]")) {
       const file = new Blob([JSON.stringify(exportFile(data), null, 1)], { type: "application/json" });
-      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(file), download: `jet-trips-${localDay()}.json` });
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(file), download: `kos-trips-${localDay()}.json` });
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
       return;
     }
@@ -680,8 +708,8 @@ app.addEventListener("click", async (ev) => {
     if (at("button[data-source]")) { source = at("button[data-source]").dataset.source; draft = null; tabSwitch = true; await render(); tabSwitch = false; return; }   // the source tabs (the form has a data-source too)
     if (at("[data-read-paste]")) { await readText(document.getElementById("pasteText").value, "paste"); return; }
     if (at("[data-scan]")) {
-      try { sessionStorage.setItem("minty.jet.scan", JSON.stringify({ trip: route().q.get("trip") ? Number(route().q.get("trip")) : null })); } catch { /* private window */ }
-      location.href = "/sub-scan?for=jet"; return;
+      try { sessionStorage.setItem("minty.kos.scan", JSON.stringify({ trip: route().q.get("trip") ? Number(route().q.get("trip")) : null })); } catch { /* private window */ }
+      location.href = "/sub-scan?for=kos"; return;
     }
     if (at("[data-use]")) {
       const b = found[Number(at("[data-use]").dataset.use)], tripId = Number(app.querySelector("[name=trip_id]")?.value) || null;
@@ -743,7 +771,7 @@ app.addEventListener("change", async (ev) => {
   }
   if (t.id === "pdfFile" && t.files.length) {
     const { readPdfs } = await import("/pdf-read.js");
-    const { rows } = await readPdfs(t.files, { view: "jet", known: async () => [], parse: (text) => ({ text }), max: 1 });
+    const { rows } = await readPdfs(t.files, { view: "kos", known: async () => [], parse: (text) => ({ text }), max: 1 });
     if (!rows[0] || rows[0].error) { document.getElementById("suggestBox").innerHTML = `<div class="suggest err">${esc(rows[0]?.error ?? "Couldn't read this PDF")}</div>`; return; }
     await readText(rows[0].text, "pdf");
     found = found.map((b) => ({ ...b, sha256: rows[0].sha }));
@@ -785,7 +813,7 @@ window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); }
 document.getElementById("themeBtn").addEventListener("click", () => {
   const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
   document.documentElement.dataset.theme = next;
-  try { localStorage.setItem("jet-theme", next); } catch { /* not remembered */ }
+  try { localStorage.setItem("kos-theme", next); } catch { /* not remembered */ }
   const { parts } = route();
   if (parts[0] === "trip" && parts[1] && parts[2] !== "edit") { mapKey = ""; showMap(tripById(Number(parts[1])), parts[2] ?? ""); }
 });
@@ -793,5 +821,8 @@ if (MODE === "device") {
   document.getElementById("mintyLink").hidden = true;
   keepData();                                              // ask the browser to keep the trips when space runs low
 }
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("/jet/sw.js", { scope: "/jet/" }).catch(() => {});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/kos/sw.js", { scope: "/kos/" }).catch(() => {});
+// Kos was JET, at /jet/ (which now redirects here): its service worker and caches go.
+navigator.serviceWorker?.getRegistrations?.().then((rs) => rs.filter((r) => new URL(r.scope).pathname === "/jet/").forEach((r) => r.unregister())).catch(() => {});
+globalThis.caches?.keys().then((ks) => ks.filter((k) => k.startsWith("jet-")).forEach((k) => caches.delete(k))).catch(() => {});
 render();

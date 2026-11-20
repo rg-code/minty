@@ -1,8 +1,8 @@
-// JET T0 (docs/trips.md §2.1): does Cloudflare Access let a service token through to Minty? Run it in
+// Kos T0 (docs/trips.md §2.1): does Cloudflare Access let a service token through to Minty? Run it in
 // YOUR terminal, after making the token and its Service Auth policy on Minty's Access application:
 //
 //   MINTY_URL=https://minty.example.workers.dev ACCESS_CLIENT_ID=... ACCESS_CLIENT_SECRET=... \
-//   node scripts/jet-t0/access.ts
+//   node scripts/kos-t0/access.ts
 //
 // It asks for /healthz (the one path the Worker answers without a person's login) with the token,
 // and says whether Access passed it on or sent it to the sign-in page. No keys are printed.

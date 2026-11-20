@@ -1,6 +1,6 @@
 # Plan: security hardening after the 2026-10-14 review
 
-**Status: decisions made (2026-10-14, §2); steps 1–4 done (step 4 enforced 2026-10-16); step 5 in progress (5a done). To-do list: §4. §5 (2026-11-06, proposed): the owner's MCP Worker, the first paths reachable without Access. §6 (approved 2026-11-19): JET's inbox route for one Access service token. §7 (approved 2026-11-19): JET's Gmail pull.** Written 2026-10-14.
+**Status: decisions made (2026-10-14, §2); steps 1–4 done (step 4 enforced 2026-10-16); step 5 in progress (5a done). To-do list: §4. §5 (2026-11-06, proposed): the owner's MCP Worker, the first paths reachable without Access. §6 (approved 2026-11-19): Kos's inbox route for one Access service token. §7 (approved 2026-11-19): Kos's Gmail pull.** Written 2026-10-14.
 
 An external review of `main` at 183d15b (API, pages, encryption, migrations, workflows, tests)
 found no unauthenticated path to financial data. Its main risks were how updates reach a
@@ -274,12 +274,12 @@ are never reachable from the MCP Worker: it has no `TOKEN_ENC_KEY`.
 
 **To-do:** agent-plan §12.8 (M0 holds the approvals).
 
-## 6. JET's inbox: one route for one service token (approved by the owner, 2026-11-19)
+## 6. Kos's inbox: one route for one service token (approved by the owner, 2026-11-19)
 
 The design is [trips.md](trips.md) §2.1. (Numbered 6 to leave §5 to the MCP Worker's proposal.)
 
 **The change.** Today every API route needs a person: the Access JWT must carry an email, and the
-email must pass `ALLOWED_LOGINS`. JET's Gmail script runs on Google's servers, which can't sign in
+email must pass `ALLOWED_LOGINS`. Kos's Gmail script runs on Google's servers, which can't sign in
 as a person, so **one route, `POST /inbox`, also accepts one Cloudflare Access service token**:
 - **Access checks the token first.** A Service Auth policy on Minty's Access application admits it,
   and Access signs a JWT for it, as for a person.
@@ -315,11 +315,11 @@ could be read or changed. Delete the token in Zero Trust and make a new one.
 **Rule update (with T2):** CLAUDE.md's Auth rule gains this one exception, worded as above.
 
 
-## 7. JET's Gmail pull: the person's own script, asked from the browser (approved by the owner, 2026-11-19)
+## 7. Kos's Gmail pull: the person's own script, asked from the browser (approved by the owner, 2026-11-19)
 
 The design is [trips.md](trips.md) §17.1. Minty's Worker, Access and D1 are unchanged. What's new:
 - **a web app in the person's Gmail** that reads one label;
-- **two hosts in `/jet/*`'s `connect-src`:** `script.google.com` and `script.googleusercontent.com`.
+- **two hosts in `/kos/*`'s `connect-src`:** `script.google.com` and `script.googleusercontent.com`.
 
 **The exposure:**
 - The script is deployed for "Anyone", so its URL needs no Google sign-in.

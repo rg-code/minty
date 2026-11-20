@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { call, getJson } from "./helpers";
 import { refreshTotals } from "../src/audit/totals";
 
-// JET, trips (docs/trips.md): trips, bookings, reading an email file, and a trip's transactions.
+// Kos, trips (docs/trips.md): trips, bookings, reading an email file, and a trip's transactions.
 const db = env.DB;
 const send = (method: string, path: string, body?: unknown) =>
   getJson<any>(path, { method, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -12,7 +12,7 @@ const rows = async (sql: string, ...b: unknown[]) => (await db.prepare(sql).bind
 let card = 0, checking = 0;
 beforeEach(async () => {
   await db.batch(["trip_transactions", "trip_items", "trips", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
-  const item = (await db.prepare(`INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, institution_name) VALUES ('me', 'me_primary', 'i-jet', 'x', 'Chase') RETURNING id`).first<{ id: number }>())!.id;
+  const item = (await db.prepare(`INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, institution_name) VALUES ('me', 'me_primary', 'i-kos', 'x', 'Chase') RETURNING id`).first<{ id: number }>())!.id;
   const acct = (pid: string, name: string, type: string) => db.prepare(`INSERT INTO accounts (owner, item_id, plaid_account_id, name, type, subtype, mask) VALUES ('me', ?, ?, ?, ?, ?, '1234') RETURNING id`)
     .bind(item, pid, name, type, type === "credit" ? "credit card" : "checking").first<{ id: number }>();
   card = (await acct("p-card", "Sapphire", "credit"))!.id;

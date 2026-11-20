@@ -76,8 +76,8 @@ const og = ogImage ? `
 <meta name="twitter:card" content="summary_large_image" />` : "";
 edit("demo script first", /^<head>$/m, `<head>\n<meta name="robots" content="noindex" />${og}\n<script src="demo.js"></script>`);
 edit("no manifest", /<link rel="manifest"[^>]*>\n?/, "");
-edit("JET in the demo", `<a href="/jet/" title=`, `<a href="jet/" data-goatcounter-click="minty-demo-jet" title=`);   // JET runs on the demo's data too (below)
-editIn("app.js", "a trip opens the demo's JET", "/jet/#/trip/", "jet/#/trip/");
+edit("Kos in the demo", `<a href="/kos/" title=`, `<a href="kos/" data-goatcounter-click="minty-demo-kos" title=`);   // Kos runs on the demo's data too (below)
+editIn("app.js", "a trip opens the demo's Kos", "/kos/#/trip/", "kos/#/trip/");
 edit("no device lock", '<link rel="stylesheet" href="/lock.css" />\n<script src="/lock.js"></script>\n', "");   // demo visitors are never asked for Face ID
 editIn("app.js", "no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});`, "// the demo registers no service worker");
 // SUB's screenshot reader is its own page with Tesseract (7 MB), which the demo leaves out: paste and PDFs still work.
@@ -104,41 +104,41 @@ await copyFile(join(root, "demo/demo.css"), join(out, "demo.css"));
 await mkdir(join(out, "vendor/pdfjs"), { recursive: true });
 for (const f of ["pdf.min.mjs", "pdf.worker.min.mjs", "LICENSE"]) await copyFile(join(root, "public/vendor/pdfjs", f), join(out, "vendor/pdfjs", f));
 
-// JET (public/jet/, docs/trips.md) on the demo's data, at jet/: its pages from the demo's folder
-// (relative paths, so the landing site's own /jet/, JET on its own, is never what loads), its API
+// Kos (public/kos/, docs/trips.md) on the demo's data, at kos/: its pages from the demo's folder
+// (relative paths, so the landing site's own /kos/, Kos on its own, is never what loads), its API
 // calls to the Worker in the page (demo.js runs first), as on a Minty. A new page load starts the
 // demo's data afresh, as the dashboard does. No service worker, install or device lock; Gmail pull
-// and the screenshot reader need a real JET, so their tabs go. Each edit is checked, as above.
-const jetFiles = {};
-for (const f of ["index.html", "jet.js", "map.js"]) jetFiles[f] = await readFile(join(root, "public/jet", f), "utf8");
-const editJet = (file, what, from, to, count = 1) => {
-  const text = jetFiles[file];
+// and the screenshot reader need a real Kos, so their tabs go. Each edit is checked, as above.
+const kosFiles = {};
+for (const f of ["index.html", "kos.js", "map.js"]) kosFiles[f] = await readFile(join(root, "public/kos", f), "utf8");
+const editKos = (file, what, from, to, count = 1) => {
+  const text = kosFiles[file];
   const n = typeof from === "string" ? text.split(from).length - 1 : (text.match(from) ?? []).length;
-  if (count === "some" ? n < 1 : n !== count) throw new Error(`build-demo: JET "${what}" matched ${n} times in public/jet/${file} (expected ${count})`);
-  jetFiles[file] = typeof from === "string" ? text.replaceAll(from, to) : text.replace(from, to);
+  if (count === "some" ? n < 1 : n !== count) throw new Error(`build-demo: Kos "${what}" matched ${n} times in public/kos/${file} (expected ${count})`);
+  kosFiles[file] = typeof from === "string" ? text.replaceAll(from, to) : text.replace(from, to);
 };
-editJet("index.html", "title", "<title>JET</title>", "<title>JET demo</title>");
-editJet("index.html", "demo script first", /^<head>$/m, `<head>\n<meta name="robots" content="noindex" />\n<script src="../demo.js"></script>`);
-editJet("index.html", "no manifest", /<link rel="manifest"[^>]*>\n/, "");
-editJet("index.html", "no device lock", '<link rel="stylesheet" href="/lock.css" />\n<script src="/lock.js"></script>\n', "");
-editJet("index.html", "the map library from the demo", /"\/vendor\/maplibre\//g, '"../vendor/maplibre/', 2);
-editJet("index.html", "JET's own files, relative", /"\/jet\//g, '"', "some");
-editJet("index.html", "back to the demo's dashboard", 'id="mintyLink" href="/"', 'id="mintyLink" href="../" title="The demo\'s dashboard"');
-editJet("index.html", "demo styles", /^<\/head>$/m, `<link rel="stylesheet" href="../demo.css" />\n</head>`);
-if (goatcounter) editJet("index.html", "GoatCounter", /^<\/body>$/m, GOATCOUNTER);
-if (/(href|src)="\/[a-z]/.test(jetFiles["index.html"])) throw new Error(`build-demo: an absolute path is left in JET's page: ${jetFiles["index.html"].match(/(href|src)="\/[^"]*"/)[0]}`);
-editJet("jet.js", "no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/jet/sw.js", { scope: "/jet/" }).catch(() => {});`, "// the demo registers no service worker");
-editJet("jet.js", "no Gmail tab", `["gmail", "Gmail"], `, "");
-editJet("jet.js", "no screenshot tab", `["shot", "Screenshot"], `, "");
-editJet("jet.js", "pdf.js from the demo", `import("/pdf-read.js")`, `import("../pdf-read.js")`, 2);
-editJet("jet.js", "Open in Minty: the demo's dashboard", `href="/?trip=`, `href="../?trip=`);
-editJet("map.js", "airports, relative", `"/jet/airports.json"`, `"airports.json"`);
-editJet("map.js", "the map's worker from the demo", `"/vendor/maplibre/maplibre-gl-csp-worker.js"`, `"../vendor/maplibre/maplibre-gl-csp-worker.js"`);
-await mkdir(join(out, "jet"), { recursive: true });
-for (const f of await readdir(join(root, "public/jet"))) {
+editKos("index.html", "title", "<title>Kos</title>", "<title>Kos demo</title>");
+editKos("index.html", "demo script first", /^<head>$/m, `<head>\n<meta name="robots" content="noindex" />\n<script src="../demo.js"></script>`);
+editKos("index.html", "no manifest", /<link rel="manifest"[^>]*>\n/, "");
+editKos("index.html", "no device lock", '<link rel="stylesheet" href="/lock.css" />\n<script src="/lock.js"></script>\n', "");
+editKos("index.html", "the map library from the demo", /"\/vendor\/maplibre\//g, '"../vendor/maplibre/', 2);
+editKos("index.html", "Kos's own files, relative", /"\/kos\//g, '"', "some");
+editKos("index.html", "back to the demo's dashboard", 'id="mintyLink" href="/"', 'id="mintyLink" href="../" title="The demo\'s dashboard"');
+editKos("index.html", "demo styles", /^<\/head>$/m, `<link rel="stylesheet" href="../demo.css" />\n</head>`);
+if (goatcounter) editKos("index.html", "GoatCounter", /^<\/body>$/m, GOATCOUNTER);
+if (/(href|src)="\/[a-z]/.test(kosFiles["index.html"])) throw new Error(`build-demo: an absolute path is left in Kos's page: ${kosFiles["index.html"].match(/(href|src)="\/[^"]*"/)[0]}`);
+editKos("kos.js", "no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/kos/sw.js", { scope: "/kos/" }).catch(() => {});`, "// the demo registers no service worker");
+editKos("kos.js", "no Gmail tab", `["gmail", "Gmail"], `, "");
+editKos("kos.js", "no screenshot tab", `["shot", "Screenshot"], `, "");
+editKos("kos.js", "pdf.js from the demo", `import("/pdf-read.js")`, `import("../pdf-read.js")`, 2);
+editKos("kos.js", "Open in Minty: the demo's dashboard", `href="/?trip=`, `href="../?trip=`);
+editKos("map.js", "airports, relative", `"/kos/airports.json"`, `"airports.json"`);
+editKos("map.js", "the map's worker from the demo", `"/vendor/maplibre/maplibre-gl-csp-worker.js"`, `"../vendor/maplibre/maplibre-gl-csp-worker.js"`);
+await mkdir(join(out, "kos"), { recursive: true });
+for (const f of await readdir(join(root, "public/kos"))) {
   if (["sw.js", "manifest.webmanifest"].includes(f)) continue;
-  if (jetFiles[f] !== undefined) await writeFile(join(out, "jet", f), jetFiles[f]);
-  else await copyFile(join(root, "public/jet", f), join(out, "jet", f));
+  if (kosFiles[f] !== undefined) await writeFile(join(out, "kos", f), kosFiles[f]);
+  else await copyFile(join(root, "public/kos", f), join(out, "kos", f));
 }
 await mkdir(join(out, "vendor/maplibre"), { recursive: true });
 for (const f of await readdir(join(root, "public/vendor/maplibre"))) await copyFile(join(root, "public/vendor/maplibre", f), join(out, "vendor/maplibre", f));

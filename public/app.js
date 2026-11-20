@@ -51,7 +51,7 @@ new ResizeObserver(() => placeOwnerThumb()).observe(document.getElementById("own
 const PAGE = 500;
 let loaded = [], hasMore = false, loadSeq = 0;
 
-// /?trip=ID: one JET trip's transactions (JET's "Open in Minty", docs/trips.md §6)
+// /?trip=ID: one Kos trip's transactions (Kos's "Open in Minty", docs/trips.md §6)
 const TRIP = /^\d+$/.test(new URLSearchParams(location.search).get("trip") ?? "") ? new URLSearchParams(location.search).get("trip") : null;
 async function load(more = false) {
   const seq = ++loadSeq;
@@ -380,7 +380,7 @@ function render(txns) {
     !txns.length ? "no transactions"
     : hasMore ? `latest ${txns.length.toLocaleString()} transactions`
     : `${txns.length.toLocaleString()} transaction${txns.length === 1 ? "" : "s"}`;
-  if (TRIP) document.getElementById("count").insertAdjacentHTML("beforeend", ` · one JET trip (<a href="/jet/#/trip/${TRIP}">open in JET</a> · <a href="/">show all</a>)`);
+  if (TRIP) document.getElementById("count").insertAdjacentHTML("beforeend", ` · one Kos trip (<a href="/kos/#/trip/${TRIP}">open in Kos</a> · <a href="/">show all</a>)`);
   renderTotals(txns);
 
   const feed = document.getElementById("feed");

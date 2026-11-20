@@ -1,8 +1,8 @@
-/** A small MIME reader for forwarded booking and bill emails (JET, docs/trips.md §3). It reads what
- * JET needs from a raw message: the headers, the text and HTML parts (decoded from base64 or
+/** A small MIME reader for forwarded booking and bill emails (Kos, docs/trips.md §3). It reads what
+ * Kos needs from a raw message: the headers, the text and HTML parts (decoded from base64 or
  * quoted-printable, in their charset), and the attachments' names, types and bytes. It doesn't
  * follow links, load anything, or run anything in the message. Pure, with no imports, so the T0
- * scripts (scripts/jet-t0/) run it in Node too. */
+ * scripts (scripts/kos-t0/) run it in Node too. */
 
 export interface Part { headers: Record<string, string>; contentType: string; params: Record<string, string>; body: Uint8Array }
 export interface Attachment { filename: string | null; contentType: string; size: number; content: Uint8Array }
@@ -104,7 +104,7 @@ export function parts(raw: string, depth = 0): Part[] {
 
 const addresses = (v: string | undefined) => (v ?? "").split(/[,\n]/).map((a) => (/<([^>]+)>/.exec(a)?.[1] ?? a).trim().toLowerCase()).filter((a) => a.includes("@"));
 
-/** A raw message (as Gmail's "Show original" or an Email Worker gives it) read for JET. `raw` is the
+/** A raw message (as Gmail's "Show original" or an Email Worker gives it) read for Kos. `raw` is the
  * message as a "binary string" (one char per byte), which is what both deliver. */
 export function readMessage(raw: string): Message {
   const { headers } = split(raw);

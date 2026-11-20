@@ -1,7 +1,7 @@
-// JET's map (docs/trips.md §13): MapLibre GL (vendored, its CSP build: public/vendor/maplibre/) on
+// Kos's map (docs/trips.md §13): MapLibre GL (vendored, its CSP build: public/vendor/maplibre/) on
 // OpenFreeMap's tiles, recoloured at night (map-style.js, GRAZE's palette). Flights are great-circle
 // arcs between airports (airports.json, from OurAirports, public domain); places with coordinates
-// are pins. Tiles, the style and its fonts come from tiles.openfreemap.org, which the /jet/ page's
+// are pins. Tiles, the style and its fonts come from tiles.openfreemap.org, which the /kos/ page's
 // policy allows (public/_headers); nothing else is loaded from another host.
 import { LIBERTY_STYLE, nightStyle } from "./map-style.js";
 
@@ -16,7 +16,7 @@ export function latinLabels(style) {
 
 let airports = null;
 export async function loadAirports() {
-  airports ??= fetch("/jet/airports.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+  airports ??= fetch("/kos/airports.json").then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
   return airports;
 }
 
@@ -84,23 +84,23 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
   ] };
   const points = { type: "FeatureCollection", features: pins.map((p) => ({ type: "Feature", properties: { id: p.id ?? "", kind: p.kind, label: p.label ?? "", color: p.color ?? KIND_COLOR[p.kind] ?? KIND_COLOR.other },
     geometry: { type: "Point", coordinates: [p.lon, p.lat] } })) };
-  for (const [id, data] of [["jet-lines", lines], ["jet-pins", points]]) {
+  for (const [id, data] of [["kos-lines", lines], ["kos-pins", points]]) {
     if (map.getSource(id)) map.getSource(id).setData(data); else map.addSource(id, { type: "geojson", data });
   }
-  if (!map.getLayer("jet-arcs")) {
-    map.addLayer({ id: "jet-paths", type: "line", source: "jet-lines", filter: ["==", ["get", "kind"], "path"],
+  if (!map.getLayer("kos-arcs")) {
+    map.addLayer({ id: "kos-paths", type: "line", source: "kos-lines", filter: ["==", ["get", "kind"], "path"],
                    paint: { "line-color": ["get", "color"], "line-width": 3, "line-opacity": 0.8 }, layout: { "line-cap": "round", "line-join": "round" } });
-    map.addLayer({ id: "jet-arcs", type: "line", source: "jet-lines", filter: ["==", ["get", "kind"], "flight"],
+    map.addLayer({ id: "kos-arcs", type: "line", source: "kos-lines", filter: ["==", ["get", "kind"], "flight"],
                    paint: { "line-color": KIND_COLOR.flight, "line-width": 2.5, "line-dasharray": [2, 1.5] }, layout: { "line-cap": "round" } });
     // Flighty's glow under the flight arcs
-    map.addLayer({ id: "jet-arcs-glow", type: "line", source: "jet-lines", filter: ["==", ["get", "kind"], "flight"],
-                   paint: { "line-color": KIND_COLOR.flight, "line-width": 8, "line-blur": 6, "line-opacity": 0.45 } }, "jet-arcs");
-    map.addLayer({ id: "jet-pins", type: "circle", source: "jet-pins",
+    map.addLayer({ id: "kos-arcs-glow", type: "line", source: "kos-lines", filter: ["==", ["get", "kind"], "flight"],
+                   paint: { "line-color": KIND_COLOR.flight, "line-width": 8, "line-blur": 6, "line-opacity": 0.45 } }, "kos-arcs");
+    map.addLayer({ id: "kos-pins", type: "circle", source: "kos-pins",
                    paint: { "circle-radius": 7, "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
-    map.addLayer({ id: "jet-labels", type: "symbol", source: "jet-pins", minzoom: 3,
+    map.addLayer({ id: "kos-labels", type: "symbol", source: "kos-pins", minzoom: 3,
                    layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 12, "text-offset": [0, 1.2], "text-anchor": "top", "text-optional": true },
                    paint: { "text-color": dark ? "#eef1f8" : "#11162a", "text-halo-color": dark ? "#0b1020" : "#ffffff", "text-halo-width": 1.6 } });
-    for (const layer of ["jet-pins", "jet-arcs"]) {
+    for (const layer of ["kos-pins", "kos-arcs"]) {
       map.on("click", layer, (e) => { const id = e.features?.[0]?.properties?.id; if (id && onPick) onPick(String(id)); });
       map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });

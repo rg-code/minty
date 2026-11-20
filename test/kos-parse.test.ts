@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { dates, parseBookings, times } from "../public/jet/jet-parse.js";
+import { dates, parseBookings, times } from "../public/kos/kos-parse.js";
 
-// Reading bookings from pasted, PDF or screenshot text (public/jet/jet-parse.js). Made-up texts.
+// Reading bookings from pasted, PDF or screenshot text (public/kos/kos-parse.js). Made-up texts.
 describe("dates and times", () => {
   it("in their usual forms, in order", () => {
     expect(dates("Wed, Mar 10, 2027 and 15 March 2027 then 2027-03-20, also Apr 2", 2027).map((d) => d.date))

@@ -1,18 +1,18 @@
-// JET T0 (docs/trips.md §11): how well Minty reads your own booking emails, and how long it takes.
+// Kos T0 (docs/trips.md §11): how well Minty reads your own booking emails, and how long it takes.
 // Export ~20 confirmation emails as .eml files (Gmail: open the email → ⋮ → Download message) into a
 // folder OUTSIDE this repo, then run:
 //
-//   node scripts/jet-t0/parse.ts ~/jet-emails
+//   node scripts/kos-t0/parse.ts ~/kos-emails
 //
 // It prints, for each file, what was found (kinds, which fields) and the time to read it, then a
 // summary. Nothing is saved or sent anywhere; paste the summary (not the emails) back to Claude.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { readMessage, viewOf } from "../../src/jet/mime.ts";
-import { reservations } from "../../src/jet/reservations.ts";
+import { readMessage, viewOf } from "../../src/kos/mime.ts";
+import { reservations } from "../../src/kos/reservations.ts";
 
 const dir = process.argv[2];
-if (!dir) { console.error("usage: node scripts/jet-t0/parse.ts <folder of .eml files>"); process.exit(1); }
+if (!dir) { console.error("usage: node scripts/kos-t0/parse.ts <folder of .eml files>"); process.exit(1); }
 const files = readdirSync(dir).filter((f) => /\.eml$/i.test(f)).sort();
 if (!files.length) { console.error(`no .eml files in ${dir}`); process.exit(1); }
 

@@ -147,7 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.body.prepend(strip);
 
   const abc = document.getElementById("abcOpen");
-  if (!abc) return;                                    // JET's page (jet/): the strip only
+  if (!abc) return;                                    // Kos's page (kos/): the strip only
   const btn = document.createElement("button");
   Object.assign(btn, { type: "button", className: "pill", id: "mcpOpen", title: "MCP / AI connector: ask about your money from an AI assistant (coming soon)" });
   btn.setAttribute("aria-haspopup", "dialog");
