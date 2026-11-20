@@ -663,6 +663,9 @@ Kos's own:
 #014147, inside the safe zone) and `apple-touch-icon.png`, all made from the owner's 1254 px image.
 The old SVG is gone.
 
+**The trip list ends like the first screen** (on its own only): Support Kos (Ko-fi, Star Minty on GitHub), the
+other rg-code projects and the © line, the same markup (`supportHtml`, `alsoFromHtml`, `copyHtml`).
+
 ### 17.5 Backups, and the theme (owner, 2026-11-20)
 
 - **The reminder:** on Kos on its own, when there are trips of one's own (not only the sample's) and
@@ -895,6 +898,16 @@ page asks for it (optional, kept on this device); until then the trip shows just
 - **Still a tap to add:** a mistyped code, or someone else's mail, never adds anything by itself.
 - **A script made before this** reads only the label; Kos says to copy it again and deploy a new version.
 
+### 21.1 Which trip, when it wasn't sent to one (owner, 2026-11-20)
+
+A booking from the Kos label (or pasted, a PDF, an email file) goes in the one trip whose dates cover
+its date, or the trip starting the next day (the flight out the night before): `tripFor` in `store.js`.
+When two trips fit, or none, it waits for the person to pick, as before. A trip's own address wins over
+the dates, and the trip being added to (its Add page) wins over them too. Still a tap to add.
+
+Under the trip's address the summary says so: Kos works this out from the dates, so forwarding to Kos is
+enough, and the address is for filing one there for certain (overlapping trips, dates Kos can't read).
+
 **On a Minty's inbox (T2, to come):** `+mintytrips` and `+mintybills` as planned, and a trip's
 `+<code>` files into that trip.
 
@@ -934,11 +947,20 @@ page asks for it (optional, kept on this device); until then the trip shows just
   itself. The link is taken out of the address bar, a link can't unpack into more than 256 KB, and
   everything in it is checked like an import. Shared to Kos on Android, a link opens the same preview.
 - **On a Minty,** the link opens Kos on its own (the household's /kos/ is behind Access); someone with a
-  Minty pastes it on Your data (Add a shared trip). **Download file** saves the same trip as a file.
+  Minty pastes it on Your data (Add a shared trip), or on **New trip** (above the form: "Someone shared a trip?"). **Download file** saves the same trip as a file.
+- **Before adding,** the link opens the whole trip as its page would show it: the cover (with its city photo), the
+  map and the plan day by day, read-only (a tap shows a place on the map). **Add this trip** and **Not now** sit on top.
 
-## 24. Send a trip to the Kos developers (owner, 2026-11-20)
+## 24. Share a trip with the Kos team (owner, 2026-11-20)
 
-- **"Send it to the Kos developers"** (a line under a trip's plan, and on its Share page) opens a short
+**Why** (the owner): people share trips with the Kos team (the owner) to have them **featured** (a demo
+or sample trip, a catalog of trips), or as a **bug report**. The page asks which: "Feature it" (the
+email then says, as the person's permission, that Kos may use the trip as a sample trip or in a
+catalog, with its dates moved and nothing personal; subject "Kos trip to feature: …") or "Something's
+wrong" (subject "Kos trip with a problem: …"). Below, what was first built as "Send to the Kos developers":
+
+
+- **"Share it with the Kos team"** (a line under a trip's plan, and on its Share page) opens a short
   page on Kos on its own with the trip in the link (its share string, never with confirmation numbers,
   prices or guests). It shows what goes, takes an optional note, and **Open email** starts an email in
   the person's own mail app (`mailto:`): to the developers' address, "Kos trip: <name>", with the note and

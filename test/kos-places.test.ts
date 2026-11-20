@@ -95,11 +95,18 @@ describe("send to the Kos developers (a mailto: from the person's own mail app)"
     const u = new URL(m.href);
     expect(u.protocol).toBe("mailto:");
     expect(u.pathname).toBe("kos-reports@example.com");
-    expect(u.searchParams.get("subject")).toBe("Kos trip: Tokyo");
+    expect(u.searchParams.get("subject")).toBe("Kos trip with a problem: Tokyo");
     const body = u.searchParams.get("body")!;
     expect(body.startsWith("The check-out day is wrong.")).toBe(true);
     expect(body).toContain("Open it in Kos: https://minty.milesmaximizer.com/kos/#/import?t=1.abc");
     expect(m.tooLong).toBe(false);
+  });
+  it("to be featured: its own subject, and the person's permission written in", () => {
+    const m = reportMail({ to: "kos-reports@example.com", trip, link: "https://minty.milesmaximizer.com/kos/#/import?t=1.abc", why: "feature" });
+    const u = new URL(m.href);
+    expect(u.searchParams.get("subject")).toBe("Kos trip to feature: Tokyo");
+    expect(u.searchParams.get("body")).toContain("You may feature this trip in Kos");
+    expect(new URL(reportMail({ to: "a@b.co", trip, link: "x" }).href).searchParams.get("subject")).toBe("Kos trip with a problem: Tokyo");
   });
   it("leaves out a link too long for some mail apps, and says to paste it", () => {
     const m = reportMail({ to: "kos-reports@example.com", trip, link: `https://minty.milesmaximizer.com/kos/#/import?t=1.${"a".repeat(3000)}` });

@@ -123,6 +123,19 @@ export const isWikimediaImage = (u) => /^https:\/\/(upload|thumb)\.wikimedia\.or
 // --- backups (Kos on its own, docs/trips.md §17.5): when to remind ------------------------------------
 /** Whether to show the backup reminder: trips of one's own, last backed up (or, never, the oldest of
  * them made) more than 30 days ago, and not snoozed. Times in ms. */
+/** The trip a booking on `day` (YYYY-MM-DD) belongs to, from the trips' dates: the one trip that covers it,
+ * else the one starting the next day (the flight out the night before). Two trips that both fit: none, the
+ * person picks (docs/trips.md §21.1). */
+export function tripFor(day, trips) {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(day ?? "")) return null;
+  day = day.slice(0, 10);
+  const inside = trips.filter((t) => t.start_date <= day && day <= t.end_date);
+  if (inside.length) return inside.length === 1 ? inside[0] : null;
+  const next = new Date(day + "T00:00:00Z"); next.setUTCDate(next.getUTCDate() + 1);
+  const eve = trips.filter((t) => t.start_date === next.toISOString().slice(0, 10));
+  return eve.length === 1 ? eve[0] : null;
+}
+
 export function backupDue({ now, backedUp, oldestOwn, snoozedUntil }) {
   if (!oldestOwn) return false;
   if (snoozedUntil && now < snoozedUntil) return false;
@@ -159,13 +172,17 @@ export async function shareString(t, { withPrivate = false } = {}) {
   return `1.${b64u(await pipe(new TextEncoder().encode(JSON.stringify(data)), new CompressionStream("deflate-raw")))}`;
 }
 export const shareLink = (str) => `${SHARE_BASE}#/import?t=${str}`;
-/** "Send to the Kos developers" (docs/trips.md §24): an email for the person's own mail app (mailto:, no
- * server), to the address the landing site's build gives Kos on its own. The trip goes as its share link
- * (never with confirmation numbers, prices or guests). Some mail apps cut a mailto past about 2,000
- * characters: then the link is left out (`tooLong`) and the page copies it for the person to paste. */
-export function reportMail({ to, trip, link, note = "" }) {
-  const subject = `Kos trip: ${trip.name}`;
-  const lines = (withLink) => [note.trim() || "(What's wrong, or what Kos should have read differently?)", "",
+/** "Share with the Kos team" (docs/trips.md §24): an email for the person's own mail app (mailto:, no
+ * server), to the address the landing site's build gives Kos on its own. `why`: "feature" (the team may
+ * use it, dates moved and nothing personal, as a sample trip or in a catalog; the email says so, as the
+ * person's permission) or "problem" (a bug report). The trip goes as its share link (never with
+ * confirmation numbers, prices or guests). Some mail apps cut a mailto past about 2,000 characters: then
+ * the link is left out (`tooLong`) and the page copies it for the person to paste. */
+export function reportMail({ to, trip, link, note = "", why = "problem" }) {
+  const feature = why === "feature";
+  const subject = `${feature ? "Kos trip to feature" : "Kos trip with a problem"}: ${trip.name}`;
+  const lines = (withLink) => [note.trim() || (feature ? "(Anything about the trip worth knowing?)" : "(What's wrong, or what should Kos have read differently?)"), "",
+    ...(feature ? ["You may feature this trip in Kos (as a sample trip or in a catalog), with its dates moved and nothing personal.", ""] : []),
     `Trip: ${trip.name}, ${trip.start_date} to ${trip.end_date}${trip.place ? `, ${trip.place}` : ""}`,
     withLink ? `Open it in Kos: ${link}` : "The trip's link is copied: paste it here.", "", "Sent from Kos (minty.milesmaximizer.com/kos/)"].join("\n");
   const href = (withLink) => `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines(withLink))}`;

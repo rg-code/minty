@@ -109,6 +109,17 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
     expect(tripAddress("k7f3x9p2ad", "ourminty+kos@gmail.com")).toBe("ourminty+k7f3x9p2ad@gmail.com");   // its own + replaced
     expect(tripAddress("k7f3x9p2ad", "")).toBe("+k7f3x9p2ad");
   });
+  it("a booking with no trip address goes in the one trip its dates fall in (§21.1)", async () => {
+    const { tripFor } = await import("../public/kos/store.js");
+    const lisbon = { id: 1, start_date: "2027-03-10", end_date: "2027-03-15" }, tokyo = { id: 2, start_date: "2027-04-02", end_date: "2027-04-09" };
+    const trips = [lisbon, tokyo];
+    expect(tripFor("2027-03-12T19:30", trips)).toBe(lisbon);
+    expect(tripFor("2027-03-15", trips)).toBe(lisbon);                 // the last day
+    expect(tripFor("2027-04-01T22:10", trips)).toBe(tokyo);            // the flight out the night before
+    expect(tripFor("2027-03-20", trips)).toBeNull();                   // between trips: waits for one
+    expect(tripFor(null, trips)).toBeNull();
+    expect(tripFor("2027-03-12", [...trips, { id: 3, start_date: "2027-03-11", end_date: "2027-03-13" }])).toBeNull();   // overlapping: the person picks
+  });
   it("the Gmail script reads the label or a trip's address, says which trip, and checks the codes it's given", async () => {
     const g = await import("../public/kos/gmail.js");
     const code = g.script(g.newKey());
