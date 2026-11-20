@@ -936,3 +936,23 @@ page asks for it (optional, kept on this device); until then the trip shows just
 - **On a Minty,** the link opens Kos on its own (the household's /kos/ is behind Access); someone with a
   Minty pastes it on Your data (Add a shared trip). **Download file** saves the same trip as a file.
 
+## 24. Send a trip to the Kos developers (owner, 2026-11-20)
+
+- **"Send it to the Kos developers"** (a line under a trip's plan, and on its Share page) opens a short
+  page on Kos on its own with the trip in the link (its share string, never with confirmation numbers,
+  prices or guests). It shows what goes, takes an optional note, and **Open email** starts an email in
+  the person's own mail app (`mailto:`): to the developers' address, "Kos trip: <name>", with the note and
+  the trip's link written in. Nothing is sent until they send it, and Kos has no email server.
+- **The address** is a Cloudflare Email Routing alias on the owner's domain (forwarding to them), given
+  only to the landing site's build (`scripts/build-kos.mjs --report-to …`, in minty-site's deploy.mjs),
+  which writes `kos/report-to.js`. It never goes in this public repo, so from a Minty (or a fork) the
+  button opens the landing site's Kos, which knows it.
+- **Long trips:** some mail apps cut a `mailto:` past about 2,000 characters; then the email leaves the
+  link out and Kos copies it for the person to paste (`reportMail` in `store.js`).
+- **The developer** opens the link in any Kos to see the trip as the person did.
+
+**The first screen's lights** (owner, 2026-11-20): one teal and saffron pair in each of three places
+down the page (behind the headline, beside the sample flight, behind the set-up), each breathing
+(brighter and a touch larger, then dimmer and smaller), out of step with the others; sized in px and
+placed so each fades out inside its own section; still for reduced motion.
+

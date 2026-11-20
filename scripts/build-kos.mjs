@@ -3,7 +3,7 @@
 // browser (IndexedDB) instead of Minty's API. Builds it as static files for any host, laid out as
 // served (the site's root holds /kos/ and the shared files Kos loads by absolute path):
 //
-//   node scripts/build-kos.mjs --out ../minty-site/public [--goatcounter https://<code>.goatcounter.com/count]
+//   node scripts/build-kos.mjs --out ../minty-site/public [--goatcounter https://<code>.goatcounter.com/count] [--report-to <address>]
 //
 // Writes <out>/kos/ (with mode.js set to "device", and the email reader as plain JS in kos/mail/),
 // <out>/vendor/{maplibre,pdfjs,tesseract,qrcode}/, the screenshot reader (/sub-scan) and what it and Kos
@@ -21,6 +21,10 @@ const out = arg("out") ? resolve(arg("out")) : join(root, "dist/kos-standalone")
 // (no cookies, no personal data), as its demo does. Only this build: Kos on a Minty never has it.
 const goatcounter = arg("goatcounter") ?? "";
 if (goatcounter && !/^https:\/\/[a-z0-9-]+\.goatcounter\.com\/count$/.test(goatcounter)) throw new Error(`--goatcounter: not a GoatCounter count URL: ${goatcounter}`);
+// --report-to kos-reports@example.com: where "Send to the Kos developers" addresses its email (mailto:).
+// Only this build has it: the address never goes in this public repo (docs/trips.md §24).
+const reportTo = arg("report-to") ?? "";
+if (reportTo && !/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(reportTo)) throw new Error(`--report-to: not an email address: ${reportTo}`);
 
 async function copyDir(from, to, skip = () => false) {
   await mkdir(to, { recursive: true });
@@ -48,11 +52,17 @@ await writeFile(join(out, "kos/sw.js"), sw.replace(`"/kos/store.js",`, `"/kos/st
 // the Minty link in the header goes; "Your data" says where the trips are
 const html = await readFile(join(out, "kos/index.html"), "utf8");
 if (!html.includes('id="mintyLink"')) throw new Error("build-kos: kos/index.html lost its Minty link; update the edit here");
+if (reportTo) {
+  await writeFile(join(out, "kos/report-to.js"), `// Where "Send to the Kos developers" writes to (scripts/build-kos.mjs --report-to).\nwindow.KOS_REPORT_TO = ${JSON.stringify(reportTo)};\n`);
+  const h = await readFile(join(out, "kos/index.html"), "utf8");
+  if (!h.includes('<script src="/kos/mode.js"></script>')) throw new Error("build-kos: kos/index.html lost its mode.js line; update the edit here");
+  await writeFile(join(out, "kos/index.html"), h.replace('<script src="/kos/mode.js"></script>', '<script src="/kos/mode.js"></script>\n<script src="/kos/report-to.js"></script>'));
+}
 if (goatcounter) {
   // its settings in a file (the policy allows no inline script), then GoatCounter's own script
   await writeFile(join(out, "kos/gc.js"), `// GoatCounter's settings for Kos on its own (scripts/build-kos.mjs): the host goes in the path.\nwindow.goatcounter = { path: (p) => location.host + p };\n`);
   if (!/^<\/body>$/m.test(html)) throw new Error("build-kos: kos/index.html has no </body> line; update the edit here");
-  await writeFile(join(out, "kos/index.html"), html.replace(/^<\/body>$/m, `<script src="/kos/gc.js"></script>\n<script data-goatcounter="${goatcounter}" async src="https://gc.zgo.at/count.js"></script>\n</body>`));
+  await writeFile(join(out, "kos/index.html"), (await readFile(join(out, "kos/index.html"), "utf8")).replace(/^<\/body>$/m, `<script src="/kos/gc.js"></script>\n<script data-goatcounter="${goatcounter}" async src="https://gc.zgo.at/count.js"></script>\n</body>`));
 }
 
 // the sample trips ("Try a sample trip" on an empty Kos): the live demo's made-up trips (demo/data.ts),

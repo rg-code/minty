@@ -221,23 +221,26 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
    accents, and EasyUI's pill navigation for the set-up's steps. Scoped to .welcome. */
 .welcome { --kos-teal: #024248; --kos-saffron: #feab0a; --kos-cream: #fcf1dd; max-width: 720px; margin: 0 auto; padding: 8px 4px 0; }
 .w-hero { position: relative; isolation: isolate; padding: 28px 0 8px; }   /* the glow is drawn inside it, not under the page */
-/* the hero's lights: the same pair as before (the icon's teal and saffron) in three places, each pair
-   breathing slowly, out of step, so they shimmer; each fades out inside the box, so there's no edge */
-.w-hero { --glow-hi: .6; --glow-lo: .3; }
-:root[data-theme="light"] .w-hero { --glow-hi: .26; --glow-lo: .12; }
-.w-hero::before, .w-hero::after { content: ""; position: absolute; inset: -30px 0 auto 0; height: 340px; z-index: -1; pointer-events: none; opacity: var(--glow-hi); }
-.w-hero::before { background:                                   /* the first and third pairs */
-    radial-gradient(18% 42% at 14% 42%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
-    radial-gradient(14% 32% at 28% 26%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%),
-    radial-gradient(18% 42% at 76% 46%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
-    radial-gradient(14% 32% at 90% 30%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%);
-  animation: kos-glow 7s ease-in-out infinite; }
-.w-hero::after { background:                                    /* the middle pair */
-    radial-gradient(18% 42% at 44% 58%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
-    radial-gradient(14% 32% at 58% 34%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%);
-  animation: kos-glow 5.5s ease-in-out -2.5s infinite; }
-@keyframes kos-glow { 0%, 100% { opacity: var(--glow-hi); } 50% { opacity: var(--glow-lo); } }
-@media (prefers-reduced-motion: reduce) { .w-hero::before, .w-hero::after { animation: none; } }
+/* the first screen's lights: one pair (the icon's teal and saffron) in each of three places down the
+   page (behind the headline, the sample flight and the set-up), each breathing, out of step with the
+   others: brighter and a touch larger, then dimmer and smaller. Each fades out inside its box. */
+.w-hero, .w-visual, .w-setup { position: relative; isolation: isolate; --glow-hi: .9; --glow-lo: .38; }
+:root[data-theme="light"] :is(.w-hero, .w-visual, .w-setup) { --glow-hi: .7; --glow-lo: .3; }
+.w-hero::before, .w-visual::before, .w-setup::before { content: ""; position: absolute; inset: -40px 0; z-index: -1; pointer-events: none; opacity: var(--glow-hi);
+  background: radial-gradient(var(--tw) var(--th) at var(--tx) var(--ty), color-mix(in srgb, var(--kos-teal) 80%, transparent), transparent 100%),
+              radial-gradient(var(--sw) var(--sh) at var(--sx) var(--sy), color-mix(in srgb, var(--kos-saffron) 42%, transparent), transparent 100%);
+  animation: kos-glow var(--glow-t, 6s) ease-in-out var(--glow-d, 0s) infinite; }
+/* sizes in px, centres placed so each glow fades out inside its own box (no straight edges) */
+.w-hero { --tw: 200px; --th: 150px; --tx: 30%; --ty: 48%; --sw: 160px; --sh: 120px; --sx: 66%; --sy: 30%; --glow-t: 6s; }
+.w-visual { --tw: 110px; --th: 120px; --tx: 84%; --ty: 45%; --sw: 150px; --sh: 50px; --sx: 60%; --sy: 84%; --glow-t: 7.5s; --glow-d: -2.5s; }
+.w-setup { --tw: 170px; --th: 130px; --tx: 24%; --ty: 52%; --sw: 140px; --sh: 110px; --sx: 70%; --sy: 42%; --glow-t: 6.8s; --glow-d: -4.5s; }
+@media (max-width: 640px) {
+  .w-hero { --tw: 110px; --th: 120px; --tx: 33%; --sw: 90px; --sh: 90px; --sx: 72%; }
+  .w-visual { --tw: 80px; --th: 90px; --tx: 76%; --sw: 100px; --sh: 40px; --sx: 50%; }
+  .w-setup { --tw: 100px; --th: 110px; --tx: 30%; --sw: 90px; --sh: 90px; --sx: 72%; }
+}
+@keyframes kos-glow { 0%, 100% { opacity: var(--glow-hi); transform: scale(1.04); } 50% { opacity: var(--glow-lo); transform: scale(.94); } }
+@media (prefers-reduced-motion: reduce) { .w-hero::before, .w-visual::before, .w-setup::before { animation: none; } }
 .w-kicker { margin: 0; display: inline-flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--kos-saffron); }
 .w-kicker span { opacity: .65; font-weight: 700; } .w-kicker a { color: inherit; text-decoration: none; border-bottom: 1.5px solid color-mix(in srgb, currentColor 40%, transparent); }
 :root[data-theme="light"] .w-kicker { color: #b86f00; }
@@ -367,4 +370,8 @@ a.photo-credit:hover { color: #fff; text-decoration: underline; }
 .add-place:hover { text-decoration: underline; }
 .stops > .add-place { margin-top: -2px; }
 .where-hint { font-size: 13px; line-height: 1.45; min-height: 1.4em; } .where-hint .good { color: var(--good); font-weight: 650; }
+
+/* "Send to the Kos developers": a quiet line under a trip's plan */
+.report-line { font-size: 12.5px; margin: 18px 0 4px; }
+.linklike { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 

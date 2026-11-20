@@ -159,6 +159,19 @@ export async function shareString(t, { withPrivate = false } = {}) {
   return `1.${b64u(await pipe(new TextEncoder().encode(JSON.stringify(data)), new CompressionStream("deflate-raw")))}`;
 }
 export const shareLink = (str) => `${SHARE_BASE}#/import?t=${str}`;
+/** "Send to the Kos developers" (docs/trips.md §24): an email for the person's own mail app (mailto:, no
+ * server), to the address the landing site's build gives Kos on its own. The trip goes as its share link
+ * (never with confirmation numbers, prices or guests). Some mail apps cut a mailto past about 2,000
+ * characters: then the link is left out (`tooLong`) and the page copies it for the person to paste. */
+export function reportMail({ to, trip, link, note = "" }) {
+  const subject = `Kos trip: ${trip.name}`;
+  const lines = (withLink) => [note.trim() || "(What's wrong, or what Kos should have read differently?)", "",
+    `Trip: ${trip.name}, ${trip.start_date} to ${trip.end_date}${trip.place ? `, ${trip.place}` : ""}`,
+    withLink ? `Open it in Kos: ${link}` : "The trip's link is copied: paste it here.", "", "Sent from Kos (minty.milesmaximizer.com/kos/)"].join("\n");
+  const href = (withLink) => `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines(withLink))}`;
+  const full = href(true);
+  return full.length <= 2000 ? { href: full, tooLong: false } : { href: href(false), tooLong: true };
+}
 /** A share string, or any link carrying one, back to a Kos export (one trip), checked like an import. */
 export async function readShare(text) {
   const m = /(?:^|[?&#])(?:t=)?(1\.[A-Za-z0-9_-]{8,})/.exec(String(text ?? "").trim());

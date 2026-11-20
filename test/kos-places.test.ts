@@ -3,7 +3,7 @@ import decodingCsv from "./fixtures/olc-decoding.csv?raw";
 import shortCsv from "./fixtures/olc-short.csv?raw";
 import { decodePlus, parseWhere, recoverPlus } from "../public/kos/where.js";
 import { resolvePlaceLink } from "../src/routes/kos";
-import { readShare, shareLink, shareString } from "../public/kos/store.js";
+import { readShare, reportMail, shareLink, shareString } from "../public/kos/store.js";
 
 // Kos: places on a day (docs/trips.md §22) and sharing a trip (§23).
 const rows = (csv: string) => csv.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
@@ -87,3 +87,25 @@ describe("sharing one trip (a link with it inside)", () => {
     await expect(readShare("t=1.AAAAAAAAAAAAAAAA")).rejects.toThrow(/damaged/);
   });
 });
+
+describe("send to the Kos developers (a mailto: from the person's own mail app)", () => {
+  const trip = { name: "Tokyo", start_date: "2027-03-10", end_date: "2027-03-18", place: "Tokyo, Japan" };
+  it("addresses the email, with the note and the trip's link written in", () => {
+    const m = reportMail({ to: "kos-reports@example.com", trip, link: "https://minty.milesmaximizer.com/kos/#/import?t=1.abc", note: "The check-out day is wrong." });
+    const u = new URL(m.href);
+    expect(u.protocol).toBe("mailto:");
+    expect(u.pathname).toBe("kos-reports@example.com");
+    expect(u.searchParams.get("subject")).toBe("Kos trip: Tokyo");
+    const body = u.searchParams.get("body")!;
+    expect(body.startsWith("The check-out day is wrong.")).toBe(true);
+    expect(body).toContain("Open it in Kos: https://minty.milesmaximizer.com/kos/#/import?t=1.abc");
+    expect(m.tooLong).toBe(false);
+  });
+  it("leaves out a link too long for some mail apps, and says to paste it", () => {
+    const m = reportMail({ to: "kos-reports@example.com", trip, link: `https://minty.milesmaximizer.com/kos/#/import?t=1.${"a".repeat(3000)}` });
+    expect(m.tooLong).toBe(true);
+    expect(m.href.length).toBeLessThan(2000);
+    expect(new URL(m.href).searchParams.get("body")).toContain("paste it here");
+  });
+});
+

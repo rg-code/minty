@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, shareLink, shareString, shiftSample, store, tripAddress, tripSummary } from "./store.js";
+import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, shareLink, shareString, shiftSample, store, tripAddress, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 import { parseWhere } from "./where.js";
@@ -294,7 +294,8 @@ function tripView(t, tab) {
     ${summaryHtml(t)}
     <div class="trip"><div class="plan">
       <div class="tabs"><div class="seg" role="group">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${(tab || "") === k}">${l}</button>`).join("")}</div></div>
-      ${body}</div>
+      ${body}
+      <p class="report-line muted">Something Kos got wrong in this trip? <button type="button" class="linklike" data-report-trip data-goatcounter-click="kos-report-trip">Send it to the Kos developers</button></p></div>
       <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div></div></div>
     <a class="fab" href="#/add?trip=${t.id}" aria-label="Add a booking" title="Add a booking">+</a>`;
 }
@@ -326,7 +327,31 @@ function shareView(t) {
       <textarea class="paste" id="shareText" rows="3" readonly>Making the link…</textarea>
       <div class="actions">${navigator.share ? `<button type="button" class="btn primary" data-share-trip>Share…</button>` : ""}<button type="button" class="btn${navigator.share ? "" : " primary"}" data-copy="shareText">Copy link</button>
         <button type="button" class="btn ghost" data-share-file>Download file</button><a class="btn ghost" href="#/trip/${t.id}">Back</a></div>
-      <p class="muted" id="shareNote" style="margin-bottom:0;font-size:13px"></p></div>`;
+      <p class="muted" id="shareNote" style="margin-bottom:0;font-size:13px"></p></div>
+    <div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px">Send it to the Kos developers</h3><p class="muted" style="margin-top:0">Something read wrong, or missing? Your email app opens with the trip's link in it (never confirmation numbers, prices or guests), to the Kos developers.</p>
+      <button type="button" class="btn" data-report-trip data-goatcounter-click="kos-report-trip-share">Send it to the Kos developers</button></div>`;
+}
+// --- "Send to the Kos developers" (docs/trips.md §24): an email from the person's own mail app ----------
+// Only Kos on its own knows the address (the landing site's build), so from a Minty the report page
+// opens there, with the trip in the link.
+let pendingReport = null;
+async function reportTrip(t) {
+  const code = await shareString(t);                            // never confirmation numbers, prices or guests
+  if (MODE === "device" && window.KOS_REPORT_TO) { location.hash = `#/report?t=${code}`; return; }
+  window.open(`${SHARE_BASE}#/report?t=${code}`, "_blank", "noopener");
+}
+function reportView(f) {
+  const to = window.KOS_REPORT_TO;
+  if (!f || f.error) return `<div class="section-title"><h2>Send to the Kos developers</h2></div><div class="card"><p class="err" style="margin-top:0">${esc(f?.error ?? "Open this from a trip's page.")}</p><a class="btn" href="#/">All trips</a></div>`;
+  const t = f.trips[0];
+  return `<div class="section-title"><h2>Send to the Kos developers</h2></div>
+    <div class="card"><p style="margin-top:0"><b>${esc(t.name)}</b> <span class="muted">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))} · ${f.items.length} booking${f.items.length === 1 ? "" : "s"}</span></p>
+      <p class="muted">What goes: the trip's days, bookings and places, as a link. Not its confirmation numbers, prices or guests. Your email app opens with it written in; nothing is sent until you send that email.</p>
+      <form class="form" id="reportForm"><label class="wide">What's wrong, or what should Kos have read differently? <small class="muted">(optional)</small><textarea name="note" rows="4" maxlength="1200"></textarea></label></form>
+      ${to ? `<div class="actions"><button type="button" class="btn primary" data-report-mail>Open email</button><button type="button" class="btn ghost" data-copy="reportLink">Copy the trip's link</button></div>
+        <p class="muted" id="reportNote" style="font-size:13px;margin-bottom:0">To: ${esc(to)}</p>`
+      : `<p class="muted">This Kos has no address for the Kos developers. Copy the trip's link and send it by any means you like.</p><div class="actions"><button type="button" class="btn" data-copy="reportLink">Copy the trip's link</button></div>`}
+      <textarea id="reportLink" hidden readonly>${esc(f.link)}</textarea></div>`;
 }
 async function fillShare(t) {
   const box = document.getElementById("shareText");
@@ -963,6 +988,11 @@ async function render() {
     if (parts[2] === "spending") spending(t);
     return;
   }
+  if (parts[0] === "report") {                                 // "Send to the Kos developers", with the trip in the link
+    const code = (location.hash.match(/[?&]t=([^&]+)/) ?? [])[1];
+    if (code) { history.replaceState(null, "", "#/report"); try { pendingReport = { ...(await readShare(`t=${code}`)), link: shareLink(code) }; } catch (e) { pendingReport = { error: e.message }; } }
+    app.innerHTML = reportView(pendingReport); return;
+  }
   if (parts[0] === "import") {                                 // a shared trip's link: a preview, then Add
     const code = (location.hash.match(/[?&]t=([^&]+)/) ?? [])[1];
     if (code) { history.replaceState(null, "", "#/import"); try { pendingShare = await readShare(`t=${code}`); } catch (e) { pendingShare = { error: e.message }; } }
@@ -1102,6 +1132,15 @@ app.addEventListener("click", async (ev) => {
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
       lsSet(BACKED_UP, Date.now());                              // an export is a backup too
       return;
+    }
+    if (at("[data-report-trip]")) { const t = tripById(Number(route().parts[1])); if (t) await reportTrip(t); return; }
+    if (at("[data-report-mail]")) {
+      const f = pendingReport, m = reportMail({ to: window.KOS_REPORT_TO, trip: f.trips[0], link: f.link, note: app.querySelector("#reportForm [name=note]").value });
+      if (m.tooLong) {
+        try { await navigator.clipboard.writeText(f.link); } catch { /* the Copy button is there */ }
+        document.getElementById("reportNote").textContent = "The trip's link is long, so it's copied: paste it into the email.";
+      }
+      location.href = m.href; return;
     }
     if (at("[data-share-trip]")) { try { await navigator.share({ title: "A trip in Kos", url: document.getElementById("shareText").value }); } catch { /* closed */ } return; }
     if (at("[data-share-file]")) {
