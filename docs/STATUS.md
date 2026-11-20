@@ -164,9 +164,10 @@ there, gitignored here). If that folder exists, read it too.
      ready on its own after a trip. **K2** (§25): the trip's Immich album, made by the cron, and each day's
      photos in the journal (thumbnails through the Worker). Live once Immich is reachable from Cloudflare
      (a Tunnel) and `IMMICH_URL` / `IMMICH_API_KEY` are set.
-   - Bookings (and bills) come from a Gmail account made for Minty, by forwarding to
-     `+mintytrips` / `+mintybills` or labeling by hand, or by forwarding to the domain's address.
-     No mailbox is connected to Minty.
+   - Bookings and bills come from the household's Gmail through the person's own Apps Script, asked
+     from the browser (Gmail pull): `+trip` (label Kos) and each trip's `+<code>` for Kos, and `+bills`
+     (label Bills) for Bills' **Check Gmail** (bills.md, built 2026-11-20). No mailbox is connected to
+     Minty's server.
    - An itinerary and flight cards, the trip's transactions, BAM's pending changes, an Immich album,
      Minty's own map; live flight status optional.
    - **T0 started (2026-11-19):** the owner runs the five checks in `scripts/kos-t0/README.md` and

@@ -37,6 +37,11 @@
   const canRemember = typeof window.showDirectoryPicker === "function";
   let pdfRead = null;
   const lib = () => (pdfRead ??= import(new URL("pdf-read.js", document.baseURI).href));
+  // Bills by email (docs/bills.md): the person's own Gmail script (set up on Kos's Gmail page, same
+  // device), asked from this browser for the emails labelled Bills. PDFs are read here like any.
+  let gmailMod = null, gmailNote = "";
+  const gmailLib = () => (gmailMod ??= import(new URL("kos/gmail.js", document.baseURI).href));
+  const gmailReady = () => { try { return Boolean(JSON.parse(localStorage.getItem("kos-gmail") ?? "null")?.url); } catch { return false; } };
 
   async function load() {
     try {
@@ -119,8 +124,9 @@
         <button type="button" class="pill" data-act="add">+ Add a bill</button>
         <button type="button" class="pill" data-act="pdf">Add from PDFs</button>
         <button type="button" class="pill bill-folder" data-act="folder">${folder ? "Change folder" : "Add a folder"}</button>
+        ${gmailReady() ? `<button type="button" class="pill" data-act="gmail">Check Gmail</button>` : `<a class="pill" href="/kos/#/gmail" title="Forward bills to your Gmail with +bills, and Bills reads them">From Gmail…</a>`}
       </div>
-    </div>${folderHtml()}
+    </div>${folderHtml()}${gmailNote ? `<div class="bill-folderline">Gmail: ${esc(gmailNote)}</div>` : ""}
     <div class="bill-controls">
       <button type="button" class="bill-toggle statement" data-show="statements" aria-pressed="${show.statements}">Statements</button>
       <button type="button" class="bill-toggle due" data-show="due" aria-pressed="${show.due}">Payments &amp; bills</button>
@@ -231,7 +237,7 @@
 
   function reviewHtml() {
     const rows = review.rows;
-    return `<section class="bill-review" aria-label="Bills read from PDFs"><h3>From your PDFs</h3>
+    return `<section class="bill-review" aria-label="Bills read from PDFs"><h3>${review.gmail ? "From your Gmail" : "From your PDFs"}</h3>
       <p class="bill-hint">Check each one, then save. The PDFs stay on this device; only these fields are saved.</p>
       <table><thead><tr><th></th><th>File</th><th>Biller</th><th>Amount</th><th>Due</th><th>Bill date</th>${users.length > 1 ? "<th>Person</th>" : ""}</tr></thead><tbody>` +
       rows.map((r, i) => `<tr class="${r.known ? "known" : ""}${r.error ? " err" : ""}" data-row="${i}">
@@ -258,9 +264,9 @@
   /** Reads bills from PDFs into the review: only the ones Minty doesn't have yet are read.
    * `fromFolder`: a check of the remembered folder, which shows only new PDFs (none: no review),
    * leaving out the ones skipped before. Returns how many are new. */
-  async function readPdfs(files, fromFolder = false) {
+  async function readPdfs(files, fromFolder = false, mail = null) {
     const pdfs = [...files].filter(f => /\.pdf$/i.test(f.name) || f.type === "application/pdf");
-    if (!pdfs.length) { if (!fromFolder) alert("No PDFs there."); return 0; }
+    if (!pdfs.length && !mail?.texts.length) { if (!fromFolder) alert("No PDFs there."); return 0; }
     if (!fromFolder) {
       review = { rows: pdfs.slice(0, 50).map(f => ({ file: f.name, on: false, biller: "Reading…", amount_cents: null, due_date: null, statement_date: null })) };
       render();
@@ -279,10 +285,40 @@
     } else {
       for (const r of cards) Object.assign(r, { on: false, error: "A card statement: Bills shows those from your bank" });
     }
+    // Bills by email: an email with no PDF may hold the bill in its own text ("Amount due $84.12 by …")
+    if (mail) {
+      const texts = [];
+      for (const m of mail.texts) {
+        const f = parseBill(`${m.subject}\n${m.text}`);
+        if (f.amount_cents === null && !f.due_date) continue;          // a notice, a receipt: nothing to add
+        const sha = [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(m.text)))].map(b => b.toString(16).padStart(2, "0")).join("");
+        texts.push({ file: `Email: ${m.subject || "(no subject)"}`, sha, fromText: true, on: true, ...f });
+      }
+      let have = [];
+      try { if (texts.length) have = (await api("POST", "/bills/known", { sha256: texts.map(r => r.sha) })).known; } catch {}
+      for (const r of texts) if (have.includes(r.sha)) Object.assign(r, { known: true, on: false });
+      rows = rows.concat(texts);
+    }
     if (fromFolder && !rows.length) return 0;
-    review = { rows, fromFolder };
+    if (mail && !rows.length) { (await gmailLib()).markBillsSeen(mail.ids); return 0; }
+    review = { rows, fromFolder, gmail: mail?.ids ?? null };
     render();
     return rows.length;
+  }
+
+  /** Bills by email: the Bills label's new emails, their PDFs read here (as any PDF), and the bills in
+   * the emails' own text, into the same review. Nothing is uploaded; only the saved fields leave. */
+  async function checkGmail() {
+    gmailNote = "asking your Gmail…";
+    render();
+    let msgs;
+    try { msgs = await (await gmailLib()).pullBills(); }
+    catch (e) { gmailNote = e.message; render(); return; }
+    if (!msgs.length) { gmailNote = "no new emails in your Bills label."; render(); return; }
+    const files = msgs.flatMap(m => m.pdfs.map(p => new File([p.bytes], /\.pdf$/i.test(p.name) ? p.name : `${p.name}.pdf`, { type: "application/pdf", lastModified: Date.parse(m.date) || Date.now() })));
+    const n = await readPdfs(files, false, { ids: msgs.map(m => m.id), texts: msgs.filter(m => !m.pdfs.length) });
+    gmailNote = n ? `${msgs.length} new email${msgs.length === 1 ? "" : "s"}: check the bills below.` : `${msgs.length} new email${msgs.length === 1 ? "" : "s"}, with no bill Minty could read.`;
+    render();
   }
 
   async function loadFolder() {
@@ -335,7 +371,12 @@
       if (!confirm("Forget this folder? BAM uses it too.")) return;
       await (await lib()).forgetFolder(); folder = null; render(); return;
     }
-    if (act === "cancel-review") { if (review.fromFolder) { await skip(review.rows); folder && (folder.note = "nothing new to add."); } review = null; render(); return; }
+    if (act === "gmail") return checkGmail();
+    if (act === "cancel-review") {
+      if (review.fromFolder) { await skip(review.rows); folder && (folder.note = "nothing new to add."); }
+      if (review.gmail) { (await gmailLib()).markBillsSeen(review.gmail); gmailNote = "those won't be offered again on this device."; }
+      review = null; render(); return;
+    }
     if (act === "save-review") return saveReview();
     const edit = t.closest("[data-edit]"); if (edit) { editing = Number(edit.dataset.edit); render(); return; }
     const paid = t.closest("[data-paid]");
@@ -385,12 +426,14 @@
     let saved = 0;
     for (const r of rows) {
       try {
+        // an email's own text is saved like a typed bill, with the text's SHA-256 so it isn't offered twice
         await api("POST", "/bills", { biller: r.biller, amount_cents: r.amount_cents, due_date: r.due_date, statement_date: r.statement_date || null,
-                                      account_hint: r.account_hint || null, source: "pdf", file_sha256: r.sha, ...(r.owner ? { owner: r.owner } : {}) });
+                                      account_hint: r.account_hint || null, source: r.fromText ? "manual" : "pdf", file_sha256: r.sha, ...(r.owner ? { owner: r.owner } : {}) });
         saved++; r.on = false; r.known = true;
       } catch (err) { box.textContent = `${r.file}: ${err.message}`; render(); return; }
     }
     if (review.fromFolder) { await skip(review.rows.filter(r => !r.known)); if (folder) folder.note = "up to date."; }
+    if (review.gmail) { (await gmailLib()).markBillsSeen(review.gmail); gmailNote = ""; }
     review = null;
     if (rows[0]) selected = rows[0].due_date;
     await load();

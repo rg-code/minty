@@ -349,6 +349,20 @@ from `#/gmail` after "Forget on this device".
 - No write scopes.
 - Nothing reaches Minty's Worker from Google.
 
+### 7.1 The same script for Bills, from the dashboard (owner's "build bills by email", 2026-11-20)
+
+[bills.md](bills.md), "By email". The script gets a second view, `view=bills`: the **Bills** label's
+emails from the last 90 days, as text and PDF attachments. Same key, same `gmail.readonly`; still only
+reads. What changes on Minty's side:
+- **The dashboard page (`/`) allows `script.google.com` and `script.googleusercontent.com` in
+  `connect-src`**, because Bills opens there. It's that page only (its own rule in `public/_headers`);
+  `/add-user`, `/connect`, the scripts and everything else keep `connect-src 'self'`. `script-src` is
+  unchanged (`'self'`), so this matters only if something already ran script on the page: it could then
+  send data to an Apps Script, where before it could send it nowhere. That's the cost, and the reason it
+  isn't on every page.
+- **The PDFs are read in the browser**, like any picked PDF; the Worker never sees an email or a PDF.
+  Only a bill's fields and a SHA-256 are saved.
+
 ## 8. Kos following a Google Maps short link (owner's request, 2026-11-20)
 
 The design is [trips.md](trips.md) §22. `POST /trips/place-link` (behind Access, like every route) is the

@@ -12,6 +12,13 @@
   Referrer-Policy: same-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
 
+# Bills by email (docs/bills.md): the dashboard, where Bills opens, may also ask the household's own
+# Gmail script on Google's Apps Script hosts (security plan §7.1); nothing else beyond 'self'. Only
+# this page: every other page keeps the policy above.
+/
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com; manifest-src 'self'; worker-src 'self'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'
+
 # The connect page also runs Plaid Link: its script, its frame, and Plaid's API hosts. No
 # 'unsafe-inline': the report-only run showed Link doesn't need it. (Link's own frame has Plaid's
 # policy, which blocks one of Plaid's inline scripts in Firefox; that's Plaid's, and harmless.)

@@ -126,7 +126,9 @@ Design history and decisions: `docs/serverless-plan.md`.
   paid". Statement-window queries bound both ends (an `OR` on the upper end read 85,000 rows).
   The dashboard's ⋯ menu holds Bills (a calendar) and is where new features go. Own bills (`bills`)
   are one row per bill; PDFs are read in the browser (pdf.js in `public/vendor/pdfjs/`, never a CDN;
-  `public/bill-parse.js`) and never uploaded, only their fields and SHA-256.
+  `public/bill-parse.js`) and never uploaded, only their fields and SHA-256. Bills by email: **Check
+  Gmail** asks Kos's Gmail script (`view=bills`, the Bills label) from the dashboard, the only page whose
+  `connect-src` has the Apps Script hosts (security plan §7.1); its PDFs are read the same way.
 - CFA, the audit (`docs/cfa.md`): `src/audit/totals.ts` puts each posted transaction in one bucket
   (income, spend, saving, transfer, debt) in SQL, and keeps `monthly_totals` and `balance_snapshots`
   from the hourly cron, never on a request. A full rebuild runs weekly or after a correction; other

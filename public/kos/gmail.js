@@ -5,7 +5,7 @@
 // asks only to read Gmail; Kos remembers which emails it has read (on this device), so the script
 // never changes the mail. The key and the web app's address stay in this browser.
 
-const CONFIG = "kos-gmail", SEEN = "kos-gmail-seen", MAX_SEEN = 1000;
+const CONFIG = "kos-gmail", SEEN = "kos-gmail-seen", BILLS_SEEN = "minty-bills-gmail-seen", MAX_SEEN = 1000;
 const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* not kept */ } } };
 
 /** The web app's address must be an Apps Script deployment's (…/macros/s/<id>/exec). */
@@ -48,22 +48,29 @@ export function saveAddress(a) {
 }
 export function forget() { ls.set(CONFIG, "null"); ls.set(`${CONFIG}-key`, ""); }
 
-const seenSet = () => { try { return new Set(JSON.parse(ls.get(SEEN) ?? "[]")); } catch { return new Set(); } };
-export function markSeen(ids) { const s = seenSet(); for (const id of ids) s.add(id); ls.set(SEEN, JSON.stringify([...s].slice(-MAX_SEEN))); }
+const seenSet = (k = SEEN) => { try { return new Set(JSON.parse(ls.get(k) ?? "[]")); } catch { return new Set(); } };
+export function markSeen(ids, k = SEEN) { const s = seenSet(k); for (const id of ids) s.add(id); ls.set(k, JSON.stringify([...s].slice(-MAX_SEEN))); }
+/** Bills' own list of emails it has offered (docs/bills.md, by email): separate from Kos's. */
+export const markBillsSeen = (ids) => markSeen(ids, BILLS_SEEN);
 
 /** The Apps Script, with the key written in: read-only, the label's emails, newest first, at most 20. */
 export function script(key, label = "Kos") {
-  return `// Kos's Gmail pull (rg-code/minty docs/trips.md §17.1, §21). Runs in YOUR Gmail, as you, hosted by
-// Google. It only reads, and only for a request with the key below: the emails labelled "${label}",
-// and those sent to a trip's own address (you+<the trip's code>@gmail.com), from the last 60 days.
+  return `// Minty's Gmail pull (rg-code/minty docs/trips.md §17.1, §21; docs/bills.md). Runs in YOUR Gmail, as
+// you, hosted by Google. It only reads, and only for a request with the key below:
+// - for Kos: the emails labelled "${label}", and those sent to a trip's own address
+//   (you+<the trip's code>@gmail.com), from the last 60 days;
+// - for Minty's Bills (view=bills): the emails labelled "Bills" from the last 90 days, each as its
+//   plain text and its PDF attachments.
 // Nothing is changed or sent anywhere else.
 const KEY = "${key}";
 const LABEL = "${label}";
+const BILLS = "Bills";
 const CODE = /^[2-9a-hjkmnp-z]{10}$/;
 
 function doGet(e) {
   if (!e || !e.parameter || e.parameter.key !== KEY) return out({ error: "forbidden" });
   const skip = String(e.parameter.seen || "").split(",").filter(Boolean);
+  if (e.parameter.view === "bills") return out({ view: "bills", messages: bills(skip), v: 3 });
   const codes = String(e.parameter.codes || "").toLowerCase().split(",").filter(function (c) { return CODE.test(c); }).slice(0, 40);
   const addr = String(e.parameter.address || "").toLowerCase().replace(/[^a-z0-9.@_-]/g, "");
   // the label, or a trip's code anywhere in the message (its address), or the address exactly when Kos knows it
@@ -83,7 +90,26 @@ function doGet(e) {
       messages.push({ id: id, date: m.getDate().toISOString(), subject: m.getSubject(), raw: raw, trip: trip });
     });
   });
-  return out({ label: LABEL, messages: messages, v: 2 });
+  return out({ label: LABEL, messages: messages, v: 3 });
+}
+// Bills: each email's text (for a bill in the email itself) and its PDFs (up to 5, 5 MB each).
+function bills(skip) {
+  const threads = GmailApp.search('newer_than:90d label:"' + BILLS + '"', 0, 30);
+  const messages = [];
+  let size = 0;
+  threads.forEach(function (t) {
+    t.getMessages().forEach(function (m) {
+      const id = m.getId();
+      if (messages.length >= 20 || size > 20000000 || skip.indexOf(id) >= 0) return;
+      const pdfs = m.getAttachments({ includeInlineImages: false }).filter(function (a) {
+        return (/pdf/i.test(a.getContentType()) || /\.pdf$/i.test(a.getName())) && a.getSize() <= 5000000;
+      }).slice(0, 5).map(function (a) { return { name: a.getName(), data: Utilities.base64Encode(a.getBytes()) }; });
+      const text = m.getPlainBody().slice(0, 20000);
+      pdfs.forEach(function (p) { size += p.data.length; });
+      messages.push({ id: id, date: m.getDate().toISOString(), subject: m.getSubject(), text: text, pdfs: pdfs });
+    });
+  });
+  return messages;
 }
 function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 `;
@@ -129,6 +155,31 @@ export async function pull(codes = []) {
   if (!d) throw new Error("Your Gmail script didn't answer with JSON: check its deployment (Execute as: Me, Who has access: Anyone).");
   if (d.error) throw new Error(d.error === "forbidden" ? "Your Gmail script refused the key: copy the script from this page again, and deploy a new version." : d.error);
   const s = seenSet();
-  if (valid.length && d.v !== 2) oldScript = true;               // made before trip addresses: copy it again
+  if (valid.length && !(d.v >= 2)) oldScript = true;             // made before trip addresses: copy it again
   return (d.messages ?? []).filter((m) => !s.has(m.id)).map((m) => ({ ...m, trip: valid.includes(m.trip) ? m.trip : null }));
+}
+
+/** Bills by email (docs/bills.md): the new emails in the Bills label (not offered on this device
+ * before), each with its text and its PDFs as bytes. The PDFs are read in this browser, like any. */
+export async function pullBills() {
+  const c = config();
+  if (!c) throw new Error("Gmail isn't set up on this device yet.");
+  const seen = [...seenSet(BILLS_SEEN)].slice(-200);
+  const u = new URL(c.url);
+  u.searchParams.set("key", c.key);
+  u.searchParams.set("view", "bills");
+  if (seen.length) u.searchParams.set("seen", seen.join(","));
+  let r;
+  try { r = await fetch(u, { redirect: "follow", credentials: "omit" }); }
+  catch { throw new Error("Couldn't reach your Gmail script. Is this device online, and is the web app deployed for \"Anyone\"?"); }
+  const d = await r.json().catch(() => null);
+  if (!d) throw new Error("Your Gmail script didn't answer with JSON: check its deployment (Execute as: Me, Who has access: Anyone).");
+  if (d.error) throw new Error(d.error === "forbidden" ? "Your Gmail script refused the key: copy the script from Kos's Gmail set-up page again, and deploy a new version." : d.error);
+  if (d.view !== "bills") throw new Error("Your Gmail script is older than Bills by email: copy it again from Kos's Gmail set-up page, and deploy a new version (Deploy → Manage deployments → Edit → New version).");
+  const s = seenSet(BILLS_SEEN);
+  const bytes = (b64) => { const t = atob(String(b64 ?? "")); const out = new Uint8Array(t.length); for (let i = 0; i < t.length; i++) out[i] = t.charCodeAt(i); return out; };
+  return (d.messages ?? []).filter((m) => m && typeof m.id === "string" && !s.has(m.id)).map((m) => ({
+    id: m.id, date: String(m.date ?? ""), subject: String(m.subject ?? "").slice(0, 300), text: String(m.text ?? "").slice(0, 20000),
+    pdfs: (Array.isArray(m.pdfs) ? m.pdfs : []).slice(0, 5).map((p) => ({ name: String(p?.name ?? "bill.pdf").slice(0, 150), bytes: bytes(p?.data) })),
+  }));
 }
