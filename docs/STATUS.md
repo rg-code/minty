@@ -166,7 +166,7 @@ there, gitignored here). If that folder exists, read it too.
      (a Tunnel) and `IMMICH_URL` / `IMMICH_API_KEY` are set.
    - Bookings and bills come from the household's Gmail through the person's own Apps Script, asked
      from the browser (Gmail pull): `+trip` (label Kos) and each trip's `+<code>` for Kos, and `+bills`
-     (label Bills) for Bills' **Check Gmail** (bills.md, built 2026-11-20). No mailbox is connected to
+     (label Bills), which Kos reads and adds to Bills (bills.md, built 2026-11-20). No mailbox is connected to
      Minty's server.
    - An itinerary and flight cards, the trip's transactions, BAM's pending changes, an Immich album,
      Minty's own map; live flight status optional.

@@ -81,7 +81,7 @@ editIn("app.js", "a trip opens the demo's Kos", "/kos/#/trip/", "kos/#/trip/");
 edit("no device lock", '<link rel="stylesheet" href="/lock.css" />\n<script src="/lock.js"></script>\n', "");   // demo visitors are never asked for Face ID
 editIn("app.js", "no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});`, "// the demo registers no service worker");
 // SUB's screenshot reader is its own page with Tesseract (7 MB), which the demo leaves out: paste and PDFs still work.
-editIn("bills.js", "no Gmail (the demo has no Gmail script)", /\n\s*\$\{gmailReady\(\) \? [^\n]*From Gmail…<\/a>`\}/, "");
+editIn("bills.js", "no Gmail (the demo has no Gmail script)", /\n\s*<a class="pill" href="\/kos\/#\/bills"[^\n]*<\/a>/, "");
 editIn("sub.js", "no screenshot reader", `<button type="button" class="pill" data-scan>Read a screenshot</button>`, "");
 editIn("theme.js", "light by default", `|| (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")`, `|| "light"`);
 edit("relative asset paths", /(href|src)="\/(favicon\.svg|favicon-32\.png|apple-touch-icon\.png|abc\.css|abc\.js|bills\.css|bills\.js|bam\.css|bam\.js|cfa\.css|cfa\.js|charts\.js|charts\.css|egg\.css|egg\.js|accounts\.css|accounts\.js|sub\.css|sub\.js|swipe\.js|reconcile\.js|app\.js|theme\.js)"/g, (_, a, f) => `${a}="${f}"`, "some");
@@ -131,7 +131,8 @@ if (/(href|src)="\/[a-z]/.test(kosFiles["index.html"])) throw new Error(`build-d
 editKos("kos.js", "no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/kos/sw.js", { scope: "/kos/" }).catch(() => {});`, "// the demo registers no service worker");
 editKos("kos.js", "no Gmail tab", `["gmail", "Gmail"], `, "");
 editKos("kos.js", "no screenshot tab", `["shot", "Screenshot"], `, "");
-editKos("kos.js", "pdf.js from the demo", `import("/pdf-read.js")`, `import("../pdf-read.js")`, 2);
+editKos("kos.js", "pdf.js from the demo", `import("/pdf-read.js")`, `import("../pdf-read.js")`, 3);
+editKos("kos.js", "the bill reader from the demo", `import("/bill-parse.js"), import("/points-parse.js")`, `import("../bill-parse.js"), import("../points-parse.js")`);
 editKos("kos.js", "Open in Minty: the demo's dashboard", `href="/?trip=`, `href="../?trip=`);
 editKos("map.js", "airports, relative", `"/kos/airports.json"`, `"airports.json"`);
 editKos("map.js", "the map's worker from the demo", `"/vendor/maplibre/maplibre-gl-csp-worker.js"`, `"../vendor/maplibre/maplibre-gl-csp-worker.js"`);

@@ -412,3 +412,6 @@ a.photo-credit:hover { color: #fff; text-decoration: underline; }
 .j-more { border: 1px dashed var(--hairline-2); background: transparent; }
 @media print { .j-photos-act, .j-photos .btn { display: none; } .j-strip { flex-wrap: wrap; overflow: visible; } }
 #jSpent:empty { display: none; }
+
+/* Bills from Gmail (docs/bills.md): each bill's email or PDF under it */
+.bill-src { display: block; font-size: 13px; }

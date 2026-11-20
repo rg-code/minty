@@ -495,11 +495,9 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
     expect(r.headers.get("permissions-policy")).toContain("camera=()");
   });
 
-  it("only the dashboard (where Bills opens) may also ask the household's Gmail script (Bills by email)", async () => {
-    const dash = csp(await raw("/"));
-    expect(dash).toContain("connect-src 'self' https://script.google.com https://script.googleusercontent.com;");
-    expect(dash.split("default-src").length).toBe(2);                          // one policy, not the pages' one plus this
-    for (const path of ["/add-user", "/connect", "/app.js", "/sub-scan"]) expect(csp(await raw(path)), path).not.toContain("script.google");
+  it("the dashboard keeps connect-src 'self': Bills by email goes through Kos, whose policy already allows the Gmail script", async () => {
+    expect(csp(await raw("/"))).toContain("connect-src 'self';");
+    for (const path of ["/", "/add-user", "/connect", "/app.js", "/bills.js"]) expect(csp(await raw(path)), path).not.toContain("script.google");
   });
 
   it("/connect has its own policy, with Plaid Link's script, frame and API hosts only", async () => {

@@ -144,6 +144,18 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
     expect(alone).not.toMatch(/bills\(|BILLS|Bills/);
     expect(() => new Function(alone)).not.toThrow();
   });
+  it("Bills by email: a complete new bill is added, an incomplete one listed, card statements and known ones left (splitBills)", async () => {
+    const { splitBills } = await import("../public/kos/store.js");
+    const pge = { file: "pge.pdf", sha: "a", biller: "PG&E", amount_cents: 12033, due_date: "2026-12-05" };
+    const out = splitBills([pge, { ...pge, sha: "b", due_date: null }, { ...pge, sha: "c", biller: null }, { ...pge, sha: "d", amount_cents: null },
+                            { ...pge, sha: "e", card: true }, { ...pge, sha: "f", known: true }, { file: "x.pdf", sha: "g", error: "Couldn't read this PDF" },
+                            { ...pge, sha: "h", amount_cents: 0 }]);
+    expect(out.add.map((r: any) => r.sha)).toEqual(["a", "h"]);                  // a $0 bill is still a bill
+    expect(out.incomplete.map((r: any) => r.sha)).toEqual(["b", "c", "d"]);
+    expect(out.cards.map((r: any) => r.sha)).toEqual(["e"]);
+    expect(out.known.map((r: any) => r.sha)).toEqual(["f"]);
+    expect(out.unreadable.map((r: any) => r.sha)).toEqual(["g"]);
+  });
   it("pullBills asks with view=bills, decodes the PDFs, and leaves out what Bills already offered", async () => {
     const store = new Map<string, string>();
     const was = (globalThis as any).localStorage;

@@ -349,19 +349,17 @@ from `#/gmail` after "Forget on this device".
 - No write scopes.
 - Nothing reaches Minty's Worker from Google.
 
-### 7.1 The same script for Bills, from the dashboard (proposed 2026-11-20; the owner asked for Bills by email, and the dashboard policy change below awaits their OK)
+### 7.1 The same script for Bills, through Kos (owner, 2026-11-20)
 
-[bills.md](bills.md), "By email". The script gets a second view, `view=bills`: the **Bills** label's
-emails from the last 90 days, as text and PDF attachments. Same key, same `gmail.readonly`; still only
-reads. What changes on Minty's side:
-- **The dashboard page (`/`) allows `script.google.com` and `script.googleusercontent.com` in
-  `connect-src`**, because Bills opens there. It's that page only (its own rule in `public/_headers`);
-  `/add-user`, `/connect`, the scripts and everything else keep `connect-src 'self'`. `script-src` is
-  unchanged (`'self'`), so this matters only if something already ran script on the page: it could then
-  send data to an Apps Script, where before it could send it nowhere. That's the cost, and the reason it
-  isn't on every page.
-- **The PDFs are read in the browser**, like any picked PDF; the Worker never sees an email or a PDF.
-  Only a bill's fields and a SHA-256 are saved.
+[bills.md](bills.md), "By email". The script gets a second view, `view=bills`, only in a script made
+on a Minty: the **Bills** label's emails from the last 90 days, as text and PDF attachments. Same key,
+same `gmail.readonly`; still only reads.
+- **No page policy changes.** Kos asks the script, as it does for bookings: `/kos/*` already allows
+  `script.google.com` and `script.googleusercontent.com`. The dashboard's `connect-src` stays `'self'`
+  (the owner chose this over allowing the hosts on the dashboard, 2026-11-20).
+- **The PDFs are read in the browser**, in Kos, like any picked PDF; the Worker never sees an email or
+  a PDF. Kos adds a complete bill through Minty's own `POST /bills` (same origin, behind Access): only
+  its fields and a SHA-256.
 - **The key's reach grows, on a Minty only:** with the URL and key, someone can now also read the
   **Bills** label's emails from the last 90 days, with their PDFs (bills carry account numbers and
   addresses). The set-up page's phone-link warning says so. Kos on its own makes a script without the

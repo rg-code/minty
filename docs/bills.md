@@ -20,24 +20,26 @@ PG&E, water, trash and the like, one entry per bill (a quarterly bill is one ent
 
 - **By hand:** **+ Add a bill** (or **+ Add a bill due this day** on a selected day): biller, amount, due date (picked on the calendar), bill date, person, and the name its payment goes by in transactions (by default the biller's first word, e.g. PG&E).
 - **From PDFs:** **Add from PDFs** (several files) or **Add a folder** (desktop browsers; phones can't pick a folder). The browser reads each PDF with pdf.js 4.10.38, stored in `public/vendor/pdfjs/` (never a CDN, so the CSP stays `'self'`, and only loaded when used), and `public/bill-parse.js` finds the biller, amount due, due date, bill date and the account's last 4 digits. A review table shows them, editable, with date pickers; a PDF already added is recognised by its SHA-256 (`POST /bills/known`) and skipped. **The PDFs never leave the device**: only those fields and the fingerprint are saved.
-- **By email (built 2026-11-20; the dashboard's policy change awaits the owner's OK, security plan §7.1):**
-  forward a bill to the household's Gmail at `+bills`, where a filter
-  labels it **Bills**, and **Check Gmail** in Bills reads it. It uses Kos's Gmail pull (trips.md §17.1):
-  the person's own Apps Script in that Gmail, set up once on Kos's Gmail page, on the same device
-  (the address and key are in this browser's storage, shared with Kos). Nothing on the server.
-  - **The script's `view=bills`** (only in a script made on a Minty; Kos on its own leaves it out) returns the Bills label's emails from the last 90 days (20 at most, not
-    ones this device offered before), each as its plain text and its PDF attachments (up to 5, 5 MB
-    each, base64). It still only reads (`gmail.readonly`).
-  - **PDFs** go through the same reading as **Add from PDFs** (`pdf-read.js`, `bill-parse.js`, the
-    `/bills/known` fingerprint check, card statements set aside), so they never leave the device either.
-  - **An email with no PDF** may hold the bill in its own text ("Amount due $42.10 by 12/10/2026"):
-    `bill-parse.js` reads it (subject first). One with no amount and no due date (a receipt, a notice) is
-    left out. Saved like a typed bill (`source` "manual") with the text's SHA-256, so it isn't offered twice.
-  - **Offered once:** emails saved or cancelled from the review aren't offered again on that device
-    (`minty-bills-gmail-seen`, separate from Kos's list). The script is never asked to change mail.
-  - **The dashboard's page policy** allows the script's two Google hosts in `connect-src` (security
-    plan §7.1); every other page keeps `'self'` only. The live demo has no Gmail button.
-  - A script made before this answers without `view: "bills"`: Bills says to copy it again.
+- **By email, through Kos (owner, 2026-11-20):** forward a bill to the household's Gmail at `+bills`,
+  where a filter labels it **Bills**. Kos (on a Minty) reads it and adds it to Bills; Bills' **From
+  Gmail…** opens Kos's page for it (`/kos/#/bills`). Kos does it, not the dashboard, because Kos's page
+  policy already lets it ask the person's Gmail script (trips.md §17.1); the dashboard's stays `'self'`.
+  - **The Gmail script's `view=bills`** (only in a script made on a Minty; Kos on its own leaves it
+    out) returns the Bills label's emails from the last 90 days (20 at most, not ones this device
+    offered before), each as its plain text and its PDF attachments (up to 5, 5 MB each). Still only
+    reads (`gmail.readonly`). One set-up for Kos and Bills.
+  - **When:** Kos checks when it opens, at most every 30 minutes, and on **Check now**.
+  - **Reading:** the PDFs as **Add from PDFs** reads them (`pdf-read.js`, `bill-parse.js`, the
+    `/bills/known` fingerprint check, card statements set aside), so they never leave the device. An
+    email with no PDF may hold the bill in its own text ("Amount due $42.10 by 12/10/2026"); one with no
+    amount and no due date (a receipt, a notice) is left out.
+  - **Added by itself** when it has a biller, an amount and a due date and Bills doesn't have it yet
+    (`splitBills` in `public/kos/store.js`): `POST /bills`, source "pdf" with the PDF's SHA-256, or
+    "manual" with the email text's. Kos says so ("Kos added 2 bills to Bills"), and its page lists
+    them with **Undo** (`DELETE /bills/{id}`). One missing a field is listed to add by hand in Bills.
+  - **Read once:** each email is offered once on a device (`minty-bills-gmail-seen`, separate from
+    Kos's list). The script never changes mail.
+  - A script made before this answers without `view: "bills"`: Kos's page says to copy it again.
   - Planned before (trips.md §2.3): `+mintybills` into a server inbox. Not built; this replaces it.
 - **The folder is shared with BAM** (`public/pdf-read.js`): each view checks it for what it doesn't have yet. Bills sets aside card statements (a PDF with a points box): those come from the bank.
 - **A remembered folder (Chrome and Edge):** there, **Add a folder** uses the File System Access API, and the folder is remembered in this browser's IndexedDB (the handle, never anything in D1). Each time Bills opens, Minty fingerprints the PDFs in it (and two folder levels down), asks `/bills/known`, and reads only the new ones into the review; nothing new means no review. Chrome asks again for access on each visit unless "Allow on every visit" is chosen, so Bills shows **Check for new bills** until then. PDFs unticked or cancelled from a folder check are remembered as skipped (on this device), so a PDF that isn't a bill isn't offered every time. **Forget this folder** clears both. Firefox, Safari and phones don't have the API and keep the one-off picker.

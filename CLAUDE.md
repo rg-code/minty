@@ -126,9 +126,9 @@ Design history and decisions: `docs/serverless-plan.md`.
   paid". Statement-window queries bound both ends (an `OR` on the upper end read 85,000 rows).
   The dashboard's ⋯ menu holds Bills (a calendar) and is where new features go. Own bills (`bills`)
   are one row per bill; PDFs are read in the browser (pdf.js in `public/vendor/pdfjs/`, never a CDN;
-  `public/bill-parse.js`) and never uploaded, only their fields and SHA-256. Bills by email: **Check
-  Gmail** asks Kos's Gmail script (`view=bills`, the Bills label) from the dashboard, the only page whose
-  `connect-src` has the Apps Script hosts (security plan §7.1); its PDFs are read the same way.
+  `public/bill-parse.js`) and never uploaded, only their fields and SHA-256. Bills by email goes through
+  Kos (on a Minty): it asks the Gmail script's Bills view, reads the PDFs the same way, and adds complete
+  bills through `POST /bills` (security plan §7.1); the dashboard's `connect-src` stays `'self'`.
 - CFA, the audit (`docs/cfa.md`): `src/audit/totals.ts` puts each posted transaction in one bucket
   (income, spend, saving, transfer, debt) in SQL, and keeps `monthly_totals` and `balance_snapshots`
   from the hourly cron, never on a request. A full rebuild runs weekly or after a correction; other
@@ -185,8 +185,8 @@ Design history and decisions: `docs/serverless-plan.md`.
   `upload.wikimedia.org` / `thumb.wikimedia.org` (a trip's city photo, §19). Its look follows Flighty (flights, theme,
   map) and Wanderlog (trips). Gmail pull (§17.1, `public/kos/gmail.js`) asks the person's own
   Apps Script (`gmail.readonly`, a key made on the device, shared with a phone by a `#` link and a
-  QR code from vendored `public/vendor/qrcode/`) from the browser; only `/kos/*` and the dashboard
-  (`/`, for Bills by email) may reach `script.google.com` / `script.googleusercontent.com`. Share to Kos is the manifest's `share_target`,
+  QR code from vendored `public/vendor/qrcode/`) from the browser; only `/kos/*` may reach
+  `script.google.com` / `script.googleusercontent.com`. Share to Kos is the manifest's `share_target`,
   kept on the device by `kos/sw.js` until the add page reads it. It also runs on its own (§17): `public/kos/store.js` is the only
   thing that knows where trips live (Minty's API, or IndexedDB when `mode.js` says `device`);
   `scripts/build-kos.mjs` builds that for the landing site. Keep both stores answering the same
