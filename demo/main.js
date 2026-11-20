@@ -54,7 +54,12 @@ const ready = (async () => {
   env = { DB: new DemoD1(sql), ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
           MINTY_DEV_NO_AUTH: "1", PLAID_ENV: "sandbox", ...demoEnv(data) };
   // What the hourly cron prepares for the audit (CFA): today's balances, and the monthly totals.
+  // The demo's net worth history is made up (demo/data.ts), not built from snapshots, so it's never
+  // rebuilt: a rebuild would keep only the days that have snapshots.
+  const keepHistory = () => env.DB.prepare("DELETE FROM app_state WHERE key = 'networth_dirty'").run();
+  await keepHistory();
   await snapshotBalances(env);
+  await keepHistory();
   await refreshTotals(env);
   window.__mintyDemo = { ms: Math.round(performance.now() - t0), rows: data.transactions.length };
   return env;
@@ -79,6 +84,10 @@ window.fetch = async (input, init) => {
   });
   const response = await worker.fetch(local, env, ctx);
   if (request.method === "POST" && url.pathname === "/sync-request") demoSync();
+  // An account entered by hand (Accounts): today's net worth at once, as the hourly run would.
+  if (request.method !== "GET" && url.pathname.startsWith("/accounts/") && response.ok) await snapshotBalances(env);
+  // The made-up net worth history is never rebuilt (see above): a rebuild would keep only the days with snapshots.
+  if (request.method !== "GET") await env.DB.prepare("DELETE FROM app_state WHERE key = 'networth_dirty'").run();
   // A correction on the audit: what the 10-minute cron run would do, at once.
   if (request.method === "PUT" && url.pathname === "/audit/buckets" && response.ok) await refreshTotals(env);
   return response;

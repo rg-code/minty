@@ -1,0 +1,61 @@
+/* SUB (public/sub.js) in ABC's popup frame (abc.css), and its screenshot page (/sub-scan). Colours
+   come from the dashboard's tokens, so it follows light and dark. */
+.sub .sub-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }
+.sub .sub-sum { font-size: 13.5px; color: var(--muted); }
+.sub .sub-ctls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.sub .sub-person { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.sub .pill.solid, .sub-scan .pill.solid { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sub .sub-sec { margin: 0 0 16px; }
+.sub .sub-sec h3 { font-size: 13px; font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 6px; }
+.sub .sub-offer { border: 1px solid var(--hairline); border-radius: 14px; background: var(--surface); padding: 12px 14px; margin-bottom: 10px; }
+.sub .sub-offer > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.sub .sub-offer h4 { margin: 0; font-size: 15px; font-weight: 650; }
+.sub .sub-meta, .sub .sub-muted, .sub .sub-est { font-size: 12.5px; color: var(--muted); }
+.sub .sub-reward { font-weight: 650; text-align: right; white-space: nowrap; }
+.sub .sub-reqs { list-style: none; margin: 10px 0 6px; padding: 0; display: grid; gap: 8px; }
+.sub .sub-req-top { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; flex-wrap: wrap; }
+.sub .sub-state { font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.sub .sub-req.met .sub-state, .sub .sub-req.met_estimate .sub-state { color: var(--in); }
+.sub .sub-req.overdue .sub-state { color: var(--out); }
+.sub .sub-req.cant_tell .sub-state { color: var(--pending-ink); }
+.sub .sub-bar { height: 6px; border-radius: 999px; background: var(--hairline); overflow: hidden; margin: 5px 0 3px; }
+.sub .sub-bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+.sub .sub-req.met .sub-bar i, .sub .sub-req.met_estimate .sub-bar i { background: var(--in); }
+.sub .sub-req-act { display: flex; gap: 12px; font-size: 12px; }
+.sub .sub-paid, .sub .sub-cand, .sub .sub-acct { font-size: 13px; margin: 6px 0; }
+.sub .sub-cand { padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--in) 8%, var(--surface)); }
+.sub .sub-cand span { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; }
+.sub .sub-hold { font-size: 13px; margin: 8px 0 4px; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--hairline); }
+.sub .sub-hold span { color: var(--muted); }
+.sub .sub-hold.until { border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline)); }
+.sub .sub-hold.reached { border-color: color-mix(in srgb, var(--pending-ink) 45%, var(--hairline)); }
+.sub .sub-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; align-items: center; }
+.sub .sub-actions select, .sub-scan textarea, .sub .sub-form select, .sub .sub-form input, .sub .sub-form textarea, .sub .sub-child input, .sub .sub-child select {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); border: 1px solid var(--hairline); border-radius: 8px; padding: 6px 9px; min-width: 0; }
+
+.sub .sub-form, .sub .sub-child { margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--hairline); }
+.sub .sub-fields, .sub .sub-child { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 12px; }
+.sub .sub-form label, .sub .sub-child label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.sub .sub-form label.wide, .sub .sub-child label.wide, .sub .sub-child .sub-buttons { grid-column: 1 / -1; }
+.sub .sub-terms { border: 1px solid var(--hairline); border-radius: 12px; margin: 12px 0; padding: 10px 12px; display: grid; gap: 8px; }
+.sub .sub-terms legend { font-size: 12px; font-weight: 650; color: var(--muted); padding: 0 4px; }
+.sub .sub-terms textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.sub .sub-read { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sub .sub-sug { font-size: 13px; padding: 10px; border-radius: 10px; background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.sub .sub-sug ul { margin: 6px 0 8px; padding-left: 18px; }
+.sub .sub-sug q { display: block; color: var(--muted); font-size: 12px; margin: 2px 0 4px; }
+.sub .sub-notes { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+.sub .sub-buttons, .sub-scan .sub-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sub .sub-err { color: var(--out); font-size: 13px; }
+
+/* the screenshot page */
+body.sub-scan { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.sub-scan main { max-width: 720px; margin: 0 auto; padding: 24px 16px 40px; display: grid; gap: 12px; }
+.sub-scan h1 { font-size: 22px; margin: 0; }
+.sub-scan .sub-muted { color: var(--muted); font-size: 13.5px; margin: 0; }
+.sub-scan .pill { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--hairline);
+                  background: var(--surface); color: var(--ink); text-decoration: none; font: inherit; font-weight: 600; cursor: pointer; }
+.sub-scan .sub-pick { justify-self: start; }
+.sub-scan img { max-width: 100%; max-height: 320px; object-fit: contain; border-radius: 10px; border: 1px solid var(--hairline); }
+.sub-scan textarea { width: 100%; box-sizing: border-box; resize: vertical; }
+.sub-scan [hidden] { display: none !important; }                                 /* a .pill sets display, which would otherwise win over hidden */

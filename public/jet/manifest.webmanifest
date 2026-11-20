@@ -1,0 +1,28 @@
+{
+  "id": "/jet/",
+  "name": "JET",
+  "short_name": "JET",
+  "description": "Your household's trips: itinerary, flights, map, photos and what they cost, from Minty.",
+  "start_url": "/jet/",
+  "scope": "/jet/",
+  "display": "standalone",
+  "background_color": "#0f1b3d",
+  "theme_color": "#1b3aa8",
+  "icons": [
+    { "src": "/jet/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/jet/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/jet/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/jet/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "share_target": {
+    "action": "/jet/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [{ "name": "files", "accept": ["application/pdf", ".pdf", "image/*", "message/rfc822", ".eml", "text/plain"] }]
+    }
+  }
+}

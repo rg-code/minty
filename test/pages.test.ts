@@ -400,6 +400,15 @@ describe("static pages", () => {
   });
 });
 
+describe("a refused sign-in on the dashboard", () => {
+  it("shows the API's reason (e.g. not in ALLOWED_LOGINS) instead of sample data, which would look like an empty Minty", async () => {
+    const html = await fetchText("/app.js");
+    expect(html).toContain("if (res.status === 401 || res.status === 403) {");
+    expect(html).toContain("notice(refusedText(refused));");
+    expect(html).toContain("can add this email to the Worker's ALLOWED_LOGINS variable");
+  });
+});
+
 describe("limits on the dashboard (docs/security-plan.md, step 2)", () => {
   it("the search box stops at D1's LIKE limit, and a refusal shows its reason instead of sample data", async () => {
     const { html } = await page("/");
@@ -454,6 +463,20 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
   const raw = async (path: string) => SELF.fetch(`https://minty.example.workers.dev${path}`);
   const csp = (r: Response) => r.headers.get("content-security-policy") ?? "";
 
+  it("SUB's screenshot page and its vendored reader alone get 'wasm-unsafe-eval'; the dashboard's policy doesn't", async () => {
+    for (const path of ["/sub-scan", "/vendor/tesseract/worker.min.js", "/vendor/tesseract/tesseract.min.js"]) {
+      const r = await raw(path);
+      expect(r.status, path).toBe(200);
+      expect(csp(r), path).toContain("script-src 'self' 'wasm-unsafe-eval';");
+      expect(csp(r), path).toContain("frame-ancestors 'none'");
+      expect(csp(r).match(/default-src/g), path).toHaveLength(1);                  // one policy: the pages' own is detached, not added to
+    }
+    for (const path of ["/", "/sub.js", "/sub-parse.js"]) expect(csp(await raw(path)), path).not.toContain("wasm-unsafe-eval");
+    const html = await (await raw("/sub-scan")).text();
+    expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
+    expect(html).toContain('<script src="/lock.js"></script>');
+  });
+
   it.each(["/", "/connect", "/add-user"])("%s has no inline script or inline event handler left", async (path) => {
     const html = await (await raw(path)).text();
     expect(html).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);                     // every script is a file
@@ -506,7 +529,7 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
   it("the headers file isn't served, and every moved script is in the service worker's shell", async () => {
     expect((await raw("/_headers")).status).toBe(404);
     const sw = await (await raw("/sw.js")).text();
-    expect(sw).toContain('const CACHE = "minty-v9";');                          // installed apps refresh their copy once (v3: Bills)
+    expect(sw).toContain('const CACHE = "minty-v11";');                          // installed apps refresh their copy once (v3: Bills)
     for (const src of MOVED_SCRIPTS) expect(sw, src).toContain(`"${src}"`);
   });
 });
@@ -536,7 +559,7 @@ describe("Bills (docs/bills.md)", () => {
     const reader = await (await SELF.fetch("https://minty.example.workers.dev/pdf-read.js")).text();
     const bam = await (await SELF.fetch("https://minty.example.workers.dev/bam.js")).text();
     for (const page of [js, bam]) expect(page).toContain('import(new URL("pdf-read.js", document.baseURI).href)');
-    expect(reader).toContain('import(new URL("vendor/pdfjs/pdf.min.mjs", document.baseURI).href)');
+    expect(reader).toContain('import(new URL("vendor/pdfjs/pdf.min.mjs", import.meta.url).href)');   // its own file, not the page: JET at /jet/ loads it too
     expect(reader).toContain("isEvalSupported: false");
     for (const f of [js, bam, reader]) expect(f).not.toMatch(/https?:\/\/[^"'\s]*pdf/);
     for (const f of ["/vendor/pdfjs/pdf.min.mjs", "/vendor/pdfjs/pdf.worker.min.mjs", "/bill-parse.js", "/pdf-read.js", "/points-parse.js"]) {

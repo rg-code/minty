@@ -11,6 +11,13 @@ const MAX_NAME = 60;
 
 const cleaned = (a: string) => `rtrim(replace(replace(${a}.name, char(65533), ''), '  ', ' '))`;
 
+/** SQL: true when bank row `i` is a Plaid login, not the "manual" bank row that holds a person's
+ * manual accounts (docs/accounts.md §1). Every query that walks the banks for Plaid's sake (sync,
+ * health, Setup checks, the Trial cap, statements, investments, reconnecting) uses it; a test in
+ * test/manual.test.ts fails on a query over items that neither uses it nor is listed as meaning
+ * every row. */
+export const PLAID_ITEM = (i: string) => `${i}.products <> 'manual'`;
+
 /** SQL: the name to show for account `a`. */
 /** SQL: true when the household left this account (or its bank) out of the numbers (CFA, the
  * dashboard's cards, EGG; analytics_exclusions). `a` is the accounts table's alias. */

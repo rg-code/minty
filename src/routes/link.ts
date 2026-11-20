@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { PLAID_ITEM } from "../accounts";
 import { type Config, ConfigError, credsFor, isConfigured, secretNames } from "../config";
 import { FernetError, fernetEncrypt } from "../fernet";
 import { openAccessToken } from "../token-key";
@@ -30,7 +31,7 @@ const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 export const RESERVED = `s.operation = 'link' AND s.released_at IS NULL AND s.finished_at IS NULL
                 AND (s.used_at IS NOT NULL OR s.expires_at > ${NOW})`;
 /** Banks plus reservations on one credential set (?1). */
-const USED_SQL = `(SELECT count(*) FROM items WHERE plaid_account = ?1)
+const USED_SQL = `(SELECT count(*) FROM items WHERE plaid_account = ?1 AND ${PLAID_ITEM("items")})
                 + (SELECT count(*) FROM link_sessions s WHERE s.plaid_account = ?1 AND ${RESERVED})`;
 
 function newSessionId(): string {
@@ -241,10 +242,10 @@ export async function exchange(env: Env, config: Config, request: Request, ctx: 
 export async function reconnected(env: Env, config: Config, request: Request): Promise<Response> {
   const itemId = (await body(request)).item_id;
   if (!Number.isInteger(itemId)) throw unprocessable("item_id must be an integer");
-  const item = await env.DB.prepare("SELECT * FROM items WHERE id = ?").bind(itemId).first<ItemRow>();
+  const item = await env.DB.prepare(`SELECT * FROM items WHERE id = ? AND ${PLAID_ITEM("items")}`).bind(itemId).first<ItemRow>();
   if (!item) throw new HttpError(404, "item not found");
   const result = await checkItem(env, config, item);
-  const row = await env.DB.prepare(`${BANK_ROWS_SQL} WHERE i.id = ?`).bind(itemId).first<BankRow>();
+  const row = await env.DB.prepare(`${BANK_ROWS_SQL} AND i.id = ?`).bind(itemId).first<BankRow>();
   return json({ item_id: item.id, checked: result !== "skipped" && result !== "retry", health: bankHealth(env, config, row!) });
 }
 
@@ -274,7 +275,7 @@ export type UpdatePurpose = "reconnect" | "statements" | "investments";
 export async function updateMode(env: Env, config: Config, request: Request, email: string, purpose: UpdatePurpose = "reconnect"): Promise<Response> {
   const itemId = (await body(request)).item_id;
   if (!Number.isInteger(itemId)) throw unprocessable("item_id must be an integer");
-  const item = await env.DB.prepare("SELECT * FROM items WHERE id = ?").bind(itemId).first<ItemRow>();
+  const item = await env.DB.prepare(`SELECT * FROM items WHERE id = ? AND ${PLAID_ITEM("items")}`).bind(itemId).first<ItemRow>();
   if (!item) throw new HttpError(404, "item not found");
   if (!config.accountOwner.has(item.plaid_account)) throw new HttpError(400, "item's plaid_account is not configured");
   let accessToken: string;

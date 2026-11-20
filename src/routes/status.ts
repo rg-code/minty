@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { PLAID_ITEM } from "../accounts";
 import { type Config, keyState, secretNames } from "../config";
 import { fernetDecrypt, fernetEncrypt } from "../fernet";
 import { plaidHost } from "../plaid";
@@ -11,7 +12,7 @@ import { tokenKeys } from "../token-key";
  * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql", "0010_card_statements.sql", "0011_bills.sql", "0012_point_balances.sql", "0013_audit.sql", "0014_audit_views.sql", "0015_investments.sql", "0016_statement_marks.sql", "0017_account_names.sql", "0018_statement_estimated.sql", "0019_analytics_exclusions.sql", "0020_txn_category_index.sql", "0021_authorized_date.sql", "0022_benefit_credit_periods.sql"];
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql", "0010_card_statements.sql", "0011_bills.sql", "0012_point_balances.sql", "0013_audit.sql", "0014_audit_views.sql", "0015_investments.sql", "0016_statement_marks.sql", "0017_account_names.sql", "0018_statement_estimated.sql", "0019_analytics_exclusions.sql", "0020_txn_category_index.sql", "0021_authorized_date.sql", "0022_benefit_credit_periods.sql", "0023_manual_accounts.sql", "0024_sub.sql", "0025_jet.sql", "0026_trip_tags.sql"];
 
 interface Check { id: string; ok: boolean; level: "error" | "warn"; message: string; fix?: string }
 
@@ -140,7 +141,7 @@ export async function status(env: Env, config: Config, email: string): Promise<R
         fix: "Redeploy (npm run deploy applies migrations), or run: npx wrangler d1 migrations apply DB --remote" }
     : { id: "migrations", ok: true, level: "error", message: "Database schema is up to date." });
 
-  const { results: counts } = await env.DB.prepare("SELECT status, count(*) AS n FROM items GROUP BY status")
+  const { results: counts } = await env.DB.prepare(`SELECT status, count(*) AS n FROM items WHERE ${PLAID_ITEM("items")} GROUP BY status`)
     .all<{ status: string; n: number }>().catch(() => ({ results: [] as { status: string; n: number }[] }));
   const byStatus = Object.fromEntries(counts.map((r) => [r.status, r.n]));
   // Plaid keys for someone who isn't in MINTY_USERS (e.g. set up for a second person who was never
@@ -160,7 +161,7 @@ export async function status(env: Env, config: Config, email: string): Promise<R
   // Banks whose credential set is gone (person removed from MINTY_USERS, slot removed from
   // PLAID_SLOTS) or has no keys any more: sync skips them, so say so instead of failing silently.
   const { results: perAccount } = await env.DB.prepare(
-    "SELECT plaid_account, count(*) AS n FROM items WHERE status IN ('good', 'login_required') GROUP BY plaid_account",
+    `SELECT plaid_account, count(*) AS n FROM items WHERE status IN ('good', 'login_required') AND ${PLAID_ITEM("items")} GROUP BY plaid_account`,
   ).all<{ plaid_account: string; n: number }>().catch(() => ({ results: [] as { plaid_account: string; n: number }[] }));
   const stranded = perAccount.filter((r) => !config.accountOwner.has(r.plaid_account) || keyState(env, config, r.plaid_account) !== "set");
   if (stranded.length) {
@@ -169,6 +170,21 @@ export async function status(env: Env, config: Config, email: string): Promise<R
       ? "no keys" : "not in MINTY_USERS / PLAID_SLOTS"})`).join(", ");
     add({ id: "items_stranded", ok: false, level: "error", message: `${total} bank(s) can't sync: ${why}.`,
           fix: "Restore that person / slot and its keys. Banks stay with the Plaid account they were linked under." });
+  }
+
+  // Holders and beneficiaries (docs/accounts.md §5) naming a person no longer in MINTY_USERS. Only
+  // accounts that have any are read (a few), and the keys checked here, not in SQL.
+  const { results: related } = await env.DB.prepare(
+    "SELECT holders, beneficiary FROM accounts WHERE holders <> '[]' OR beneficiary IS NOT NULL").all<{ holders: string; beneficiary: string | null }>()
+    .catch(() => ({ results: [] as { holders: string; beneficiary: string | null }[] }));
+  const gone = new Set<string>();
+  for (const r of related) {
+    try { for (const k of JSON.parse(r.holders) as string[]) if (!config.users.has(k)) gone.add(k); } catch { /* not a list: shown as no holders */ }
+    try { const b = r.beneficiary ? JSON.parse(r.beneficiary) : null; if (typeof b?.key === "string" && !config.users.has(b.key)) gone.add(b.key); } catch { /* likewise */ }
+  }
+  if (gone.size) {
+    add({ id: "holders_unknown", ok: false, level: "warn", message: `Some accounts name ${[...gone].join(", ")} as a holder or beneficiary, who isn't in MINTY_USERS.`,
+          fix: "Add them back to MINTY_USERS, or change those accounts' holders in Accounts." });
   }
 
   // A bank link that stopped after its session was claimed (src/routes/link.ts): Plaid may have
@@ -200,7 +216,7 @@ export async function status(env: Env, config: Config, email: string): Promise<R
             (SELECT count(DISTINCT t.account_owner) FROM transactions t JOIN accounts a ON a.id = t.account_id
               WHERE a.item_id = i.id AND t.account_owner IS NOT NULL) AS distinct_members
      FROM items i
-     WHERE i.status IN ('good', 'login_required')
+     WHERE i.status IN ('good', 'login_required') AND ${PLAID_ITEM("i")}
        AND (i.institution_name LIKE 'American Express%' OR EXISTS (
              SELECT 1 FROM transactions t JOIN accounts a ON a.id = t.account_id
              WHERE a.item_id = i.id AND t.account_owner IS NOT NULL))

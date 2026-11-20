@@ -77,7 +77,9 @@ Design history and decisions: `docs/serverless-plan.md`.
 - Plaid amount sign: POSITIVE = money out. Stored as integer cents (`amount_cents`); the
   dashboard flips the sign for display.
 - Tags live in `transaction_tags` rows. Sync never writes them, so user labels survive
-  re-syncs. Keep it that way. The same goes for an account's own name (`accounts.display_name`,
+  re-syncs. Keep it that way. A JET trip's tags are written onto its confirmed transactions, marked with
+  `transaction_tags.trip_id` (`docs/trips.md` §18): taking a tag off the trip, or a transaction out of it, removes only
+  those rows, and a tag change that involves a left-out tag marks CFA for a rebuild (`markIfLeftOutTags`). The same goes for an account's own name (`accounts.display_name`,
   `PUT /accounts/{id}/name`): pages show `ACCOUNT_NAME()` (`src/accounts.ts`: the household's
   name, else Plaid's, tidied), while card recognition (ABC, BAM) keeps matching on Plaid's
   `accounts.name`.
@@ -155,6 +157,36 @@ Design history and decisions: `docs/serverless-plan.md`.
   catch-up run only while a year isn't settled, at most weekly, never on a request. Every figure
   is sanity-checked against `src/retirement/limits.ts`, which stays the fallback. `IRS_LIMITS=off`
   never asks; tests run with it off.
+- Manual accounts and Accounts (`docs/accounts.md`): a manual account is an `accounts` row
+  (`is_manual = 1`) under its person's "manual" bank row (`items.products = 'manual'`, no token).
+  Every query that walks the banks for Plaid's sake uses `PLAID_ITEM()` (`src/accounts.ts`);
+  `test/manual.test.ts` fails on one that doesn't (or add it to that test's list of queries that mean
+  every row). Saving a balance writes the account only; the hourly snapshot dates it by
+  `balance_as_of`. Net worth: only a home among other assets, US dollars only; `net_worth` keeps
+  `home_cents` / `home_debt_cents` for "Without home". `holders` and `beneficiary` are labels on any
+  account (people stay in `MINTY_USERS`); sync never writes them.
+- SUB, sign-up bonuses (`docs/sub.md`): offers, requirements and payouts (`sub_*`) are the household's;
+  sync never writes them and they never change a balance, net worth or a transaction. Progress is an
+  estimate from the linked account's own transactions (`src/sub/rules.ts` `NOT_SPEND`, `CHECKED`),
+  one window per requirement by account and date, bounded at both ends; a feed that's behind says
+  "can't tell yet". A holding date comes only from an explicit rule or a date given with its reason;
+  never "safe to close". Terms come from pasted text, a PDF (pdf.js) or a screenshot read on
+  `/sub-scan` (vendored Tesseract.js, `public/vendor/tesseract/`), all on the device; only that page
+  and those files get `'wasm-unsafe-eval'` (`public/_headers`). The demo has no screenshot reader.
+- JET, trips (`docs/trips.md` §16): an app of its own at `/jet/` (manifest scope `/jet/`, its own
+  service worker; each SW deletes only its own `minty-…` / `jet-…` caches), on Minty's Worker, Access
+  and D1. Sync never writes `trips`, `trip_items` or `trip_transactions`. `POST /trips/read-email`
+  is the one route past the 16 KiB body cap (2 MB), reads an `.eml` with `src/jet/` and stores
+  nothing. The map is vendored MapLibre (CSP build) on OpenFreeMap's tiles: only `/jet/*` and
+  `/vendor/maplibre/*` may reach `tiles.openfreemap.org`. Its look follows Flighty (flights, theme,
+  map) and Wanderlog (trips). Gmail pull (§17.1, `public/jet/gmail.js`) asks the person's own
+  Apps Script (`gmail.readonly`, a key made on the device, shared with a phone by a `#` link and a
+  QR code from vendored `public/vendor/qrcode/`) from the browser; only `/jet/*` may reach
+  `script.google.com` / `script.googleusercontent.com`. Share to JET is the manifest's `share_target`,
+  kept on the device by `jet/sw.js` until the add page reads it. It also runs on its own (§17): `public/jet/store.js` is the only
+  thing that knows where trips live (Minty's API, or IndexedDB when `mode.js` says `device`);
+  `scripts/build-jet.mjs` builds that for the landing site. Keep both stores answering the same
+  calls, and `src/jet/` free of runtime imports (the build strips its types for the browser).
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

@@ -54,7 +54,7 @@ const result = await build({
 
 // The dashboard page and its own scripts, changed only where listed.
 const files = {};
-for (const f of ["index.html", "app.js", "theme.js"]) files[f] = await readFile(join(root, "public", f), "utf8");
+for (const f of ["index.html", "app.js", "theme.js", "sub.js"]) files[f] = await readFile(join(root, "public", f), "utf8");
 const editIn = (file, what, from, to, count = 1) => {
   const text = files[file];
   const n = typeof from === "string" ? text.split(from).length - 1 : (text.match(from) ?? []).length;
@@ -76,10 +76,13 @@ const og = ogImage ? `
 <meta name="twitter:card" content="summary_large_image" />` : "";
 edit("demo script first", /^<head>$/m, `<head>\n<meta name="robots" content="noindex" />${og}\n<script src="demo.js"></script>`);
 edit("no manifest", /<link rel="manifest"[^>]*>\n?/, "");
+edit("no JET", /\s*<a href="\/jet\/"[^\n]*<\/a>/, "");                     // JET (public/jet/) is its own app, not in the demo
 edit("no device lock", '<link rel="stylesheet" href="/lock.css" />\n<script src="/lock.js"></script>\n', "");   // demo visitors are never asked for Face ID
 editIn("app.js", "no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});`, "// the demo registers no service worker");
+// SUB's screenshot reader is its own page with Tesseract (7 MB), which the demo leaves out: paste and PDFs still work.
+editIn("sub.js", "no screenshot reader", `<button type="button" class="pill" data-scan>Read a screenshot</button>`, "");
 editIn("theme.js", "light by default", `|| (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")`, `|| "light"`);
-edit("relative asset paths", /(href|src)="\/(favicon\.svg|favicon-32\.png|apple-touch-icon\.png|abc\.css|abc\.js|bills\.css|bills\.js|bam\.css|bam\.js|cfa\.css|cfa\.js|charts\.js|charts\.css|egg\.css|egg\.js|swipe\.js|reconcile\.js|app\.js|theme\.js)"/g, (_, a, f) => `${a}="${f}"`, "some");
+edit("relative asset paths", /(href|src)="\/(favicon\.svg|favicon-32\.png|apple-touch-icon\.png|abc\.css|abc\.js|bills\.css|bills\.js|bam\.css|bam\.js|cfa\.css|cfa\.js|charts\.js|charts\.css|egg\.css|egg\.js|accounts\.css|accounts\.js|sub\.css|sub\.js|swipe\.js|reconcile\.js|app\.js|theme\.js)"/g, (_, a, f) => `${a}="${f}"`, "some");
 const html0 = files["index.html"];
 if (/(href|src)="\/(?!connect|add-user)[a-z]/.test(html0)) throw new Error(`build-demo: an absolute asset path is left: ${html0.match(/(href|src)="\/(?!connect|add-user)[^"]*"/)[0]}`);
 edit("demo styles", /^<\/head>$/m, `<link rel="stylesheet" href="demo.css" />\n</head>`);
@@ -95,7 +98,7 @@ if (goatcounter) {
 </body>`);
 }
 for (const [f, text] of Object.entries(files)) await writeFile(join(out, f), text);
-for (const f of ["abc.js", "abc.css", "bills.js", "bills.css", "bam.js", "bam.css", "pdf-read.js", "points-parse.js", "cfa.js", "cfa.css", "charts.js", "charts.css", "egg.js", "egg.css", "swipe.js", "reconcile.js", "bill-parse.js", "favicon.svg", "favicon-32.png", "apple-touch-icon.png"]) await copyFile(join(root, "public", f), join(out, f));
+for (const f of ["abc.js", "abc.css", "bills.js", "bills.css", "bam.js", "bam.css", "pdf-read.js", "points-parse.js", "cfa.js", "cfa.css", "charts.js", "charts.css", "egg.js", "egg.css", "accounts.js", "accounts.css", "sub.css", "sub-parse.js", "swipe.js", "reconcile.js", "bill-parse.js", "favicon.svg", "favicon-32.png", "apple-touch-icon.png"]) await copyFile(join(root, "public", f), join(out, f));
 await copyFile(join(root, "demo/demo.css"), join(out, "demo.css"));
 // pdf.js for reading bill PDFs in the demo too (still only in the visitor's browser).
 await mkdir(join(out, "vendor/pdfjs"), { recursive: true });

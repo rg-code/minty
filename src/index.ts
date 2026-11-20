@@ -16,6 +16,9 @@ import * as inv from "./routes/investments";
 import * as egg from "./routes/retirement";
 import * as advice from "./routes/advice";
 import * as accountNames from "./accounts";
+import * as manual from "./routes/manual";
+import * as sub from "./routes/sub";
+import * as jet from "./routes/jet";
 import { runInvestmentSync } from "./investments";
 import { refreshIrsLimits } from "./retirement/irs";
 import { PlaidError } from "./plaid";
@@ -91,6 +94,33 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["GET", /^\/investments$/, ({ env }) => inv.investmentBanks(env)],
   ["POST", /^\/investments\/off$/, ({ env, request }) => inv.investmentsOff(env, request)],
   ["PUT", /^\/accounts\/(\d+)\/name$/, ({ env, request, params }) => accountNames.renameAccount(env, request, Number(params[0]))],
+  // JET, trips (docs/trips.md; the app is public/jet/)
+  ["GET", /^\/trips$/, ({ env }) => jet.listTrips(env)],
+  ["POST", /^\/trips$/, ({ env, config, request }) => jet.saveTrip(env, config, request)],
+  ["PUT", /^\/trips\/(\d+)$/, ({ env, config, request, params }) => jet.saveTrip(env, config, request, Number(params[0]))],
+  ["DELETE", /^\/trips\/(\d+)$/, ({ env, params }) => jet.deleteTrip(env, Number(params[0]))],
+  ["POST", /^\/trips\/items$/, ({ env, request }) => jet.saveItem(env, request)],
+  ["PUT", /^\/trips\/items\/(\d+)$/, ({ env, request, params }) => jet.saveItem(env, request, Number(params[0]))],
+  ["DELETE", /^\/trips\/items\/(\d+)$/, ({ env, params }) => jet.deleteItem(env, Number(params[0]))],
+  ["POST", /^\/trips\/read-email$/, ({ env, request }) => jet.readEmail(env, request)],
+  ["GET", /^\/trips\/(\d+)\/suggestions$/, ({ env, params }) => jet.suggestions(env, Number(params[0]))],
+  ["POST", /^\/trips\/(\d+)\/transactions$/, ({ env, request, params }) => jet.linkTransactions(env, request, Number(params[0]))],
+  // SUB, sign-up bonuses (docs/sub.md)
+  ["GET", /^\/sub$/, ({ env, url }) => sub.list(env, url)],
+  ["POST", /^\/sub\/offers$/, ({ env, config, request }) => sub.saveOffer(env, config, request)],
+  ["PUT", /^\/sub\/offers\/(\d+)$/, ({ env, config, request, params }) => sub.saveOffer(env, config, request, Number(params[0]))],
+  ["DELETE", /^\/sub\/offers\/(\d+)$/, ({ env, params }) => sub.deleteOffer(env, Number(params[0]))],
+  ["POST", /^\/sub\/requirements$/, ({ env, request }) => sub.saveRequirement(env, request)],
+  ["PUT", /^\/sub\/requirements\/(\d+)$/, ({ env, request, params }) => sub.saveRequirement(env, request, Number(params[0]))],
+  ["DELETE", /^\/sub\/requirements\/(\d+)$/, ({ env, params }) => sub.deleteChild(env, "sub_requirements", Number(params[0]))],
+  ["POST", /^\/sub\/payouts$/, ({ env, request }) => sub.savePayout(env, request)],
+  ["PUT", /^\/sub\/payouts\/(\d+)$/, ({ env, request, params }) => sub.savePayout(env, request, Number(params[0]))],
+  ["DELETE", /^\/sub\/payouts\/(\d+)$/, ({ env, params }) => sub.deleteChild(env, "sub_payouts", Number(params[0]))],
+  // Manual accounts, holders and a beneficiary (docs/accounts.md)
+  ["POST", /^\/accounts\/manual$/, ({ env, config, request }) => manual.create(env, config, request)],
+  ["PUT", /^\/accounts\/(\d+)\/manual$/, ({ env, config, request, params }) => manual.update(env, config, request, Number(params[0]))],
+  ["DELETE", /^\/accounts\/(\d+)\/manual$/, ({ env, params }) => manual.remove(env, Number(params[0]))],
+  ["PUT", /^\/accounts\/(\d+)\/holders$/, ({ env, config, request, params }) => manual.setHolders(env, config, request, Number(params[0]))],
   ["PUT", /^\/accounts\/(\d+)\/view$/, ({ env, request, params }) => inv.setAccountView(env, request, Number(params[0]))],
   ["POST", /^\/link\/reconnected$/, ({ env, config, request }) => link.reconnected(env, config, request)],
 ];
@@ -123,7 +153,10 @@ export default {
     if (await rateLimited(env, auth.email, request.method, url)) {
       return json({ detail: "Too many requests. Wait a minute and try again." }, 429, { "retry-after": "60" });
     }
-    if (Number(request.headers.get("content-length")) > MAX_BODY_BYTES) {
+    // Bodies are small JSON (16 KiB), except an email file sent to JET's reader (2 MB, that route only).
+    const bodyLimit = request.method === "POST" && url.pathname === "/trips/read-email" ? jet.MAX_EMAIL_BYTES : MAX_BODY_BYTES;
+    if (Number(request.headers.get("content-length")) > bodyLimit) {
+      if (bodyLimit !== MAX_BODY_BYTES) return json({ detail: "email file too large (at most 2 MB)" }, 413);
       const e = bodyTooLarge();
       return json({ detail: e.detail }, e.status);
     }

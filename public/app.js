@@ -13,6 +13,7 @@ let selecting = false;             // Select mode: rows have checkboxes, and the
 let selected = new Set();          // transaction ids (numbers) selected
 let allTags = [];
 let offline = false;
+let refused = null;                    // the API refused this sign-in (403): its reason, shown instead of sample data
 
 const fmt = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" });
 // Plaid: POSITIVE amount = money OUT. Flip for display (spending negative/red, income positive/green).
@@ -50,9 +51,12 @@ new ResizeObserver(() => placeOwnerThumb()).observe(document.getElementById("own
 const PAGE = 500;
 let loaded = [], hasMore = false, loadSeq = 0;
 
+// /?trip=ID: one JET trip's transactions (JET's "Open in Minty", docs/trips.md §6)
+const TRIP = /^\d+$/.test(new URLSearchParams(location.search).get("trip") ?? "") ? new URLSearchParams(location.search).get("trip") : null;
 async function load(more = false) {
   const seq = ++loadSeq;
   const p = new URLSearchParams();
+  if (TRIP) p.set("trip_id", TRIP);
   if (state.owner !== "all") p.set("owner", state.owner);
   if (state.q) p.set("q", state.q);
   if (state.start) p.set("start", state.start);
@@ -76,6 +80,16 @@ async function load(more = false) {
       notice(d.detail || "Too many requests. Wait a minute and try again.");
       return;
     }
+    if (res.status === 401 || res.status === 403) {   // signed in, but refused: say why; sample data would look like an empty Minty
+      const d = await res.json().catch(() => ({}));
+      if (seq !== loadSeq) return;
+      refused = d.detail || `the API answered ${res.status}`;
+      offline = true; hasMore = false; loaded = [];
+      notice(refusedText(refused));
+      document.getElementById("ownerSeg").hidden = true;     // the preview's sample people, not this household's
+      render([]);
+      return;
+    }
     if (!res.ok) throw new Error(res.status);
     txns = await res.json();
     if (seq !== loadSeq) return;                     // filters changed meanwhile: a newer load wins
@@ -83,7 +97,7 @@ async function load(more = false) {
     if (!more) selected.clear();                     // new filters: a selection never hides off-screen
     txns = (more ? loaded : []).concat(txns.slice(0, PAGE));
     loaded = txns;
-    offline = false; banner(false);
+    offline = false; refused = null; banner(false); document.getElementById("ownerSeg").hidden = false;
     if (!more) refreshTags();
   } catch (e) {
     if (seq !== loadSeq) return;
@@ -347,6 +361,12 @@ function banner(show) {
   if (show) b.textContent = "Showing sample data — couldn't reach the API. Deploy this file behind the Minty API to see live transactions.";
 }
 
+/** Why the API refused this sign-in, in plain words (src/access.ts says which check failed). */
+function refusedText(detail) {
+  const fix = /ALLOWED_LOGINS/.test(detail) ? " The household's owner can add this email to the Worker's ALLOWED_LOGINS variable (Cloudflare: Workers & Pages → minty → Settings → Variables and Secrets)." : "";
+  return `Minty refused this sign-in: ${detail.replace(/^forbidden:\s*/, "")}${fix}`;
+}
+
 /** A message from the API in the banner (e.g. a rate limit); the next successful load clears it. */
 function notice(text) {
   const b = document.getElementById("banner");
@@ -360,10 +380,11 @@ function render(txns) {
     !txns.length ? "no transactions"
     : hasMore ? `latest ${txns.length.toLocaleString()} transactions`
     : `${txns.length.toLocaleString()} transaction${txns.length === 1 ? "" : "s"}`;
+  if (TRIP) document.getElementById("count").insertAdjacentHTML("beforeend", ` · one JET trip (<a href="/jet/#/trip/${TRIP}">open in JET</a> · <a href="/">show all</a>)`);
   renderTotals(txns);
 
   const feed = document.getElementById("feed");
-  if (!txns.length) { feed.innerHTML = `<div class="empty">Nothing here yet. Link an account, or widen your filters.</div>`; return; }
+  if (!txns.length) { feed.innerHTML = `<div class="empty">${refused ? "No transactions: Minty refused this sign-in (see above)." : "Nothing here yet. Link an account, or widen your filters."}</div>`; return; }
 
   const groups = {};
   for (const t of txns) (groups[t.date] ??= []).push(t);
@@ -524,7 +545,7 @@ const CAT = { FOOD_AND_DRINK: "Food & drink", GENERAL_MERCHANDISE: "Shopping", R
               LOAN_PAYMENTS: "Loan payments", TRANSFER_OUT: "Transfers out (not matched)", OTHER: "Other" };
 const catName = c => CAT[c] ?? titleCase(c);
 const monName = (m, opts = { month: "short", year: "numeric" }) => new Date(`${m}-15T12:00:00Z`).toLocaleDateString(undefined, { ...opts, timeZone: "UTC" });
-const filtersOn = () => !!(state.q || state.start || state.end || state.tags.length || state.categories.length || state.banks.length || state.accounts.length || state.cards.length);
+const filtersOn = () => !!(TRIP || state.q || state.start || state.end || state.tags.length || state.categories.length || state.banks.length || state.accounts.length || state.cards.length);
 
 let cardDays = null;                   // this month's spending by day, per person (GET /audit/daily split=owner): the cards' running totals
 let cardLastYear = null;               // the same month last year, the same way: the grey area behind them
@@ -582,6 +603,7 @@ function renderLeftOutNote() {
 function renderTotals(txns) {
   const el = document.getElementById("totals"), C = window.MintyCharts;
   if (!C) { document.addEventListener("DOMContentLoaded", () => renderTotals(loaded), { once: true }); return; }
+  if (refused) { el.innerHTML = ""; document.getElementById("trends").hidden = true; return; }   // nothing to add up (the banner says why)
   renderLeftOutNote();
   txns = txns.filter(t => !leftOut(t));
   const present = [...new Set(txns.map(t => t.owner))];

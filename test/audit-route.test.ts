@@ -35,7 +35,7 @@ describe("GET /audit", () => {
       { month: month(1), bucket: "spend", category: "FOOD_AND_DRINK", cents: 80000, n: 39 },          // both people, summed
       { month: month(1), bucket: "income", category: "INCOME", cents: -500000, n: 2 }]));
     expect(body.totals.some((t: any) => t.month === month(13))).toBe(false);                         // older than 12 months
-    expect(body.net_worth).toEqual([{ date: "2026-10-01", assets: 1000000, debts: 50000 }]);
+    expect(body.net_worth).toEqual([{ date: "2026-10-01", assets: 1000000, debts: 50000, home: 0, home_debt: 0 }]);
     expect(body.recurring).toEqual([expect.objectContaining({ merchant: "NETFLIX", cadence: "monthly", corrected: null })]);
     expect(body).toMatchObject({ cards: [], corrections: [], pending_rebuild: false });
   });
@@ -44,7 +44,7 @@ describe("GET /audit", () => {
     expect((await getJson<any>("/audit?months=24")).body.totals.some((t: any) => t.month === month(13))).toBe(true);
     const { body } = await getJson<any>("/audit?owner=spouse");
     expect(body.totals).toEqual([{ month: month(1), bucket: "spend", category: "FOOD_AND_DRINK", cents: 20000, n: 9 }]);
-    expect(body.net_worth).toEqual([{ date: "2026-10-01", assets: 100000, debts: 0 }]);
+    expect(body.net_worth).toEqual([{ date: "2026-10-01", assets: 100000, debts: 0, home: 0, home_debt: 0 }]);
     expect(body.recurring).toEqual([]);
     expect((await getJson("/audit?owner=nobody")).status).toBe(422);
   });

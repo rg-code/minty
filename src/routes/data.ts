@@ -4,7 +4,8 @@ import { type Config, isConfigured } from "../config";
 import { HttpError, dateParam, intParam, json, jsonBody, unprocessable } from "../http";
 import { bankHealth, bankRows, syncHealth } from "../health";
 import { RESERVED } from "./link";
-import { ACCOUNT_NAME } from "../accounts";
+import { ACCOUNT_NAME, LEFT_OUT, PLAID_ITEM } from "../accounts";
+import { IN_NET_WORTH, markIfLeftOutTags } from "../audit/totals";
 
 /** Read API for the pages in public/, plus tag editing. */
 
@@ -14,8 +15,8 @@ const MAX_FILTER_CATEGORIES = 30;   // bound as one JSON list
 // 2 for q, the categories (one JSON list) and limit = 88 bound parameters, under D1's 100.
 const MAX_FILTER_IDS = 60;    // a card member counts as 2 (account id + name)
 const MAX_CARD_MEMBER_LENGTH = 200;
-const MAX_TAGS_PER_TXN = 50;
-const MAX_TAG_LENGTH = 64;
+export const MAX_TAGS_PER_TXN = 50;
+export const MAX_TAG_LENGTH = 64;
 // D1 allows 50 bytes in a LIKE pattern, and the search adds a % on each side: longer text failed
 // with "LIKE or GLOB pattern too complex". The dashboard's search box stops there too (maxlength).
 export const MAX_SEARCH_BYTES = 48;
@@ -57,15 +58,22 @@ export async function accounts(env: Env, url: URL): Promise<Response> {
   const owner = url.searchParams.get("owner");
   // Retirement accounts (EGG) are islanded: left out unless ?view=all, or switched to the dashboard.
   const island = url.searchParams.get("view") === "all" ? "1" : `NOT ${IN_RETIREMENT("accounts")}`;
-  const select = `SELECT id, owner, item_id, plaid_account_id, ${ACCOUNT_NAME("accounts")} AS name, name AS plaid_name, display_name, mask, type, subtype,
-                         balance_current_cents / 100.0 AS balance_current,
+  // Manual accounts (docs/accounts.md) have no transactions, so the dashboard's filters leave them
+  // out; the Accounts view asks for them (?manual=1), and for no card members (?members=0).
+  const manual = url.searchParams.get("manual") === "1" ? "1" : "accounts.is_manual = 0";
+  const select = `SELECT accounts.id, accounts.owner, item_id, plaid_account_id, ${ACCOUNT_NAME("accounts")} AS name, name AS plaid_name, display_name,
+                         mask, type, subtype, balance_current_cents / 100.0 AS balance_current,
                          balance_available_cents / 100.0 AS balance_available,
-                         currency, updated_at, ${IN_RETIREMENT("accounts")} AS in_retirement
-                  FROM accounts`;
+                         currency, accounts.updated_at, ${IN_RETIREMENT("accounts")} AS in_retirement,
+                         is_manual, balance_as_of, coalesce(accounts.institution, i.institution_name) AS bank, notes, holders, beneficiary,
+                         ${LEFT_OUT("accounts")} AS left_out, ${IN_NET_WORTH("accounts")} AS in_net_worth
+                  FROM accounts LEFT JOIN items i ON i.id = accounts.item_id`;
   const stmt = owner
-    ? env.DB.prepare(`${select} WHERE owner = ? AND ${island} ORDER BY name`).bind(owner)
-    : env.DB.prepare(`${select} WHERE ${island} ORDER BY owner, name`);
-  const rows = (await stmt.all<{ id: number }>()).results;
+    ? env.DB.prepare(`${select} WHERE accounts.owner = ? AND ${island} AND ${manual} ORDER BY name`).bind(owner)
+    : env.DB.prepare(`${select} WHERE ${island} AND ${manual} ORDER BY accounts.owner, name`);
+  const rows = (await stmt.all<{ id: number; holders: string; beneficiary: string | null }>()).results
+    .map((a) => ({ ...a, holders: parseList(a.holders), beneficiary: parseBeneficiary(a.beneficiary) }));
+  if (url.searchParams.get("members") === "0") return json(rows);
   // Card members (Plaid's account_owner) on multi-card accounts, e.g. Amex authorized-user cards,
   // most-used first. Only accounts that have any; their transactions without one are listed as
   // { name: null } so they can be picked too.
@@ -94,10 +102,15 @@ export async function accounts(env: Env, url: URL): Promise<Response> {
   })));
 }
 
+const parseList = (s: string | null): string[] => { try { const v = JSON.parse(s ?? "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string") : []; } catch { return []; } };
+const parseBeneficiary = (s: string | null): { key: string } | { name: string } | null => {
+  try { const v = s ? JSON.parse(s) : null; return v && (typeof v.key === "string" || typeof v.name === "string") ? v : null; } catch { return null; }
+};
+
 export async function capacity(env: Env, config: Config): Promise<Response> {
   // Per-person Trial-account usage: how many Items each credential set holds vs the cap.
   const [itemsRes, reservedRes] = await env.DB.batch([
-    env.DB.prepare("SELECT plaid_account, count(*) AS n FROM items GROUP BY plaid_account"),
+    env.DB.prepare(`SELECT plaid_account, count(*) AS n FROM items WHERE ${PLAID_ITEM("items")} GROUP BY plaid_account`),
     // Link sessions holding a slot (src/routes/link.ts): being linked right now, or interrupted
     env.DB.prepare(`SELECT plaid_account, count(*) AS n FROM link_sessions s WHERE ${RESERVED} GROUP BY plaid_account`),
   ]);
@@ -193,10 +206,14 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
     throw unprocessable(`category must be Plaid categories like FOOD_AND_DRINK (or OTHER, for none), at most ${MAX_FILTER_CATEGORIES}`);
   }
   const limit = intParam(url, "limit", { def: 500, min: 1, max: 1000 })!;
+  // trip_id: a JET trip's confirmed transactions (docs/trips.md §6). The query then starts from the
+  // trip's links (CROSS JOIN keeps that order), so it reads only that trip's rows.
+  const tripId = intParam(url, "trip_id", { min: 1 });
 
   // Retirement accounts' transactions (an HSA's, say) show in EGG, not here, unless switched back.
   const clauses: string[] = [`NOT ${IN_RETIREMENT("a")}`];
   const params: unknown[] = [];
+  if (tripId !== undefined)     { clauses.unshift("tl.trip_id = ? AND tl.state = 'confirmed'"); params.unshift(tripId); }
   if (owner)                   { clauses.push("t.owner = ?");      params.push(owner); }
   if (accountIds.length || cards.length) {
     const any: string[] = [];
@@ -254,7 +271,7 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
            a.subtype AS account_subtype,
            a.item_id,
            i.institution_name
-    FROM transactions t
+    FROM ${tripId !== undefined ? "trip_transactions tl CROSS JOIN transactions t ON t.id = tl.transaction_id" : "transactions t"}
     JOIN accounts a ON a.id = t.account_id
     JOIN items i ON i.id = a.item_id
     ${where}
@@ -312,6 +329,7 @@ export async function bulkTags(env: Env, request: Request): Promise<Response> {
        ON CONFLICT (transaction_id, tag) DO NOTHING`).bind(ids, tag)),
   ]);
   const changed = results.reduce((n, r) => n + (r.meta.changes ?? 0), 0);
+  if (changed) await markIfLeftOutTags(env, [...add, ...remove]);   // CFA follows a left-out tag within minutes
   const { results: rows } = await env.DB.prepare(
     `SELECT t.id, (SELECT json_group_array(tag) FROM (SELECT tag FROM transaction_tags tt WHERE tt.transaction_id = t.id ORDER BY tt.position)) AS tags
      FROM json_each(?1) j JOIN transactions t ON t.id = j.value`).bind(ids).all<{ id: number; tags: string }>();
@@ -336,12 +354,18 @@ export async function setTags(env: Env, request: Request, txnId: number): Promis
 
   const exists = await env.DB.prepare("SELECT id FROM transactions WHERE id = ?").bind(txnId).first();
   if (!exists) throw new HttpError(404, "transaction not found");
+  const before = (await env.DB.prepare("SELECT tag FROM transaction_tags WHERE transaction_id = ?").bind(txnId).all<{ tag: string }>()).results.map((r) => r.tag);
 
-  // One batch = one transaction: replace the row's tags atomically.
+  // One batch = one transaction: replace the row's tags atomically. Tags it keeps keep their row
+  // (and so a trip's mark, transaction_tags.trip_id: docs/trips.md §18); tag is COLLATE NOCASE.
   await env.DB.batch([
-    env.DB.prepare("DELETE FROM transaction_tags WHERE transaction_id = ?").bind(txnId),
+    env.DB.prepare("DELETE FROM transaction_tags WHERE transaction_id = ? AND tag NOT IN (SELECT value FROM json_each(?))").bind(txnId, JSON.stringify(clean)),
     ...clean.map((tag, i) =>
-      env.DB.prepare("INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (?, ?, ?)").bind(txnId, tag, i)),
+      env.DB.prepare(`INSERT INTO transaction_tags (transaction_id, tag, position) VALUES (?, ?, ?)
+                      ON CONFLICT (transaction_id, tag) DO UPDATE SET tag = excluded.tag, position = excluded.position`).bind(txnId, tag, i)),
   ]);
+  const low = (l: string[]) => new Set(l.map((t) => t.toLowerCase()));
+  const was = low(before), now = low(clean);
+  await markIfLeftOutTags(env, [...before.filter((t) => !now.has(t.toLowerCase())), ...clean.filter((t) => !was.has(t.toLowerCase()))]);
   return json({ id: txnId, tags: clean });
 }

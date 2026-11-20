@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { PLAID_ITEM } from "./accounts";
 import { type Config, keyState } from "./config";
 
 /** Bank health: one verdict per bank (Plaid Item), shared by the dashboard (/items, /health) and
@@ -53,7 +54,8 @@ export const BANK_ROWS_SQL = `
               THEN (SELECT count(*) FROM transactions t JOIN accounts a ON a.id = t.account_id WHERE a.item_id = i.id)
               ELSE 0 END AS txns,
          i.products, s.status AS inv_status, s.synced_at AS inv_synced_at, s.last_error AS inv_error
-  FROM items i LEFT JOIN investment_sync s ON s.item_id = i.id`;
+  FROM items i LEFT JOIN investment_sync s ON s.item_id = i.id
+  WHERE ${PLAID_ITEM("i")}`;
 
 /** Plaid error codes (and Minty's own) in plain words. Unknown codes fall back to Plaid's text. */
 const MEANING: Record<string, string> = {

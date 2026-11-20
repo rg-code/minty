@@ -1,6 +1,6 @@
 # Plan: security hardening after the 2026-10-14 review
 
-**Status: decisions made (2026-10-14, §2); steps 1–4 done (step 4 enforced 2026-10-16); step 5 in progress (5a done). To-do list: §4. §5 (2026-11-06, proposed): the owner's MCP Worker, the first paths reachable without Access.** Written 2026-10-14.
+**Status: decisions made (2026-10-14, §2); steps 1–4 done (step 4 enforced 2026-10-16); step 5 in progress (5a done). To-do list: §4. §5 (2026-11-06, proposed): the owner's MCP Worker, the first paths reachable without Access. §6 (approved 2026-11-19): JET's inbox route for one Access service token. §7 (approved 2026-11-19): JET's Gmail pull.** Written 2026-10-14.
 
 An external review of `main` at 183d15b (API, pages, encryption, migrations, workflows, tests)
 found no unauthenticated path to financial data. Its main risks were how updates reach a
@@ -273,3 +273,78 @@ the Access sessions in Zero Trust, and check `undo_tagging`'s log for changed ta
 are never reachable from the MCP Worker: it has no `TOKEN_ENC_KEY`.
 
 **To-do:** agent-plan §12.8 (M0 holds the approvals).
+
+## 6. JET's inbox: one route for one service token (approved by the owner, 2026-11-19)
+
+The design is [trips.md](trips.md) §2.1. (Numbered 6 to leave §5 to the MCP Worker's proposal.)
+
+**The change.** Today every API route needs a person: the Access JWT must carry an email, and the
+email must pass `ALLOWED_LOGINS`. JET's Gmail script runs on Google's servers, which can't sign in
+as a person, so **one route, `POST /inbox`, also accepts one Cloudflare Access service token**:
+- **Access checks the token first.** A Service Auth policy on Minty's Access application admits it,
+  and Access signs a JWT for it, as for a person.
+- **The Worker checks that JWT** as it does every other (team, audience, signature, expiry). Then,
+  on `POST /inbox` only, it accepts a JWT with no email when its `common_name` (the token's Client
+  ID) equals the `INBOX_TOKEN_ID` setting.
+- **Every other route, and every other method on `/inbox`, still refuses it:** "service tokens can't
+  use Minty", as today.
+- **An unset `INBOX_TOKEN_ID` means no token is accepted anywhere.** It's off by default, and forks
+  are unchanged until they set it.
+
+**What the token can do:** add one message to the inbox, which holds suggestions until a person
+confirms them. It can't read anything: no trips, bills, transactions or accounts, and not the inbox
+itself. It can't confirm, edit or delete.
+
+**If it leaks:** someone could add messages to the inbox, which would wait as suggestions. Nothing
+could be read or changed. Delete the token in Zero Trust and make a new one.
+
+**Limits:**
+- The rate limit applies per token (as `RL_GENERAL` does per login).
+- Bodies are capped: a message up to 2 MB through `POST /inbox` alone (attachments, §2.3), every
+  other route keeping 16 KiB.
+- The inbox holds at most 500 unread messages. Past that, new ones are refused with 429, so a flood
+  can't fill D1.
+
+**Tests (with T2):**
+- the token on every other route, and on `GET /inbox`, is refused;
+- a token with another Client ID is refused;
+- with `INBOX_TOKEN_ID` unset, it's refused everywhere;
+- a person's login still works on `POST /inbox` as before;
+- the size and count caps hold.
+
+**Rule update (with T2):** CLAUDE.md's Auth rule gains this one exception, worded as above.
+
+
+## 7. JET's Gmail pull: the person's own script, asked from the browser (approved by the owner, 2026-11-19)
+
+The design is [trips.md](trips.md) §17.1. Minty's Worker, Access and D1 are unchanged. What's new:
+- **a web app in the person's Gmail** that reads one label;
+- **two hosts in `/jet/*`'s `connect-src`:** `script.google.com` and `script.googleusercontent.com`.
+
+**The exposure:**
+- The script is deployed for "Anyone", so its URL needs no Google sign-in.
+- What guards it is a 48-hex-character key (192 bits), made on the device and written into the
+  script.
+- Anyone with both the URL and the key can read that label's emails from the last 60 days. They can't
+  read anything else, or change or send mail. The script's text is generated, and a test checks it
+  only reads.
+- The key travels in the query string, so it's in the browser's history on that device and in
+  Google's logs, not in Minty's.
+
+- **The phone link** (`#/gmail?connect=…`) carries the address and the key, to connect another
+  device. It's after the `#`, so it's never sent to a server, and the page drops it from the address
+  bar once read. But wherever it's sent (a message to yourself) holds the key. The page says to send
+  it only to yourself.
+
+**Why it's acceptable:**
+- The label holds bookings the person chose to forward.
+- With the recommended Gmail account made only for Minty, there's nothing else in the mailbox.
+- The `gmail.readonly` permission covers the whole mailbox, but the script only searches the label.
+
+**If the key leaks:** archive the deployment (Deploy → Manage deployments), and paste a new script
+from `#/gmail` after "Forget on this device".
+
+**Not done:**
+- No `UrlFetchApp`: the script never sends mail anywhere.
+- No write scopes.
+- Nothing reaches Minty's Worker from Google.

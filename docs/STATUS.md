@@ -142,17 +142,40 @@ there, gitignored here). If that folder exists, read it too.
    [agent-plan.md](agent-plan.md), and its decisions were made 2026-10-06. It waits behind §12
    (the owner's Ask Minty is Claude, through MCP). When picked up: **A0** (§8.1), which needs
    the owner's go-ahead plus an OpenRouter key (training off) and a Workers AI token in `.dev.vars`.
-8. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
+8. **Manual accounts and an Accounts view** ([accounts.md](accounts.md)), and **SUB, sign-up
+   bonuses** ([sub.md](sub.md)): built 2026-11-19: ⋯ menu → Accounts, and ⋯ menu → SUB. Accounts
+   also gets holders and a beneficiary on any account, with people still in `MINTY_USERS`. Both
+   use ideas from a fork, with its author's permission.
+9. **JET, trips (a Flighty and Wanderlog hybrid)**, [trips.md](trips.md): **J1 built 2026-11-19**, the app at
+   `/jet/` (§16): trips, bookings, itinerary, flight cards, the map, the trip's spending.
+   - **JET on its own** (§17): the same app with trips in the browser, for people without Minty,
+     at minty.milesmaximizer.com/jet/ (built by `scripts/build-jet.mjs`, deployed by minty-site).
+   - **Gmail pull and Share to JET** (§17.1, §17.2, live 2026-11-19): JET reads a Gmail label with the
+     person's own Apps Script, on a phone too (phone link and QR); Android's share menu. Security
+     plan §7 approved.
+   - **Trip tags** (§18): a trip's tags go onto its transactions, so "reimbursed" leaves a trip's
+     spending out of CFA and the dashboard's totals.
+   - Bookings (and bills) come from a Gmail account made for Minty, by forwarding to
+     `+mintytrips` / `+mintybills` or labeling by hand, or by forwarding to the domain's address.
+     No mailbox is connected to Minty.
+   - An itinerary and flight cards, the trip's transactions, BAM's pending changes, an Immich album,
+     Minty's own map; live flight status optional.
+   - **T0 started (2026-11-19):** the owner runs the five checks in `scripts/jet-t0/README.md` and
+     sends back their output. Decided: text kept 30 days, the owner's Immich key, the map and live
+     status (AeroAPI Personal), and a timeline from bookings, photos' metadata and transactions (§15).
+     Street map: OpenFreeMap's tiles; push notifications later. The Gmail script's security change is
+     approved (security-plan §6).
+10. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
    page so the demo follows. A dashboard change the demo can't follow stops the build, by
    design. Other landing-page to-dos: `docs/private/STATUS.md`.
-9. **Owner housekeeping:**
+11. **Owner housekeeping:**
    - Delete unused `PLAID_*` secrets that Setup checks flag, and set `MINTY_USERS` to show your
      name. Keep the existing person keys: banks are stored under them.
    - **Wrangler logins:** `npx wrangler logout` on machines that don't need Cloudflare access.
    - **Plaid Sandbox end-to-end:** the owner runs `node scripts/sandbox-e2e.ts` against
      `npm run dev`, because it reads `.dev.vars`.
    - Other housekeeping: `docs/private/STATUS.md`.
-10. **Ongoing:**
+12. **Ongoing:**
    - **Keep Cloudflare's "Update your Wrangler configuration" prompt unapplied:** `keep_vars`
      already preserves dashboard variables, and copying them into `wrangler.jsonc` would publish
      the household's emails and Access IDs.
@@ -167,7 +190,7 @@ there, gitignored here). If that folder exists, read it too.
      commits with its cursor. If overruns become frequent, lower `SYNC_MAX_BYTES_PER_RUN`, or move
      to Workers Paid and raise it.
    - **Household notes go in `docs/private/`**, never in this file.
-11. **Later:**
+13. **Later:**
    - Onboard friends with GET-STARTED.md, and fix anything they trip on.
    - Email or push alerts for bank problems (they'd need an outbound mail setup).
    - Several Plaid Trial accounts per person is a Plaid ToS gray area. One paid Plaid account per

@@ -45,7 +45,7 @@ async function readsOf(path: string, init: RequestInit = {}) {
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["investment_txns", "holdings", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["trip_transactions", "trip_items", "trips", "sub_payouts", "sub_requirements", "sub_offers", "investment_txns", "holdings", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   // The first three are banks ABC's catalog recognises (src/benefits/catalog.ts); the rest are made up.
   const banks = ["American Express", "Citibank Online", "U.S. Bank", "Example Bank A", "Example Bank B", "Example Bank C", "Example Bank D", "Example Bank E"];
   await db.batch(banks.map((b, i) => db.prepare(
@@ -99,6 +99,16 @@ beforeAll(async () => {
   await db.prepare(`INSERT INTO investment_txns (account_id, plaid_inv_txn_id, date, name, type, subtype, amount_cents)
     SELECT a.value, 'inv-' || a.value || '-' || m.value, date('now', '-' || m.value || ' months'), 'Contribution', 'cash', 'contribution', -50000
     FROM json_each('[901,902,903]') a, json_each('${JSON.stringify([...Array(24).keys()])}') m`).run();
+  // JET: a ten-day trip a month ago, with three priced bookings and 30 of its transactions linked.
+  await db.prepare(`INSERT INTO trips (id, name, start_date, end_date) VALUES (1, 'Trip', date('now', '-40 days'), date('now', '-30 days'))`).run();
+  await db.prepare(`INSERT INTO trip_items (trip_id, kind, name, price_cents, currency) SELECT 1, 'lodging', 'Stay ' || value, 10000 * value, 'USD' FROM json_each('[1,2,3]')`).run();
+  await db.prepare(`INSERT INTO trip_transactions (trip_id, transaction_id, state)
+    SELECT 1, id, 'confirmed' FROM transactions WHERE date >= date('now', '-40 days') AND date <= date('now', '-30 days') LIMIT 30`).run();
+  // SUB: four offers on busy cards, each with a spend requirement over 4 months, one with a cash reward (payout candidates).
+  await db.prepare(`INSERT INTO sub_offers (id, owner, account_id, status, opened_date, reward_cents, reward_points)
+    SELECT value, 'me', value, 'open', date('now', '-120 days'), CASE WHEN value = 1 THEN 30000 END, CASE WHEN value = 1 THEN NULL ELSE 60000 END
+    FROM json_each('[1,2,3,4]')`).run();
+  await db.prepare(`INSERT INTO sub_requirements (offer_id, kind, target_cents, deadline) SELECT value, 'spend', 400000, date('now', '-1 day') FROM json_each('[1,2,3,4]')`).run();
   // BAM: three years of monthly readings of 8 balances (more updating than anyone does).
   await db.prepare(`INSERT INTO point_balances (owner, program, balance, as_of, source)
     SELECT 'me', p.value, 1000 * m.value, date('now', '-' || m.value || ' months'), 'manual'
@@ -109,6 +119,10 @@ describe("D1 rows read per request (budgets)", () => {
   it.each([
     ["/benefits", 3000],                 // only the tracked cards' rows, once each (the first version read every row once per pattern)
     ["/statements", 100],                // one row per bank
+    ["/sub", 350],
+    ["/trips", 150],                     // 66 when written. JET: the trips, their bookings once each, and each trip's links by index
+    ["/trips/1/suggestions", 300],       // about 110 when written: the trip's window by the date index (bounded), and each priced booking by idx_txn_pair (INDEXED BY: the date index read a year)
+    ["/transactions?trip_id=1", 350],    // 175 when written: starts from the trip's links (CROSS JOIN), not the date index                       // 218 when written. SUB: 4 offers, each requirement's window by account and date (bounded at both ends), and one payout look-up
     ["/bills", 9000],                    // 28 cards x 12 statements (each window an index range: an OR there read 85,000), plus 40 own bills
     ["/health", 100],
     ["/items", 100],
@@ -116,6 +130,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/transactions?before=2025-06-01:3000", 2500],   // the next page, via the same index
     ["/transactions?category=FOOD_AND_DRINK", 2500],   // a category: the newest 500 of it
     ["/accounts", 3500],                 // card members: only accounts that have some
+    ["/accounts?view=all&manual=1&members=0", 200],   // Accounts: one row per account, no card members (docs/accounts.md)
     ["/status", 3500],
     ["/tags", 100],
     ["/users", 10],
@@ -175,7 +190,7 @@ describe("D1 rows read by the audit's cron step (docs/cfa.md, C1)", () => {
     expect(full.tally.rows).toBeLessThanOrEqual(12 * n);
     const quiet = counting(env.DB);
     expect(await refreshTotals({ ...E, DB: quiet.db })).toEqual({ from: null, full: false });
-    expect(quiet.tally.rows).toBeLessThanOrEqual(12);
+    expect(quiet.tally.rows).toBeLessThanOrEqual(13);              // 13 since migration 0023: the networth_dirty row now always exists (its value is cleared, not the row)
     const snap = counting(env.DB);
     await snapshotBalances({ ...E, DB: snap.db }, new Date("2026-10-15T12:00:00Z"));   // midday: the first run after midnight also thins old snapshots
     expect(snap.tally.rows).toBeLessThanOrEqual(200);              // one row per account, plus each one's snapshot by its key

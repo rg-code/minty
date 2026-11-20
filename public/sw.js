@@ -2,15 +2,16 @@
 // It caches only Minty's own static files (pages, styles, scripts, icons), network first so
 // updates land at once. API responses (transactions, balances, everything with data) are
 // never touched or cached: they always go to the network, behind Cloudflare Access.
-const CACHE = "minty-v9";             // v9: the Select bar's Summary (reconcile.js)
-const SHELL = ["/", "/connect", "/add-user", "/theme.js", "/app.js", "/connect.js", "/add-user.js", "/abc.js", "/abc.css", "/bills.js", "/bills.css", "/bam.js", "/bam.css", "/cfa.js", "/cfa.css", "/charts.js", "/charts.css", "/egg.js", "/egg.css", "/swipe.js", "/reconcile.js", "/lock.js", "/lock.css",
+const CACHE = "minty-v11";            // v11: SUB (sub.js, sub.css, sub-parse.js)
+const SHELL = ["/", "/connect", "/add-user", "/theme.js", "/app.js", "/connect.js", "/add-user.js", "/abc.js", "/abc.css", "/bills.js", "/bills.css", "/bam.js", "/bam.css", "/cfa.js", "/cfa.css", "/charts.js", "/charts.css", "/egg.js", "/egg.css", "/accounts.js", "/accounts.css", "/sub.js", "/sub.css", "/sub-parse.js", "/swipe.js", "/reconcile.js", "/lock.js", "/lock.css",
                "/manifest.webmanifest", "/favicon.svg",
                "/favicon-32.png", "/apple-touch-icon.png", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-512.png"];
 const isShell = (url) => url.origin === self.location.origin && SHELL.includes(url.pathname);
 
 self.addEventListener("install", (e) => { self.skipWaiting(); });
 self.addEventListener("activate", (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+  // only Minty's own old caches: JET (public/jet/sw.js) keeps its own, named jet-…
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k.startsWith("minty-") && k !== CACHE).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 self.addEventListener("fetch", (e) => {

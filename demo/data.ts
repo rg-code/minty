@@ -31,6 +31,9 @@ export interface DemoData {
   holdings: Record<string, string | number | null>[];
   investmentTxns: Record<string, string | number | null>[];
   snapshots: Record<string, string | number | null>[];
+  subOffers: Record<string, string | number | null>[];       // SUB (docs/sub.md): two made-up offers
+  subRequirements: Record<string, string | number | null>[];
+  subPayouts: Record<string, string | number | null>[];
 }
 
 export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", sam: "sam" }): DemoData {
@@ -79,6 +82,29 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
                       balance_current_cents: cents(bal), balance_available_cents: type === "credit" ? null : cents(bal), currency: "USD" });
     });
   });
+  // Accounts entered by hand (docs/accounts.md): a home and its mortgage, a car (shown, not in net
+  // worth), and a 529 for a child who isn't a Minty person. Each person's under their "manual" bank row.
+  const MANUAL: [string, string, string, string, number, number, string | null, string[], string | null][] = [
+    // person, name, type, subtype, balance, as of (days ago), source, holders, beneficiary's name
+    ["alex", "Home", "other", "home", 685000, 40, "Estimate from the county assessor", ["alex", "sam"], null],
+    ["alex", "Mortgage", "loan", "mortgage", 412300, 12, "Rocket Mortgage", ["alex", "sam"], null],
+    ["sam", "Car", "other", "vehicle", 21500, 120, "Kelley Blue Book", [], null],
+    ["sam", "College 529", "investment", "529", 18240, 25, "NY 529 Direct Plan", [], "Maya"],
+  ];
+  for (const person of ["alex", "sam"]) {
+    const itemId = 90 + items.length;
+    items.push({ id: itemId, owner: who(person), plaid_account: "", plaid_item_id: `manual:${who(person)}`, access_token_enc: "",
+                 institution_name: null, status: "manual", products: "manual", updated_at: nowIso(400) });
+    MANUAL.filter((m) => m[0] === person).forEach(([, name, type, subtype, bal, ago, source, holders, ben], j) => {
+      const id = itemId * 10 + j;
+      accounts.push({ id, owner: who(person), item_id: itemId, plaid_account_id: `manual:demo-${id}`, name, mask: null, type, subtype,
+                      balance_current_cents: cents(bal), balance_available_cents: null, currency: "USD", is_manual: 1,
+                      balance_as_of: daysAgo(ago), institution: source, holders: JSON.stringify(holders.map(who)),
+                      beneficiary: ben ? JSON.stringify({ name: ben }) : null });
+    });
+  }
+  // the joint checking account, held by both
+  accounts.find((a) => a.name === "Total Checking")!.holders = JSON.stringify([who("alex"), who("sam")]);
   const ownerOf = (accountId: number) => accounts.find((a) => a.id === accountId)!.owner as string;
 
   let nextId = 1;
@@ -321,17 +347,35 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   const netWorth: DemoData["netWorth"] = [];
   for (const owner of [owners.alex, owners.sam]) {
     const mine = accounts.filter((a) => a.owner === owner);
-    const held = mine.filter((a) => a.type === "depository" || a.type === "investment").reduce((s, a) => s + Number(a.balance_current_cents ?? 0), 0);
-    const owed = mine.filter((a) => a.type === "credit" || a.type === "loan").reduce((s, a) => s + Number(a.balance_current_cents ?? 0), 0);
+    const sum = (f: (a: DemoData["accounts"][number]) => boolean) => mine.filter(f).reduce((s, a) => s + Number(a.balance_current_cents ?? 0), 0);
+    const home = sum((a) => a.type === "other" && a.subtype === "home"), homeDebt = sum((a) => a.type === "loan" && a.subtype === "mortgage");
+    const held = sum((a) => a.type === "depository" || a.type === "investment"), owed = sum((a) => (a.type === "credit" || a.type === "loan") && a.subtype !== "mortgage");
     for (let d = 150; d >= 1; d--) {
       const drift = 1 - d * 0.0011 + Math.sin(d / 9) * 0.012;
-      netWorth.push({ date: daysAgo(d), owner, assets_cents: Math.round(held * drift), debts_cents: Math.round(owed * (0.85 + 0.3 * Math.abs(Math.sin(d / 13)))) });
+      const h = Math.round(home * (1 - d * 0.0002)), hd = Math.round(homeDebt * (1 + d * 0.00025));
+      netWorth.push({ date: daysAgo(d), owner, assets_cents: Math.round(held * drift) + h, debts_cents: Math.round(owed * (0.85 + 0.3 * Math.abs(Math.sin(d / 13)))) + hd,
+                      home_cents: h, home_debt_cents: hd });
     }
   }
 
   const users = [`${owners.alex}:Alex`, `${owners.sam}:Sam`, ...CAMEOS.map(([label]) => `${label.toLowerCase()}:${label}`)].join(",");
+  // SUB: a card bonus in progress (its spend estimated from the card's own transactions), and a bank
+  // bonus that paid out, now in its keep-open period.
+  const subOffers: DemoData["subOffers"] = [
+    { id: 1, owner: owners.alex, account_id: sapphire, kind: "card", institution: "Chase", product: "Sapphire Preferred", status: "open",
+      reward_points: 60000, reward_program: "chase_ur", opened_date: daysAgo(60), rule_trigger: "opened", rule_length: 12, rule_unit: "months",
+      annual_fee_cents: 9500, terms_text: "Earn 60,000 bonus points after you spend $4,000 on purchases in the first 3 months from account opening." },
+    { id: 2, owner: owners.sam, account_id: savings, kind: "bank", institution: "Ally Bank", product: "Online Savings", status: "paid",
+      reward_cents: 30000, opened_date: daysAgo(160), rule_trigger: "last_payout", rule_length: 6, rule_unit: "months",
+      rule_text: "If the account is closed within 6 months after the bonus is paid, the bonus may be deducted." },
+  ];
+  const subRequirements: DemoData["subRequirements"] = [
+    { id: 1, offer_id: 1, kind: "spend", target_cents: 400000, deadline: iso(Y, M, D - 60 + 91) },
+    { id: 2, offer_id: 2, kind: "deposits", target_cents: 1500000, deadline: daysAgo(70), done_at: daysAgo(120) },
+  ];
+  const subPayouts: DemoData["subPayouts"] = [{ id: 1, offer_id: 2, date: daysAgo(95), amount_cents: 30000 }];
   return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills, points, netWorth,
-           investmentSync, securities, holdings, investmentTxns, snapshots };
+           investmentSync, securities, holdings, investmentTxns, snapshots, subOffers, subRequirements, subPayouts };
 }
 
 /** The Worker settings the demo runs with: its people, and placeholder Plaid keys for each, so no
@@ -358,6 +402,7 @@ export function statements(d: DemoData): [string, (string | number | null)[]][] 
     ...ins("statement_sync", d.statementSync), ...ins("card_statements", d.cardStatements), ...ins("bills", d.bills), ...ins("point_balances", d.points), ...ins("net_worth", d.netWorth),
     ...ins("investment_sync", d.investmentSync), ...ins("securities", d.securities), ...ins("holdings", d.holdings),
     ...ins("investment_txns", d.investmentTxns), ...ins("balance_snapshots", d.snapshots),
+    ...ins("sub_offers", d.subOffers), ...ins("sub_requirements", d.subRequirements), ...ins("sub_payouts", d.subPayouts),
   ];
 }
 

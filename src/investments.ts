@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { PLAID_ITEM } from "./accounts";
 import { type Config, credsFor, isConfigured, loadConfig } from "./config";
 import { FernetError } from "./fernet";
 import { openAccessToken } from "./token-key";
@@ -23,8 +24,10 @@ const OVERLAP_DAYS = 30;                         // later fetches look back this
 
 /** Account subtypes that are retirement accounts (HSAs included, decided 2026-10-16): islanded in
  * EGG unless the household switches one back to the dashboard (accounts.view). */
-export const RETIREMENT_SUBTYPES = ["401a", "401k", "403b", "457b", "ira", "roth", "roth 401k", "sep ira", "simple ira", "sarsep",
-  "keogh", "pension", "retirement", "thrift savings plan", "profit sharing plan", "hsa", "rrsp", "rrif", "lira", "lrif", "lif", "prif", "rdsp", "sipp"];
+// Lower case: IN_RETIREMENT compares lower(subtype) (Plaid writes "403B" and "roth 403B").
+export const RETIREMENT_SUBTYPES = ["401a", "401k", "403b", "457b", "ira", "roth", "roth 401k", "roth 403b", "roth 457b", "sep ira", "simple ira", "sarsep",
+  "keogh", "pension", "roth pension", "retirement", "thrift savings plan", "roth thrift savings plan", "profit sharing plan", "roth profit sharing plan",
+  "hsa", "rrsp", "rrif", "lira", "lrif", "lif", "prif", "rdsp", "sipp"];
 
 /** SQL: whether account `a` shows in EGG instead of the dashboard. */
 export const IN_RETIREMENT = (a: string) =>
@@ -161,11 +164,11 @@ export async function runInvestmentSync(env: Env, config: Config = loadConfig(en
   const leased = await env.DB.prepare(
     `UPDATE investment_sync SET attempted_at = ${NOW}, next_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+10 minutes')
      WHERE item_id = (SELECT s.item_id FROM investment_sync s JOIN items i ON i.id = s.item_id
-                      WHERE s.next_attempt_at IS NOT NULL AND s.next_attempt_at <= ${NOW} AND i.status = 'good'
+                      WHERE s.next_attempt_at IS NOT NULL AND s.next_attempt_at <= ${NOW} AND i.status = 'good' AND ${PLAID_ITEM("i")}
                       ORDER BY s.next_attempt_at, s.item_id LIMIT 1)
      RETURNING item_id`).first<{ item_id: number }>();
   if (!leased) return {};
-  const item = await env.DB.prepare("SELECT * FROM items WHERE id = ?").bind(leased.item_id).first<ItemRow>();
+  const item = await env.DB.prepare(`SELECT * FROM items WHERE id = ? AND ${PLAID_ITEM("items")}`).bind(leased.item_id).first<ItemRow>();
   if (!item) return {};
   return { [item.id]: await syncInvestments(env, config, item) };
 }
