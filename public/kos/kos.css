@@ -235,15 +235,8 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
          background: var(--surface); border: 1px solid var(--hairline-2); box-shadow: 0 14px 30px -12px rgba(0, 0, 0, .5); font-size: 13.5px; }
 .w-day span:last-child { color: var(--muted); }
 .w-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--kos-saffron); box-shadow: 0 0 0 4px color-mix(in srgb, var(--kos-saffron) 25%, transparent); }
-/* three things it does */
-.w-features { list-style: none; margin: 40px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
-.w-features li { display: flex; flex-direction: column; gap: 4px; }
-.w-features b { font-size: 15px; margin-top: 8px; } .w-features li > span:last-child { color: var(--muted); font-size: 14px; line-height: 1.45; }
-.w-ico { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; color: var(--kos-saffron);
-         background: color-mix(in srgb, var(--kos-saffron) 14%, transparent); }
-.w-ico svg { width: 21px; height: 21px; fill: currentColor; }
 /* the set-up: EasyUI's pill navigation (a track, a thumb that slides to the step) and its panel */
-.w-setup { margin-top: 48px; }
+.w-setup { margin-top: 44px; }
 .w-setup h2 { margin: 0 0 14px; font-size: 20px; letter-spacing: -.01em; }
 .w-tabs { position: relative; display: inline-flex; gap: 2px; padding: 4px; border-radius: 999px; border: 1px solid var(--hairline-2);
           background: color-mix(in srgb, var(--bg) 60%, black 10%); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .35); max-width: 100%; }
@@ -258,6 +251,11 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 .w-tab[aria-selected="true"] { color: var(--bg); } .w-tab[aria-selected="true"] i { background: var(--kos-saffron); color: var(--kos-teal); }
 .w-panel { margin-top: 14px; padding: 16px 18px; border-radius: 18px; background: var(--surface); border: 1px solid var(--hairline); line-height: 1.55; }
 .w-panel .actions { margin-top: 10px; }
+.w-ways { display: grid; gap: 10px; margin-top: 10px; }
+.w-way { display: inline-block; margin-right: 6px; padding: 1px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+         background: color-mix(in srgb, var(--kos-saffron) 16%, transparent); color: var(--kos-saffron); }
+:root[data-theme="light"] .w-way { color: #9a5d00; }
+.w-lede b { color: var(--ink); font-weight: 650; }
 .w-support { margin-top: 48px; } .w-support p { margin: 0; color: var(--muted); } .w-support .w-cta { margin-top: 12px; }
 .w-support .w-pill svg { color: var(--kos-saffron); opacity: 1; }
 .w-foot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--hairline); color: var(--muted); font-size: 13px; line-height: 1.6; }
@@ -271,9 +269,6 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
   .w-lede { font-size: 16px; }
   .w-cta .w-primary { flex: 1 0 100%; }
   .w-cta .w-pill { flex: 1 1 0; justify-content: center; }
-  .w-features { grid-template-columns: 1fr; gap: 16px; }
-  .w-features li { display: grid; grid-template-columns: 38px 1fr; column-gap: 12px; }
-  .w-features li .w-ico { grid-row: span 2; } .w-features b { margin-top: 0; }
   .w-tabs { display: flex; width: 100%; }
   .w-tab { flex: 1 1 0; justify-content: center; min-width: 0; padding: 8px 4px; gap: 5px; font-size: 13px; }
   .w-day { right: 2%; }
@@ -317,3 +312,11 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
   .j-text { border: 0; padding: 0; background: none; color: #000; }
   .j-text:placeholder-shown { display: none; }
 }
+
+/* the trip's Lodging tab: its stays, as cards; the map zooms in on them */
+.item.stay { display: block; width: 100%; text-align: left; margin-bottom: 10px; }
+.item.stay .row1 { align-items: center; }
+.stay-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 4px; }
+.stay-dates span { display: block; font-size: 11px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.stay-dates b { font-size: 15px; } .stay-dates small { margin-left: 6px; color: var(--muted); }
+

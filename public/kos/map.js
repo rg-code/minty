@@ -68,7 +68,7 @@ const near = (lon, ref) => lon + 360 * Math.round((ref - lon) / 360);
 
 /** Draws a trip: arcs [{from, to, label, id}] ([lon, lat]) and pins [{lon, lat, kind, label, id, color}].
  * `onPick(id)` is called when a pin or arc is tapped. `fit`: "pins" frames the trip's places (the
- * itinerary, like Wanderlog), "all" frames the flights too (like Flighty). */
+ * itinerary, like Wanderlog), "lodging" the stays (the Lodging tab), "all" the flights too (like Flighty). */
 export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit = "all", dark = true) {
   const gl = window.maplibregl;
   // everything around one reference longitude: the trip's first place, else the first flight's arrival
@@ -107,7 +107,9 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
     }
   }
   const placed = points.features.map((f) => f.geometry.coordinates);
-  const all = fit === "pins" && placed.length ? placed : [...lines.features.flatMap((f) => f.geometry.coordinates), ...placed];
+  const stays = points.features.filter((f) => f.properties.kind === "lodging").map((f) => f.geometry.coordinates);
+  // "lodging" frames the stays (falling back to the places), "pins" the places, "all" the flights too
+  const all = fit === "lodging" && stays.length ? stays : (fit === "pins" || fit === "lodging") && placed.length ? placed : [...lines.features.flatMap((f) => f.geometry.coordinates), ...placed];
   if (all.length) {
     const b = all.reduce((bb, c) => bb.extend(c), new gl.LngLatBounds(all[0], all[0]));
     map.fitBounds(b, { padding: 48, maxZoom: all.length === 1 ? 12 : 14, duration: 0 });

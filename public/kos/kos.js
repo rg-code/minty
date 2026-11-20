@@ -129,13 +129,13 @@ function welcome() {
   const out = addDays(localDay(), 23);                      // always about three weeks away, so it always reads "Scheduled"
   const demo = { id: 0, kind: "flight", airline: "UA", flight_number: "837", dep_airport: "SFO", arr_airport: "NRT", name: "United",
                  start_at: `${out}T11:05:00-08:00`, end_at: `${addDays(out, 1)}T15:00:00+09:00`, dep_terminal: "I", seat: "34K", confirmation: "KOS837" };
-  const feature = (k, title, line) => `<li><span class="w-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${GLYPH[k]}</svg></span><b>${title}</b><span>${line}</span></li>`;
   const step = (n, id, label) => `<button type="button" role="tab" class="w-tab" data-wstep="${id}" data-goatcounter-click="kos-setup-${id}" aria-selected="${n === 1}"><i>${n}</i>${label}</button>`;
   return `<section class="welcome">
     <header class="w-hero">
       <p class="w-kicker">Kos <span>by</span> <a href="https://minty.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-by-minty">Minty</a></p>
       <h1>Every trip,<br />in one place.</h1>
       <p class="w-lede">Flights like Flighty, days like Wanderlog, and a journal written for you when you're home.
+        <b>Forward your booking emails and Kos reads them for you</b>: no typing them in.
         Kept in this browser: no account, and your trips go nowhere you don't send them.</p>
       <div class="w-cta"><button type="button" class="w-primary" data-sample data-goatcounter-click="kos-sample">Try a sample trip</button>
         <a class="w-pill" href="#/new" data-goatcounter-click="kos-new-trip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>New trip</a>
@@ -144,16 +144,12 @@ function welcome() {
     </header>
     <div class="w-visual" aria-hidden="true"><div class="w-card">${flightCard(demo, { compact: true })}</div>
       <div class="w-day"><span class="w-dot"></span><b>Day 2</b><span>Dinner at Sushi Mitsuba · 19:30</span></div></div>
-    <ul class="w-features">
-      ${feature("flight", "Flights", "Big codes, terminals, seats and their arcs on a map.")}
-      ${feature("lodging", "Every day", "Each booking on its day, numbered like the map's pins.")}
-      ${feature("event", "A journal", "Written from your trip, with a satellite map and your notes.")}
-    </ul>
     <section class="w-setup" aria-label="Set Kos up">
-      <h2>Set it up in four steps</h2>
-      <div class="w-tabs" role="tablist"><span class="w-thumb" aria-hidden="true"></span>${step(1, "add", "Add")}${step(2, "email", "Email")}${step(3, "home", "Install")}${step(4, "lock", "Lock")}</div>
-      <div class="w-panel" role="tabpanel" data-wpanel="add"><b>Add a trip, or a booking.</b> Type it in, paste a confirmation, or read a PDF or an email file. Bookings without a trip wait until you make one.</div>
-      <div class="w-panel" role="tabpanel" data-wpanel="email" hidden><b>Bookings from your email.</b> Forward confirmations to your Gmail with <b>+kos</b> in the address, and Kos reads them, on your phone too: <a href="#/gmail" data-goatcounter-click="kos-setup-gmail">set up Gmail</a>. Once Kos is installed on Android, you can also share a PDF or a screenshot to it.</div>
+      <h2>Set it up in three steps</h2>
+      <div class="w-tabs" role="tablist"><span class="w-thumb" aria-hidden="true"></span>${step(1, "add", "Add trips")}${step(2, "home", "Install")}${step(3, "lock", "Lock")}</div>
+      <div class="w-panel" role="tabpanel" data-wpanel="add"><b>Add trips: automatically, or by hand.</b>
+        <div class="w-ways"><div><span class="w-way">Automatically</span> Forward booking emails to your Gmail with <b>+kos</b> in the address, and Kos reads them, on your phone too. <a href="#/gmail" data-goatcounter-click="kos-setup-gmail">Set up Gmail</a> (about 5 minutes, once).</div>
+        <div><span class="w-way">By hand</span> Paste a confirmation, read a PDF, an email file or a screenshot, or type it in. Once Kos is installed on Android, share a booking to it.</div></div></div>
       <div class="w-panel" role="tabpanel" data-wpanel="home" hidden><b>Put Kos on your home screen.</b> iPhone: Safari's Share button → <b>Add to Home Screen</b>. Android: Chrome's ⋮ menu → <b>Install app</b>.
         <div class="actions" id="installRow" hidden><button type="button" class="w-pill" data-install data-goatcounter-click="kos-install">Install Kos</button></div></div>
       <div class="w-panel" role="tabpanel" data-wpanel="lock" hidden><div id="lockStep"><b>Last: lock Kos on this device.</b> <span class="muted">Checking what this device can do…</span></div></div>
@@ -270,10 +266,12 @@ const tripTags = (t) => (store.spending ? t.tags ?? [] : []);
 const tagChips = (tags) => tags.length ? `<div class="trip-tags">${tags.map((g) => `<span class="pill ${leftOutTag(g) ? "warn" : "dim"}" title="${leftOutTag(g) ? "Left out of CFA and the dashboard's totals" : "Its transactions have this tag"}">${esc(g)}${leftOutTag(g) ? " · left out" : ""}</span>`).join("")}</div>` : "";
 function tripView(t, tab) {
   const p = plan(t);
-  const tabs = [["", "Itinerary"], ["flights", "Flights"], ...(store.spending ? [["spending", "Spending"]] : [])];
+  const tabs = [["", "Itinerary"], ["flights", "Flights"], ["lodging", "Lodging"], ...(store.spending ? [["spending", "Spending"]] : [])];
+  const stays = t.items.filter((i) => i.kind === "lodging").sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
   const flights = t.items.filter((i) => i.kind === "flight").sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
   let body;
   if (tab === "flights") body = flights.length ? flights.map((f) => flightCard(f)).join("") : `<div class="card muted">No flights in this trip yet.</div>`;
+  else if (tab === "lodging") body = stays.length ? stays.map(stayCard).join("") : `<div class="card muted">No stays in this trip yet. <a href="#/add?trip=${t.id}&kind=lodging">Add one</a></div>`;
   else if (tab === "spending") body = `<div id="spending"><p class="muted">Loading the trip's spending…</p></div>`;
   else body = `${p.before.length ? dayHtml({ label: "Before the trip", entries: p.before, color: "#8c96ad" }) : ""}
     ${p.days.map((d, n) => dayHtml({ label: `Day ${n + 1}`, sub: fmtDay(d.date), entries: d.entries, color: d.color })).join("")}
@@ -290,6 +288,19 @@ function tripView(t, tab) {
       ${body}</div>
       <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div></div></div>
     <a class="fab" href="#/add?trip=${t.id}" aria-label="Add a booking" title="Add a booking">+</a>`;
+}
+/** A stay, on the Lodging tab: its nights, check-in and check-out, where, and its booking. A tap
+ * centres the map on it (the same [data-item] as the itinerary's). */
+function stayCard(i) {
+  const a = dateOf(i.start_at), b = dateOf(i.end_at);
+  const nights = a && b ? Math.max(0, Math.round((asDay(b) - asDay(a)) / 864e5)) : null;
+  const when = (d, at, word) => d ? `<div><span>${word}</span><b>${esc(fmtDay(d))}</b>${at ? `<small>${esc(at)}</small>` : ""}</div>` : "";
+  return `<button type="button" class="item stay" data-item="${i.id}">
+    <div class="row1"><span class="what">${esc(i.name || "A stay")}</span>${nights !== null ? `<span class="pill dim">${nights} night${nights === 1 ? "" : "s"}</span>` : ""}</div>
+    ${i.place ? `<div class="sub">${esc(i.place)}</div>` : ""}
+    <div class="stay-dates">${when(a, timeOf(i.start_at), "Check in")}${when(b, timeOf(i.end_at), "Check out")}</div>
+    ${i.confirmation || i.price_cents || i.points ? `<div class="sub">${[i.confirmation ? `Conf. ${esc(i.confirmation)}` : "", i.points ? `${i.points.toLocaleString()} pts` : i.price_cents ? money(i.price_cents, i.currency) : ""].filter(Boolean).join(" · ")}</div>` : ""}
+    ${Number.isFinite(i.lat) && Number.isFinite(i.lon) ? "" : `<div class="sub muted">No address on the map yet: edit the stay to add one.</div>`}</button>`;
 }
 function dayHtml({ label: l, sub, entries, color }) {
   return `<section class="day" style="--day:${color}"><div class="day-head"><span class="day-dot"></span><h3>${esc(l)}</h3>${sub ? `<span class="muted">${esc(sub)}</span>` : ""}</div>
@@ -331,7 +342,7 @@ async function showMap(t, tab = "") {
   drawTrip(map, d, (id) => {
     const card = app.querySelector(`[data-item="${CSS.escape(id)}"]`);
     if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); card.animate?.([{ outline: "2px solid var(--accent)" }, { outline: "2px solid transparent" }], 1200); }
-  }, tab === "flights" ? "all" : "pins", dark);
+  }, tab === "flights" ? "all" : tab === "lodging" ? "lodging" : "pins", dark);   // Lodging zooms in on the stays
 }
 
 // --- the trip's spending ----------------------------------------------------------------------

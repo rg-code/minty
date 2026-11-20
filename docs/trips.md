@@ -648,10 +648,10 @@ Kos's own:
   with Support on Ko-fi and Star Minty on GitHub, and the rg-code footer. On the landing site only,
   `build-kos.mjs --goatcounter` counts visits and taps (GoatCounter: no cookies, nothing about the
   trips; `kos/gc.js` and the counting hosts in its policy); Kos on a Minty never has it. The set-up:
-  1. add a trip or a booking (or try the sample);
-  2. bookings from email (Gmail pull, or sharing to Kos on Android);
-  3. put Kos on the home screen (Install Kos when the browser offers it);
-  4. **last:** lock Kos on this device (Turn on / Not on this device), or what this device can't do.
+  1. add trips, automatically (Gmail pull) or by hand (paste, a PDF, an email file, a screenshot,
+     typing, or sharing to Kos on Android): one step, since both add trips;
+  2. put Kos on the home screen (Install Kos when the browser offers it);
+  3. **last:** lock Kos on this device (Turn on / Not on this device), or what this device can't do.
 - **`lock.js` on Kos on its own** (`window.KOS_MODE === "device"`, set by `mode.js` before it loads)
   says Kos and trips, shows Kos's icon, and never offers itself on arrival. Once it's on, it unlocks
   as on Minty. Minty, and Kos on a Minty, are unchanged.
@@ -780,6 +780,9 @@ trip's spending left out too.
 - **Gmail pull:** new set-ups use the label **Kos** and `+kos`. A script made with the label JET keeps
   working, since Kos never tells the script which label to read.
 - **Kept:** `0025_jet.sql` (an applied migration's name is how D1 tracks it), and history.
+
+**The Lodging tab** (2026-11-20, beside Itinerary and Flights): the trip's stays as cards (nights, check-in
+and check-out, where, the booking), and the map zooms in on them (`drawTrip`'s "lodging" fit).
 
 **The summary strip** (under a trip's cover, like Wanderlog's):
 - **Reservations:** Flight, Lodging, Rental car, Train (trains and buses), Restaurant, Activity, Other,
