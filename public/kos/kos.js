@@ -6,9 +6,10 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, shiftSample, store, tripAddress, tripSummary } from "./store.js";
+import { MODE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, shareLink, shareString, shiftSample, store, tripAddress, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
+import { parseWhere } from "./where.js";
 
 const app = document.getElementById("app");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -282,11 +283,11 @@ function tripView(t, tab) {
   else if (tab === "lodging") body = stays.length ? stays.map(stayCard).join("") : `<div class="card muted">No stays in this trip yet. <a href="#/add?trip=${t.id}&kind=lodging">Add one</a></div>`;
   else if (tab === "spending") body = `<div id="spending"><p class="muted">Loading the trip's spending…</p></div>`;
   else body = `${p.before.length ? dayHtml({ label: "Before the trip", entries: p.before, color: "#8c96ad" }) : ""}
-    ${p.days.map((d, n) => dayHtml({ label: `Day ${n + 1}`, sub: fmtDay(d.date), entries: d.entries, color: d.color })).join("")}
+    ${p.days.map((d, n) => dayHtml({ label: `Day ${n + 1}`, sub: fmtDay(d.date), entries: d.entries, color: d.color, add: `#/place?trip=${t.id}&day=${d.date}` })).join("")}
     ${p.after.length ? dayHtml({ label: "After the trip", entries: p.after, color: "#8c96ad" }) : ""}
     ${p.unscheduled.length ? dayHtml({ label: "No date yet", entries: p.unscheduled, color: "#8c96ad" }) : ""}`;
   return `<section class="trip-head"><div class="cover" style="--h:${hue(t.name)}" data-photo="${t.id}" data-photo-link>
-      <div class="cover-actions"><a class="btn small" href="#/trip/${t.id}/journal">Journal</a><a class="btn small" href="#/trip/${t.id}/edit">Edit</a><a class="btn small" href="#/add?trip=${t.id}">Add booking</a></div>
+      <div class="cover-actions"><a class="btn small" href="#/trip/${t.id}/share" data-goatcounter-click="kos-share-trip">Share</a><a class="btn small" href="#/trip/${t.id}/journal">Journal</a><a class="btn small" href="#/trip/${t.id}/edit">Edit</a><a class="btn small" href="#/add?trip=${t.id}">Add booking</a></div>
       <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div>
       ${t.travellers.length ? `<div class="avatars">${t.travellers.map((k) => `<span title="${esc(label(k))}">${esc(label(k).slice(0, 1).toUpperCase())}</span>`).join("")}</div>` : ""}
       ${tagChips(tripTags(t))}</div></section>
@@ -310,10 +311,91 @@ function stayCard(i) {
     ${i.confirmation || i.price_cents || i.points ? `<div class="sub">${[i.confirmation ? `Conf. ${esc(i.confirmation)}` : "", i.points ? `${i.points.toLocaleString()} pts` : i.price_cents ? money(i.price_cents, i.currency) : ""].filter(Boolean).join(" · ")}</div>` : ""}
     ${Number.isFinite(i.lat) && Number.isFinite(i.lon) ? "" : `<div class="sub muted">No address on the map yet: edit the stay to add one.</div>`}</button>`;
 }
-function dayHtml({ label: l, sub, entries, color }) {
+function dayHtml({ label: l, sub, entries, color, add }) {
+  const plus = add ? `<a class="add-place" href="${add}" data-goatcounter-click="kos-add-place">+ Add a place</a>` : "";
   return `<section class="day" style="--day:${color}"><div class="day-head"><span class="day-dot"></span><h3>${esc(l)}</h3>${sub ? `<span class="muted">${esc(sub)}</span>` : ""}</div>
-    <div class="stops">${entries.length ? entries.map(entryHtml).join("") : `<div class="empty-day">Nothing planned yet.</div>`}</div></section>`;
+    <div class="stops">${entries.length ? entries.map(entryHtml).join("") + plus : `<div class="empty-day">Nothing planned yet. ${plus}</div>`}</div></section>`;
 }
+
+// --- sharing one trip (docs/trips.md §23): a link with the trip in it, or a file -----------------------
+function shareView(t) {
+  return `<div class="section-title"><h2>Share ${esc(t.name)}</h2><span class="muted">${t.items.length} booking${t.items.length === 1 ? "" : "s"}</span></div>
+    <div class="card"><p style="margin-top:0">A link with the trip in it: its days, bookings and places. Whoever opens it sees the trip in Kos and chooses whether to add it. Nothing is stored anywhere.</p>
+      <label class="check"><input type="checkbox" id="sharePrivate" /> Include confirmation numbers, prices and guest names</label>
+      <p class="muted" style="margin:6px 0 0;font-size:13px">Off unless you need it: a booking reference with a surname can be enough to change or cancel a booking, and the link stays in the chat.</p>
+      <textarea class="paste" id="shareText" rows="3" readonly>Making the link…</textarea>
+      <div class="actions">${navigator.share ? `<button type="button" class="btn primary" data-share-trip>Share…</button>` : ""}<button type="button" class="btn${navigator.share ? "" : " primary"}" data-copy="shareText">Copy link</button>
+        <button type="button" class="btn ghost" data-share-file>Download file</button><a class="btn ghost" href="#/trip/${t.id}">Back</a></div>
+      <p class="muted" id="shareNote" style="margin-bottom:0;font-size:13px"></p></div>`;
+}
+async function fillShare(t) {
+  const box = document.getElementById("shareText");
+  if (!box) return;
+  const link = shareLink(await shareString(t, { withPrivate: document.getElementById("sharePrivate")?.checked }));
+  box.value = link;
+  document.getElementById("shareNote").textContent = link.length > 8000 ? "A long link: some chat apps may cut it short. Download file shares the same trip as a file." : MODE === "device" ? "" : "It opens Kos on its own (minty.milesmaximizer.com/kos/). Someone with a Minty can paste it on Your data instead.";
+}
+let pendingShare = null;
+function importView(f) {
+  if (!f) return `<div class="section-title"><h2>Add a shared trip</h2></div><div class="card muted">Open a shared Kos trip link, or paste one on <a href="#/data">Your data</a>.</div>`;
+  if (f.error) return `<div class="section-title"><h2>Add a shared trip</h2></div><div class="card"><p class="err" style="margin-top:0">${esc(f.error)}</p><a class="btn" href="#/">All trips</a></div>`;
+  const t = f.trips[0], kinds = {};
+  for (const i of f.items) kinds[i.kind] = (kinds[i.kind] ?? 0) + 1;
+  return `<div class="section-title"><h2>Add a shared trip</h2></div>
+    <div class="card"><h3 style="margin:0 0 4px">${esc(t.name)}</h3><div class="muted">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${esc(String(t.end_date).slice(0, 4))}${t.place ? ` · ${esc(t.place)}` : ""}</div>
+      <p>${f.items.length} booking${f.items.length === 1 ? "" : "s"}${Object.keys(kinds).length ? `: ${Object.entries(kinds).map(([k, n]) => `${n} ${esc((KIND[k] ?? k).toLowerCase())}`).join(", ")}` : ""}.</p>
+      <div class="actions"><button type="button" class="btn primary" data-add-shared>Add this trip</button><a class="btn ghost" href="#/">Not now</a><span class="err" id="formErr"></span></div></div>`;
+}
+
+// --- a place to go on a day (docs/trips.md §22): one box takes an address, a plus code, coordinates
+// or a Google Maps link, read with no lookup service (where.js); saved as an Activity on that day
+/** Points a short plus code may be near: the trip's own place, then its bookings on the map. */
+const whereRefs = (t) => [
+  ...(Number.isFinite(t?.lat) && Number.isFinite(t?.lon) ? [{ lat: t.lat, lon: t.lon, name: t.place || t.name }] : []),
+  ...(t?.items ?? []).filter((i) => i.kind !== "flight" && Number.isFinite(i.lat) && Number.isFinite(i.lon)).map((i) => ({ lat: i.lat, lon: i.lon, name: i.name || i.place || "a booking" })),
+];
+/** Where the text is: a short Google Maps link followed by a Minty's Worker first, when there is one. */
+async function readWhere(text, t) {
+  let w = parseWhere(text, { refs: whereRefs(t), airports });
+  if (w.shortLink) {
+    if (!store.placeLink) return { error: "A short maps.app.goo.gl link can't be read here: open it, then paste the long address from the browser's bar (or the place's plus code)." };
+    try { w = parseWhere(await store.placeLink(w.shortLink), { refs: whereRefs(t), airports }); } catch (e) { return { error: e.message }; }
+  }
+  return w;
+}
+const mapsSearch = (q) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+function whereHint(w) {
+  if (w.error) return `<span class="err">${esc(w.error)}</span>`;
+  if (w.address) return `<span class="muted">Kept as an address, not on the map (paste a plus code or a map link to place it). <a href="${mapsSearch(w.address)}" target="_blank" rel="noopener">Open in Maps ↗</a></span>`;
+  return `<span class="good">On the map, from ${esc(w.how)}${w.label ? `: ${esc(w.label)}` : ""}${w.near ? ` (${esc(w.near)})` : ""}.</span> <a href="https://www.google.com/maps/search/?api=1&query=${w.lat},${w.lon}" target="_blank" rel="noopener">Check it ↗</a>`;
+}
+function placeView(t, day) {
+  return `<div class="section-title"><h2>Add a place</h2><span class="muted">${esc(t.name)} · ${esc(fmtDay(day))}</span></div>
+    <form class="card" id="placeForm" data-trip="${t.id}" data-day="${esc(day)}"><div class="form">
+      <label class="wide">What <input name="name" maxlength="150" placeholder="Tokyo Skytree, a ramen place, a walk…" /></label>
+      <label class="wide">Where <textarea name="where" rows="2" maxlength="600" placeholder="An address, a plus code (PRF9+WQ Sumida City, Tokyo), coordinates, or a Google Maps link"></textarea></label>
+      <div class="wide where-hint" id="whereHint"><span class="muted">Easiest: in Google Maps, tap the place, then copy its plus code, or Share → Copy link.</span></div>
+      <label>Time <small class="muted">(optional)</small><input name="time" type="time" /></label>
+    </div><div class="actions"><button class="btn primary" type="submit">Add to ${esc(fmtShort(day))}</button><a class="btn ghost" href="#/trip/${t.id}">Cancel</a><span class="err" id="formErr"></span></div></form>`;
+}
+app.addEventListener("change", (ev) => { if (ev.target.id === "sharePrivate") fillShare(tripById(Number(route().parts[1]))); });
+let whereTimer = null;
+app.addEventListener("input", (ev) => {
+  const f = ev.target.closest?.("#placeForm, #itemForm");
+  if (!f || !(ev.target.name === "where" || (f.id === "itemForm" && ev.target.name === "place"))) return;
+  clearTimeout(whereTimer);
+  whereTimer = setTimeout(async () => {
+    const text = ev.target.value, t = tripById(Number(f.dataset.trip || f.elements.trip_id?.value));
+    if (f.id === "itemForm") {                                 // a booking's place: placed on the map when it can be
+      if (!text.trim()) return;
+      const w = await readWhere(text, t), hint = f.querySelector("#placeHint");
+      if (Number.isFinite(w.lat)) { f.dataset.lat = w.lat; f.dataset.lon = w.lon; if (w.label && /\+|https?:|°|^\s*-?\d/.test(text)) ev.target.value = w.label; }
+      if (hint) hint.innerHTML = w.address ? "" : whereHint(w);
+      return;
+    }
+    document.getElementById("whereHint").innerHTML = text.trim() ? whereHint(await readWhere(text, t)) : "";
+  }, 450);
+});
 /** What the map draws for a trip: each flight's arc, and numbered pins in their day's colour. */
 function mapData(t) {
   const p = plan(t), arcs = [], pins = [];
@@ -557,7 +639,8 @@ function itemForm(i, tripId) {
     <label>Time<input name="start_time" type="time" value="${esc(timeOf(i?.start_at))}" /></label>
     <label><span data-end-label>${kind === "lodging" ? "Check out" : kind === "flight" ? "Arrives" : "Ends"}</span><input name="end_date" type="date" value="${esc(dateOf(i?.end_at) ?? "")}" /></label>
     <label>Time<input name="end_time" type="time" value="${esc(timeOf(i?.end_at))}" /></label>
-    <label class="wide">Address or place<input name="place" maxlength="200" value="${v("place")}" /></label>
+    <label class="wide">Address or place<input name="place" maxlength="200" value="${v("place")}" placeholder="An address, a plus code, coordinates or a Google Maps link" /></label>
+    <div class="wide where-hint" id="placeHint"></div>
     <label>Confirmation<input name="confirmation" maxlength="40" value="${v("confirmation")}" /></label>
     <label>Price<input name="price" inputmode="decimal" value="${i?.price_cents ? i.price_cents / 100 : ""}" /></label>
     <label>Currency<input name="currency" maxlength="3" value="${esc(i?.currency ?? "USD")}" /></label>
@@ -664,7 +747,10 @@ function dataView() {
       <p class="muted">${n} trip${n === 1 ? "" : "s"} and ${b} booking${b === 1 ? "" : "s"} here.</p>
       ${MODE === "device" ? `<p class="muted">${lsNum(BACKED_UP) ? `Last backed up ${ago(lsNum(BACKED_UP))}.` : "Not backed up yet."} <b>Back up</b> saves a copy where you choose: Google Drive, an email to yourself, or your phone's files.</p>` : ""}
       <div class="actions">${MODE === "device" ? `<button type="button" class="btn primary" data-backup data-goatcounter-click="kos-backup-data">Back up</button>` : ""}<button type="button" class="btn${MODE === "device" ? "" : " primary"}" data-export>Export (a JSON file)</button>
-        <label class="btn">Import…<input type="file" accept="application/json,.json" id="importFile" hidden /></label><span class="err" id="formErr"></span></div></div>`;
+        <label class="btn">Import…<input type="file" accept="application/json,.json" id="importFile" hidden /></label><span class="err" id="formErr"></span></div></div>
+    <div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px">Add a shared trip</h3><p class="muted" style="margin-top:0">Paste a Kos trip link someone sent you (or the trip file's contents).</p>
+      <textarea class="paste" id="sharedPaste" rows="2" placeholder="https://minty.milesmaximizer.com/kos/#/import?t=1.…"></textarea>
+      <div class="actions"><button type="button" class="btn" data-paste-shared>Look at it</button></div></div>`;
 }
 // --- backups (docs/trips.md §17.5): the phone's share sheet (Google Drive, email, Files…), else a download
 const BACKED_UP = "kos-backup-at", SNOOZE = "kos-backup-snooze";
@@ -849,6 +935,7 @@ async function readShared() {
     box.innerHTML = suggestionsHtml(found, "email"); return;
   }
   const text = [s.title, s.text, s.url, file && /^text\//.test(file.type) ? await file.blob.text() : ""].filter(Boolean).join("\n");
+  if (/[?&#]t=1\.[A-Za-z0-9_-]{8,}/.test(text)) { try { pendingShare = await readShare(text); } catch (e) { pendingShare = { error: e.message }; } location.hash = "#/import"; return; }
   if (text.trim()) { await readText(text, "paste"); return; }
   box.innerHTML = `<div class="suggest muted">Kos can't read that kind of file. Share a PDF, a screenshot, an email file or text.</div>`;
 }
@@ -869,11 +956,22 @@ async function render() {
     if (parts[2] === "edit") { app.innerHTML = tripForm(t); tagPicker(); return; }
     if (map) { map.remove(); map = null; mapKey = ""; }
     if (parts[2] === "journal") { app.innerHTML = journalView(t); window.scrollTo(0, 0); journalLoad(t); return; }
+    if (parts[2] === "share") { app.innerHTML = shareView(t); fillShare(t); return; }
     app.innerHTML = tripView(t, parts[2] ?? "");
     applyPhotos();
     showMap(t, parts[2] ?? "");
     if (parts[2] === "spending") spending(t);
     return;
+  }
+  if (parts[0] === "import") {                                 // a shared trip's link: a preview, then Add
+    const code = (location.hash.match(/[?&]t=([^&]+)/) ?? [])[1];
+    if (code) { history.replaceState(null, "", "#/import"); try { pendingShare = await readShare(`t=${code}`); } catch (e) { pendingShare = { error: e.message }; } }
+    app.innerHTML = importView(pendingShare); return;
+  }
+  if (parts[0] === "place") {
+    const t = tripById(Number(q.get("trip")));
+    if (!t || !/^\d{4}-\d{2}-\d{2}$/.test(q.get("day") ?? "")) { location.hash = "#/"; return; }
+    app.innerHTML = placeView(t, q.get("day")); app.querySelector("[name=where]").focus(); return;
   }
   if (parts[0] === "new") { app.innerHTML = tripForm(null, (q.get("items") ?? "").split(",").filter(Boolean)); tagPicker(); return; }
   if (parts[0] === "data") { app.innerHTML = dataView(); return; }
@@ -1005,6 +1103,23 @@ app.addEventListener("click", async (ev) => {
       lsSet(BACKED_UP, Date.now());                              // an export is a backup too
       return;
     }
+    if (at("[data-share-trip]")) { try { await navigator.share({ title: "A trip in Kos", url: document.getElementById("shareText").value }); } catch { /* closed */ } return; }
+    if (at("[data-share-file]")) {
+      const t = tripById(Number(route().parts[1]));
+      const file = new Blob([JSON.stringify(await readShare(document.getElementById("shareText").value), null, 1)], { type: "application/json" });
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(file), download: `kos-trip-${(t?.name ?? "trip").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.json` });
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); return;
+    }
+    if (at("[data-add-shared]")) {
+      try { const r = await importData(pendingShare); pendingShare = null; data = null; location.hash = r.trips[0] ? `#/trip/${r.trips[0]}` : "#/"; }
+      catch (e2) { app.querySelector("#formErr").textContent = e2.message; }
+      return;
+    }
+    if (at("[data-paste-shared]")) {
+      try { pendingShare = await readShare(app.querySelector("#sharedPaste").value); location.hash = "#/import"; render(); }
+      catch (e2) { app.querySelector("#formErr").textContent = e2.message; }
+      return;
+    }
     if (at("[data-backup]")) {
       try { if (await backUp()) { document.getElementById("backupNote")?.remove(); if (route().parts[0] === "data") render(); } }
       catch (e2) { alert(`Couldn't back up: ${e2.message}`); }
@@ -1113,6 +1228,15 @@ app.addEventListener("submit", async (ev) => {
       if (!f.dataset.id && f.dataset.items) body.items = f.dataset.items.split(",").map(Number);
       const r = await store.saveTrip(f.dataset.id ? Number(f.dataset.id) : null, body);
       data = null; location.hash = `#/trip/${r.id}`; return;
+    }
+    if (f.id === "placeForm") {
+      const t = tripById(Number(f.dataset.trip)), e = f.elements, text = e.where.value.trim();
+      const w = text ? await readWhere(text, t) : { address: "" };
+      if (w.error) { err(w.error); return; }
+      const name = e.name.value.trim() || w.label || (w.address ? w.address.split(",")[0] : "") || "A place";
+      await store.saveItem(null, { kind: "event", trip_id: t.id, name, start_at: e.time.value ? `${f.dataset.day}T${e.time.value}` : f.dataset.day,
+        place: w.address || w.label || null, lat: Number.isFinite(w.lat) ? w.lat : null, lon: Number.isFinite(w.lon) ? w.lon : null, source: "typed" });
+      data = null; location.hash = `#/trip/${t.id}`; return;
     }
     if (f.id === "itemForm") {
       const body = await itemBody(f);

@@ -898,3 +898,41 @@ page asks for it (optional, kept on this device); until then the trip shows just
 **On a Minty's inbox (T2, to come):** `+mintytrips` and `+mintybills` as planned, and a trip's
 `+<code>` files into that trip.
 
+## 22. A place to go on any day (owner, 2026-11-20)
+
+**Why:** a day with no booking ("Nothing planned yet") can still have somewhere to go.
+- **"+ Add a place"** under every day (and in an empty one) opens a small form: what, where, and an
+  optional time. It's saved as an Activity on that day (`kind = 'event'`, no new kind), so it's
+  numbered in the itinerary, drawn on both maps and written into the journal.
+- **One box for where, with no maps or lookup service** (`public/kos/where.js`, tested):
+  - **plus codes:** full ones (`8Q7XPRF9+WQ`) anywhere; short ones (`PRF9+WQ Sumida City, Tokyo`, what
+    Google Maps copies) recovered near a reference point. A city named after the code comes first
+    (from `airports.json`), then the trip's own places. The recovery always finds the match nearest
+    that point, so the hint says which point it used ("about 20 km from Tokyo"), with a Check it link.
+    The decoder passes Google's own test data (`test/fixtures/olc-*.csv`, Apache 2.0).
+  - **coordinates:** `35.7101, 139.8107`, or degrees, minutes and seconds.
+  - **a Google Maps link:** the long address (the place itself, `!3d…!4d…`, before the map's centre).
+    A short `maps.app.goo.gl` link only says where after a redirect, which a page can't read: on a
+    Minty, the Worker follows it (`POST /trips/place-link`); on its own, Kos asks for the long address.
+  - **anything else** is kept as an address, with an "Open in Maps" link, but isn't placed on the map.
+  - **what3words** isn't read: it needs their paid service, and Kos says so.
+- **The booking form's "Address or place"** reads the same way, so pasting a plus code or a map link
+  into any booking puts it on the map.
+- **Following a short link** (the Worker): only from `maps.app.goo.gl` or `goo.gl/maps`, at most 3
+  hops, each only to a Google host, returning the final address, never a page. Security plan §8.
+
+## 23. Sharing one trip (owner, 2026-11-20)
+
+- **Share** on a trip's cover makes a link to Kos on its own with the trip **in the link**: its JSON,
+  deflated (`CompressionStream`), in base64url: `…/kos/#/import?t=1.<data>` (about 700 characters for
+  the sample's Tokyo trip). Nothing is stored anywhere, so there's no short code to type: that would
+  need a server to keep trips.
+- **Left out:** ids, the trip's code (the one who adds it gets their own), travellers, tags, spending,
+  notes; and unless "Include confirmation numbers, prices and guest names" is ticked, those too (a
+  booking reference with a surname can be enough to change a booking, and the link stays in the chat).
+- **Opening it** shows a preview ("Tokyo · 6 bookings") with **Add this trip**; nothing is added by
+  itself. The link is taken out of the address bar, a link can't unpack into more than 256 KB, and
+  everything in it is checked like an import. Shared to Kos on Android, a link opens the same preview.
+- **On a Minty,** the link opens Kos on its own (the household's /kos/ is behind Access); someone with a
+  Minty pastes it on Your data (Add a shared trip). **Download file** saves the same trip as a file.
+

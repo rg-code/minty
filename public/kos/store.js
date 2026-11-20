@@ -129,6 +129,49 @@ export function backupDue({ now, backedUp, oldestOwn, snoozedUntil }) {
   return now - (backedUp || oldestOwn) > 30 * 864e5;
 }
 
+// --- sharing one trip (docs/trips.md §23): the trip in the link itself, compressed --------------------
+// The link opens Kos on its own, which asks before adding anything. Left out always: ids, the trip's code
+// (the one who adds it gets their own), travellers, tags, spending, notes; and unless asked for,
+// confirmation numbers, prices and guests (a booking reference with a surname can change a booking).
+export const SHARE_BASE = "https://minty.milesmaximizer.com/kos/";
+const SHARE_ITEM = ["kind", "name", "start_at", "end_at", "place", "lat", "lon", "airline", "flight_number", "dep_airport", "arr_airport", "dep_terminal", "arr_terminal", "dep_gate", "seat"];
+const SHARE_PRIVATE = ["confirmation", "guest", "price_cents", "currency", "points", "points_program"];
+const MAX_SHARE = 256 * 1024;                                    // a link can't unpack into more than this
+const b64u = (bytes) => { let s = ""; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+async function pipe(bytes, stream) {
+  const reader = new Blob([bytes]).stream().pipeThrough(stream).getReader(), parts = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > MAX_SHARE) { await reader.cancel(); throw new Error("That shared trip is too big."); }
+    parts.push(value);
+  }
+  return new Uint8Array(await new Blob(parts).arrayBuffer());
+}
+/** A trip (with its items) as a share string: "1." and its JSON, deflated, in base64url. */
+export async function shareString(t, { withPrivate = false } = {}) {
+  const keep = withPrivate ? [...SHARE_ITEM, ...SHARE_PRIVATE] : SHARE_ITEM;
+  const pick = (o, ks) => Object.fromEntries(ks.filter((k) => o[k] !== null && o[k] !== undefined && o[k] !== "").map((k) => [k, o[k]]));
+  const data = { app: "Kos", share: 1, trip: pick(t, ["name", "start_date", "end_date", "place", "lat", "lon"]), items: (t.items ?? []).map((i) => pick(i, keep)) };
+  return `1.${b64u(await pipe(new TextEncoder().encode(JSON.stringify(data)), new CompressionStream("deflate-raw")))}`;
+}
+export const shareLink = (str) => `${SHARE_BASE}#/import?t=${str}`;
+/** A share string, or any link carrying one, back to a Kos export (one trip), checked like an import. */
+export async function readShare(text) {
+  const m = /(?:^|[?&#])(?:t=)?(1\.[A-Za-z0-9_-]{8,})/.exec(String(text ?? "").trim());
+  if (!m) throw new Error("That isn't a shared Kos trip.");
+  let data;
+  try { data = JSON.parse(new TextDecoder().decode(await pipe(unb64u(m[1].slice(2)), new DecompressionStream("deflate-raw")))); }
+  catch (e) { throw new Error(/too big/.test(e.message) ? e.message : "That shared trip is damaged: ask for the link again."); }
+  if (data?.app !== "Kos" || data.share !== 1 || !data.trip || !Array.isArray(data.items)) throw new Error("That isn't a shared Kos trip.");
+  const file = { app: "Kos", version: 1, trips: [{ ...data.trip, id: 1, travellers: [] }], items: data.items.slice(0, 500).map((i) => ({ ...i, trip_id: 1 })) };
+  importFile(file);                                              // throws on anything a trip or booking can't be
+  return file;
+}
+
 // --- Minty: its API ---------------------------------------------------------------------------
 async function api(method, path, body, raw) {
   const r = await fetch(path, { method, headers: raw ? { "content-type": "message/rfc822" } : body ? { "content-type": "application/json" } : {},
@@ -152,6 +195,7 @@ const mintyStore = {
   journal: (id) => api("GET", `/trips/${id}/journal`),
   saveJournal: (id, b) => api("PUT", `/trips/${id}/journal`, b),
   allNotes: async () => [],                              // on a Minty, the journal's notes stay in its database
+  placeLink: async (url) => (await api("POST", "/trips/place-link", { url })).url,   // a maps.app.goo.gl link, followed by the Worker
   tags: () => api("GET", "/tags").catch(() => []),       // the household's tags, to suggest for a trip
   spending: true,
 };
@@ -324,6 +368,7 @@ const deviceStore = {
     });
   },
   async allNotes() { return tx(["notes"], "readonly", async (x) => req(x.objectStore("notes").getAll())); },
+  placeLink: null,                                       // no server here to follow a short link
   async deleteItem(id) { return tx(["items"], "readwrite", async (x) => { await req(x.objectStore("items").delete(id)); return { id, removed: true }; }); },
   /** An email file, read in this browser with the same reader Minty runs (src/kos/). Nothing is kept. */
   async readEmail(buf) {
