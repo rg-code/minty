@@ -936,10 +936,9 @@ enough, and the address is for filing one there for certain (overlapping trips, 
 
 ## 23. Sharing one trip (owner, 2026-11-20)
 
-- **Share** on a trip's cover makes a link to Kos on its own with the trip **in the link**: its JSON,
-  deflated (`CompressionStream`), in base64url: `…/kos/#/import?t=1.<data>` (about 700 characters for
-  the sample's Tokyo trip). Nothing is stored anywhere, so there's no short code to type: that would
-  need a server to keep trips.
+- **Share** on a trip's cover makes a link to Kos on its own with the trip **in the link**:
+  `…/kos/#2.<data>` (§23.1). Nothing is stored anywhere, so there's no short code to type: that would
+  need a server to keep trips, and Kos on its own has none (owner, 2026-11-20).
 - **Left out:** ids, the trip's code (the one who adds it gets their own), travellers, tags, spending,
   notes; and unless "Include confirmation numbers, prices and guest names" is ticked, those too (a
   booking reference with a surname can be enough to change a booking, and the link stays in the chat).
@@ -950,6 +949,22 @@ enough, and the address is for filing one there for certain (overlapping trips, 
   Minty pastes it on Your data (Add a shared trip), or on **New trip** (above the form: "Someone shared a trip?"). **Download file** saves the same trip as a file.
 - **Before adding,** the link opens the whole trip as its page would show it: the cover (with its city photo), the
   map and the plan day by day, read-only (a tap shows a place on the map). **Add this trip** and **Not now** sit on top.
+
+### 23.1 Shorter links, still no server (owner, 2026-11-20)
+
+The first links carried the trip's JSON (`1.`, about 680 characters for the sample's Tokyo trip). `2.` links
+carry it as short text instead (`shareText` / `fromShareText` in `store.js`), deflated, in base64url, and
+start at `#` rather than `#/import?t=`: the same trip is about 390 characters.
+- **Rows and fields:** one row for the trip, one per booking, fields joined by `|`, in a fixed order, so
+  no field names. Empty fields at a row's end are left off. A booking's kind is a digit.
+- **Dates and times:** days after the trip's first day (`-1` for the flight out the night before), then
+  `T` and HHMM. The trip's most common UTC offset is said once; a time in another zone carries its own
+  (`-8`, `+5.5`), and `~` marks a time typed with none.
+- **Places:** coordinates in 1e5ths of a degree (about a metre), a booking's relative to the trip's.
+- **Lost on the way:** a `|` or line break in text becomes `/` or a space; seconds in a time.
+- **Old links** (`1.`, `#/import?t=`) still open. A decoded trip is checked like an import, as before.
+- **What it can't do:** a link still grows with the trip (about 40 characters a booking). A link that
+  stays short whatever the trip would need a server to keep trips.
 
 ## 24. Share a trip with the Kos team (owner, 2026-11-20)
 

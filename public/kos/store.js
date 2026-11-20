@@ -147,8 +147,6 @@ export function backupDue({ now, backedUp, oldestOwn, snoozedUntil }) {
 // (the one who adds it gets their own), travellers, tags, spending, notes; and unless asked for,
 // confirmation numbers, prices and guests (a booking reference with a surname can change a booking).
 export const SHARE_BASE = "https://minty.milesmaximizer.com/kos/";
-const SHARE_ITEM = ["kind", "name", "start_at", "end_at", "place", "lat", "lon", "airline", "flight_number", "dep_airport", "arr_airport", "dep_terminal", "arr_terminal", "dep_gate", "seat"];
-const SHARE_PRIVATE = ["confirmation", "guest", "price_cents", "currency", "points", "points_program"];
 const MAX_SHARE = 256 * 1024;                                    // a link can't unpack into more than this
 const b64u = (bytes) => { let s = ""; for (const b of bytes) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
 const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
@@ -164,14 +162,83 @@ async function pipe(bytes, stream) {
   }
   return new Uint8Array(await new Blob(parts).arrayBuffer());
 }
-/** A trip (with its items) as a share string: "1." and its JSON, deflated, in base64url. */
-export async function shareString(t, { withPrivate = false } = {}) {
-  const keep = withPrivate ? [...SHARE_ITEM, ...SHARE_PRIVATE] : SHARE_ITEM;
-  const pick = (o, ks) => Object.fromEntries(ks.filter((k) => o[k] !== null && o[k] !== undefined && o[k] !== "").map((k) => [k, o[k]]));
-  const data = { app: "Kos", share: 1, trip: pick(t, ["name", "start_date", "end_date", "place", "lat", "lon"]), items: (t.items ?? []).map((i) => pick(i, keep)) };
-  return `1.${b64u(await pipe(new TextEncoder().encode(JSON.stringify(data)), new CompressionStream("deflate-raw")))}`;
+/* A share string (docs/trips.md §23.1): "2." and the trip as short text, deflated, in base64url. No server:
+ * the trip is the link, so the text keeps only what a trip needs, in rows of fields joined by "|":
+ *   name|first day (YYYYMMDD)|last day (days after the first)|place|lat|lon|time zone (hours, the trip's usual)
+ *   kind (KINDS' index)|name|start|end|place|lat|lon|airline|flight number|from|to|dep. terminal|arr. terminal|gate|seat
+ *     [|confirmation|guest|price in cents|currency|points|points program: only when shared with them]
+ * A time is days after the first day, then "T" and HHMM when it has one, then its UTC offset in hours when
+ * it isn't the trip's ("~" for none). Coordinates are 1e5ths (about a metre), a booking's from the trip's.
+ * Empty fields at a row's end are left off; "|" and line breaks in text become "/" and spaces.
+ * "1." strings (the trip's JSON) still open. */
+const SHARE_PUBLIC = 15, SHARE_FIELDS = 21;                       // a booking row's fields, without and with the private ones
+const offsetHours = (s) => { const m = /(Z|[+-]\d\d:?\d\d)$/.exec(s ?? ""); if (!m) return null; if (m[1] === "Z") return 0;
+  const [, sign, h, mm] = /([+-])(\d\d):?(\d\d)/.exec(m[1]); return (sign === "-" ? -1 : 1) * (Number(h) + Number(mm) / 60); };
+const hoursText = (h) => `${h >= 0 ? "+" : "-"}${Math.abs(h)}`;
+const hoursOffset = (h) => { const a = Math.round(Math.abs(h) * 60); return `${h < 0 ? "-" : "+"}${String(Math.floor(a / 60)).padStart(2, "0")}:${String(a % 60).padStart(2, "0")}`; };
+const dayNum = (ymd) => Date.parse(`${ymd}T00:00:00Z`) / 864e5;
+const ymdOf = (n) => new Date(n * 864e5).toISOString().slice(0, 10);
+const field = (v) => (v === null || v === undefined ? "" : String(v).replace(/\|/g, "/").replace(/[\r\n]+/g, " "));
+export function shareText(t, { withPrivate = false } = {}) {
+  const items = t.items ?? [];
+  const zones = items.flatMap((i) => [offsetHours(i.start_at), offsetHours(i.end_at)]).filter((z) => z !== null);
+  const tz = zones.length ? zones.slice().sort((a, b) => zones.filter((z) => z === b).length - zones.filter((z) => z === a).length)[0] : null;
+  const first = dayNum(t.start_date);
+  const when = (s) => {
+    const m = /^(\d{4}-\d{2}-\d{2})(?:T(\d\d):(\d\d))?/.exec(s ?? "");
+    if (!m) return "";
+    let out = String(dayNum(m[1]) - first);
+    if (m[2]) { out += `T${m[2]}${m[3]}`; const z = offsetHours(s); if (z === null) { if (tz !== null) out += "~"; } else if (z !== tz) out += hoursText(z); }
+    return out;
+  };
+  const e5 = (x) => (Number.isFinite(x) ? Math.round(x * 1e5) : null);
+  const lat0 = e5(t.lat) ?? 0, lon0 = e5(t.lon) ?? 0;
+  const row = (fields) => { const f = fields.map(field); while (f.length && f[f.length - 1] === "") f.pop(); return f.join("|"); };
+  const lines = [row([t.name, t.start_date.replace(/-/g, ""), dayNum(t.end_date) - first, t.place, e5(t.lat), e5(t.lon), tz === null ? "" : hoursText(tz)])];
+  for (const i of items) {
+    const f = [KINDS.indexOf(i.kind), i.name, when(i.start_at), when(i.end_at), i.place, e5(i.lat) === null ? null : e5(i.lat) - lat0, e5(i.lon) === null ? null : e5(i.lon) - lon0,
+      i.airline, i.flight_number, i.dep_airport, i.arr_airport, i.dep_terminal, i.arr_terminal, i.dep_gate, i.seat];
+    if (withPrivate) f.push(i.confirmation, i.guest, i.price_cents, i.currency, i.points, i.points_program);
+    lines.push(row(f));
+  }
+  return lines.join("\n");
 }
-export const shareLink = (str) => `${SHARE_BASE}#/import?t=${str}`;
+/** shareText back to a trip and its bookings (fields as the export file has them), not yet checked. */
+export function fromShareText(text) {
+  const [head, ...rows] = String(text).split("\n");
+  const h = head.split("|");
+  if (!/^\d{8}$/.test(h[1] ?? "") || !/^\d+$/.test(h[2] ?? "")) throw new Error("That isn't a shared Kos trip.");
+  const start = `${h[1].slice(0, 4)}-${h[1].slice(4, 6)}-${h[1].slice(6)}`, first = dayNum(start);
+  const tz = h[6] ? Number(h[6]) : null;
+  const num = (v) => (v === "" || v === undefined ? null : Number(v));
+  const lat0 = num(h[4]) ?? 0, lon0 = num(h[5]) ?? 0;
+  const when = (v) => {
+    const m = /^(-?\d+)(?:T(\d\d)(\d\d)(~|[+-][\d.]+)?)?$/.exec(v ?? "");
+    if (!m) return null;
+    const day = ymdOf(first + Number(m[1]));
+    if (!m[2]) return day;
+    const z = m[4] === "~" ? null : m[4] ? Number(m[4]) : tz;
+    return `${day}T${m[2]}:${m[3]}${z === null || !Number.isFinite(z) ? "" : hoursOffset(z)}`;
+  };
+  const trip = { name: h[0], start_date: start, end_date: ymdOf(first + Number(h[2])), place: h[3] || null,
+                 lat: num(h[4]) === null ? null : num(h[4]) / 1e5, lon: num(h[5]) === null ? null : num(h[5]) / 1e5 };
+  const items = rows.filter(Boolean).slice(0, 500).map((r) => {
+    const f = r.split("|").concat(Array(SHARE_FIELDS).fill("")).slice(0, SHARE_FIELDS).map((x) => x || null);
+    return { kind: KINDS[Number(f[0])] ?? f[0], name: f[1], start_at: when(f[2] ?? ""), end_at: when(f[3] ?? ""), place: f[4],
+      lat: f[5] === null ? null : (lat0 + Number(f[5])) / 1e5, lon: f[6] === null ? null : (lon0 + Number(f[6])) / 1e5,
+      airline: f[7], flight_number: f[8], dep_airport: f[9], arr_airport: f[10], dep_terminal: f[11], arr_terminal: f[12], dep_gate: f[13], seat: f[14],
+      ...(f.slice(SHARE_PUBLIC).some((x) => x !== null) ? { confirmation: f[15], guest: f[16], price_cents: num(f[17] ?? ""), currency: f[18], points: num(f[19] ?? ""), points_program: f[20] } : {}) };
+  });
+  const set = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== null && v !== undefined));   // as "1." strings had them: only what's there
+  return { trip: set(trip), items: items.map(set) };
+}
+/** A trip (with its items) as a share string: "2." and shareText, deflated, in base64url. */
+export async function shareString(t, opts = {}) {
+  return `2.${b64u(await pipe(new TextEncoder().encode(shareText(t, opts)), new CompressionStream("deflate-raw")))}`;
+}
+/** A share string in any text: a link (…/kos/#2.…, or the older #/import?t=1.…) or the string alone. */
+export const SHARE_RE = /(?:^|[?&#\s])(?:t=)?([12]\.[A-Za-z0-9_-]{8,})/;
+export const shareLink = (str) => `${SHARE_BASE}#${str}`;
 /** "Share with the Kos team" (docs/trips.md §24): an email for the person's own mail app (mailto:, no
  * server), to the address the landing site's build gives Kos on its own. `why`: "feature" (the team may
  * use it, dates moved and nothing personal, as a sample trip or in a catalog; the email says so, as the
@@ -191,11 +258,13 @@ export function reportMail({ to, trip, link, note = "", why = "problem" }) {
 }
 /** A share string, or any link carrying one, back to a Kos export (one trip), checked like an import. */
 export async function readShare(text) {
-  const m = /(?:^|[?&#])(?:t=)?(1\.[A-Za-z0-9_-]{8,})/.exec(String(text ?? "").trim());
+  const m = SHARE_RE.exec(String(text ?? "").trim());
   if (!m) throw new Error("That isn't a shared Kos trip.");
   let data;
-  try { data = JSON.parse(new TextDecoder().decode(await pipe(unb64u(m[1].slice(2)), new DecompressionStream("deflate-raw")))); }
-  catch (e) { throw new Error(/too big/.test(e.message) ? e.message : "That shared trip is damaged: ask for the link again."); }
+  try {
+    const plain = new TextDecoder().decode(await pipe(unb64u(m[1].slice(2)), new DecompressionStream("deflate-raw")));
+    data = m[1][0] === "2" ? { app: "Kos", share: 1, ...fromShareText(plain) } : JSON.parse(plain);
+  } catch (e) { throw new Error(/too big/.test(e.message) ? e.message : "That shared trip is damaged: ask for the link again."); }
   if (data?.app !== "Kos" || data.share !== 1 || !data.trip || !Array.isArray(data.items)) throw new Error("That isn't a shared Kos trip.");
   const file = { app: "Kos", version: 1, trips: [{ ...data.trip, id: 1, travellers: [] }], items: data.items.slice(0, 500).map((i) => ({ ...i, trip_id: 1 })) };
   importFile(file);                                              // throws on anything a trip or booking can't be
