@@ -34,6 +34,11 @@ export interface DemoData {
   subOffers: Record<string, string | number | null>[];       // SUB (docs/sub.md): two made-up offers
   subRequirements: Record<string, string | number | null>[];
   subPayouts: Record<string, string | number | null>[];
+  trips: Record<string, string | number | null>[];            // JET (docs/trips.md): two past trips and one coming up
+  tripItems: Record<string, string | number | null>[];
+  tripTransactions: Record<string, string | number | null>[];
+  tripTags: [number, string, number, number][];               // transaction_id, tag, position, trip_id (a trip's tag, §18)
+  exclusions: [string, string][];                             // CFA's "Left out of the numbers": kind, value
 }
 
 export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", sam: "sam" }): DemoData {
@@ -110,7 +115,7 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
   let nextId = 1;
   const add = (accountId: number, date: string, dollars: number, name: string, merchant: string | null, category: string,
                o: { tags?: string[]; member?: string | null } = {}) => {
-    if (date > todayIso) return;
+    if (date > todayIso) return null;
     const id = nextId++;
     const age = daysBetween(date, todayIso);
     transactions.push({
@@ -120,6 +125,7 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
       account_owner: o.member ?? null,
     });
     (o.tags ?? []).forEach((t, pos) => tags.push([id, t, pos]));
+    return id;
   };
 
   const checking = acct["alex:Total Checking"], sapphire = acct["alex:Sapphire Preferred"];
@@ -374,8 +380,90 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
     { id: 2, offer_id: 2, kind: "deposits", target_cents: 1500000, deadline: daysAgo(70), done_at: daysAgo(120) },
   ];
   const subPayouts: DemoData["subPayouts"] = [{ id: 1, offer_id: 2, date: daysAgo(95), amount_cents: 30000 }];
+
+  // JET (docs/trips.md): a holiday in Lisbon last month, a work trip to Chicago tagged "reimbursed"
+  // (a tag CFA leaves out of the numbers, so the trip's spending is left out: §18), and Tokyo coming
+  // up, with its flights paid for. Hotels and restaurants are invented; airlines and flight numbers
+  // are real-looking, as the rest of the demo's big names are. Their charges are the demo's own
+  // transactions, linked to the trips (and, for a flight or a stay, to its booking).
+  const trips: DemoData["trips"] = [], tripItems: DemoData["tripItems"] = [], tripTransactions: DemoData["tripTransactions"] = [];
+  const tripTags: DemoData["tripTags"] = [];
+  const exclusions: DemoData["exclusions"] = [["tag", "reimbursed"]];
+  const inDays = (n: number) => iso(Y, M, D + n);
+  const at = (date: string, time: string, offset: string) => `${date}T${time}${offset}`;
+  const trip = (t: Record<string, string | number | null>, tags: string[] = []) => {
+    const id = trips.length + 1;
+    trips.push({ id, lat: null, lon: null, notes: null, ...t, tags: JSON.stringify(tags) });
+    return id;
+  };
+  const booking = (b: Record<string, string | number | null>) => {
+    const id = tripItems.length + 1;
+    tripItems.push({ id, source: "typed", ...b });
+    return id;
+  };
+  const charge = (tripId: number, tx: number | null, itemId: number | null = null) => {
+    if (tx === null) return;
+    tripTransactions.push({ trip_id: tripId, transaction_id: tx, state: "confirmed", item_id: itemId });
+    const t = JSON.parse(String(trips[tripId - 1].tags)) as string[];
+    t.forEach((g, i) => tripTags.push([tx, g, (tags.filter(([id]) => id === tx).length) + i, tripId]));
+  };
+
+  // Lisbon, Alex and Sam, 52 to 45 days ago
+  const lis0 = daysAgo(52), lis1 = daysAgo(45);
+  const lisbon = trip({ name: "Lisbon", start_date: lis0, end_date: lis1, place: "Lisbon, Portugal", lat: 38.7223, lon: -9.1393,
+                        travellers: JSON.stringify([owners.alex, owners.sam]), notes: "Tram 28 early, before the crowds." });
+  const lisOut = booking({ trip_id: lisbon, kind: "flight", name: "TAP Air Portugal", airline: "TP", flight_number: "238", dep_airport: "SFO", arr_airport: "LIS",
+                           start_at: at(addDays(lis0, -1), "18:35", "-08:00"), end_at: at(lis0, "14:10", "+00:00"), confirmation: "QX7RPL", seat: "23A",
+                           price_cents: 148640, currency: "USD", dep_terminal: "A" });
+  booking({ trip_id: lisbon, kind: "flight", name: "TAP Air Portugal", airline: "TP", flight_number: "237", dep_airport: "LIS", arr_airport: "SFO",
+            start_at: at(lis1, "11:00", "+00:00"), end_at: at(lis1, "14:55", "-08:00"), confirmation: "QX7RPL", seat: "23A" });
+  const lisHotel = booking({ trip_id: lisbon, kind: "lodging", name: "Casa do Pátio", place: "Rua das Flores 28, Lisbon", lat: 38.7101, lon: -9.1434,
+                             start_at: lis0, end_at: lis1, confirmation: "CP-4471", price_cents: 112400, currency: "USD" });
+  booking({ trip_id: lisbon, kind: "restaurant", name: "Taberna do Largo", place: "Largo do Chafariz, Lisbon", lat: 38.7118, lon: -9.1306, start_at: at(addDays(lis0, 1), "20:00", "+00:00") });
+  booking({ trip_id: lisbon, kind: "event", name: "Sintra day trip", place: "Sintra, Portugal", lat: 38.7978, lon: -9.3906, start_at: at(addDays(lis0, 3), "09:30", "+00:00") });
+  charge(lisbon, add(sapphire, daysAgo(118), 1486.4, "TAP AIR PORTUGAL", "TAP Air Portugal", "TRAVEL", { member: "ALEX MORGAN" }), lisOut);
+  charge(lisbon, add(platinum, lis1, 1124, "CASA DO PATIO LISBOA", "Casa do Pátio", "TRAVEL", { member: "ALEX MORGAN" }), lisHotel);
+  charge(lisbon, add(platinum, addDays(lis0, 1), 86.2, "TABERNA DO LARGO", "Taberna do Largo", "FOOD_AND_DRINK", { member: "SAM MORGAN" }));
+  charge(lisbon, add(strata, addDays(lis0, 2), 14.6, "PASTELARIA DA SE", null, "FOOD_AND_DRINK"));
+  charge(lisbon, add(platinum, addDays(lis0, 3), 41.8, "CP COMBOIOS SINTRA", null, "TRANSPORTATION", { member: "ALEX MORGAN" }));
+  charge(lisbon, add(sapphire, addDays(lis0, 4), 18.4, "UBER *TRIP", "Uber", "TRANSPORTATION"));
+  charge(lisbon, add(strata, addDays(lis0, 5), 63.5, "CERVEJARIA DO CAIS", null, "FOOD_AND_DRINK"));
+
+  // Chicago, Sam, for work, 24 to 22 days ago: tagged "reimbursed"
+  const chi0 = daysAgo(24), chi1 = daysAgo(22);
+  const chicago = trip({ name: "Chicago, work", start_date: chi0, end_date: chi1, place: "Chicago, IL", lat: 41.8781, lon: -87.6298,
+                         travellers: JSON.stringify([owners.sam]) }, ["reimbursed"]);
+  const chiOut = booking({ trip_id: chicago, kind: "flight", name: "United", airline: "UA", flight_number: "1932", dep_airport: "SFO", arr_airport: "ORD",
+                           start_at: at(chi0, "07:15", "-08:00"), end_at: at(chi0, "13:32", "-06:00"), confirmation: "M4ZK2D", price_cents: 41260, currency: "USD" });
+  booking({ trip_id: chicago, kind: "flight", name: "United", airline: "UA", flight_number: "1187", dep_airport: "ORD", arr_airport: "SFO",
+            start_at: at(chi1, "17:40", "-06:00"), end_at: at(chi1, "20:28", "-08:00"), confirmation: "M4ZK2D" });
+  const chiHotel = booking({ trip_id: chicago, kind: "lodging", name: "The Wacker Loft Hotel", place: "W Wacker Dr, Chicago", lat: 41.8868, lon: -87.6359,
+                             start_at: chi0, end_at: chi1, price_cents: 53800, currency: "USD" });
+  charge(chicago, add(gold, daysAgo(41), 412.6, "UNITED AIRLINES", "United Airlines", "TRAVEL"), chiOut);
+  charge(chicago, add(gold, chi1, 538, "WACKER LOFT HOTEL", null, "TRAVEL"), chiHotel);
+  charge(chicago, add(gold, chi0, 142.3, "PRAIRIE TABLE", null, "FOOD_AND_DRINK"));
+  charge(chicago, add(gold, addDays(chi0, 1), 31.2, "UBER *TRIP", "Uber", "TRANSPORTATION"));
+
+  // Tokyo, Alex and Sam, in 24 to 32 days: the flights are paid for
+  const tyo0 = inDays(24), tyo1 = inDays(32);
+  const tokyo = trip({ name: "Tokyo", start_date: tyo0, end_date: tyo1, place: "Tokyo, Japan", lat: 35.6762, lon: 139.6503,
+                       travellers: JSON.stringify([owners.alex, owners.sam]) });
+  const tyoOut = booking({ trip_id: tokyo, kind: "flight", name: "United", airline: "UA", flight_number: "837", dep_airport: "SFO", arr_airport: "NRT",
+                           start_at: at(addDays(tyo0, -1), "11:05", "-08:00"), end_at: at(tyo0, "15:00", "+09:00"), confirmation: "H8TQWN", seat: "34K",
+                           price_cents: 248120, currency: "USD", dep_terminal: "I" });
+  booking({ trip_id: tokyo, kind: "flight", name: "United", airline: "UA", flight_number: "838", dep_airport: "NRT", arr_airport: "SFO",
+            start_at: at(tyo1, "16:55", "+09:00"), end_at: at(tyo1, "09:40", "-08:00"), confirmation: "H8TQWN", seat: "34K" });
+  booking({ trip_id: tokyo, kind: "lodging", name: "Hotel Kinokuni Shinjuku", place: "Nishi-Shinjuku, Tokyo", lat: 35.6909, lon: 139.6929, start_at: tyo0, end_at: addDays(tyo0, 4), confirmation: "KN-20931" });
+  booking({ trip_id: tokyo, kind: "lodging", name: "Ryokan Hanare", place: "Hakone, Kanagawa", lat: 35.2324, lon: 139.1069, start_at: addDays(tyo0, 4), end_at: tyo1 });
+  booking({ trip_id: tokyo, kind: "restaurant", name: "Sushi Mitsuba", place: "Ginza, Tokyo", lat: 35.6717, lon: 139.7650, start_at: at(addDays(tyo0, 1), "19:30", "+09:00"), confirmation: "R-5512" });
+  booking({ trip_id: tokyo, kind: "train", name: "Odakyu Romancecar", place: "Shinjuku to Hakone-Yumoto", lat: 35.6896, lon: 139.7006, start_at: at(addDays(tyo0, 4), "10:20", "+09:00") });
+  charge(tokyo, add(platinum, daysAgo(35), 2481.2, "UNITED AIRLINES", "United Airlines", "TRAVEL", { member: "ALEX MORGAN" }), tyoOut);
+  // and a booking waiting for a trip
+  booking({ trip_id: null, kind: "restaurant", name: "Harvest Table", place: "St. Helena, CA", lat: 38.5052, lon: -122.4703, start_at: at(inDays(50), "19:00", "-08:00") });
+
   return { users, items, accounts, transactions, tags, marks, cardStatements, statementSync, bills, points, netWorth,
-           investmentSync, securities, holdings, investmentTxns, snapshots, subOffers, subRequirements, subPayouts };
+           investmentSync, securities, holdings, investmentTxns, snapshots, subOffers, subRequirements, subPayouts,
+           trips, tripItems, tripTransactions, tripTags, exclusions };
 }
 
 /** The Worker settings the demo runs with: its people, and placeholder Plaid keys for each, so no
@@ -403,6 +491,9 @@ export function statements(d: DemoData): [string, (string | number | null)[]][] 
     ...ins("investment_sync", d.investmentSync), ...ins("securities", d.securities), ...ins("holdings", d.holdings),
     ...ins("investment_txns", d.investmentTxns), ...ins("balance_snapshots", d.snapshots),
     ...ins("sub_offers", d.subOffers), ...ins("sub_requirements", d.subRequirements), ...ins("sub_payouts", d.subPayouts),
+    ...ins("trips", d.trips), ...ins("trip_items", d.tripItems), ...ins("trip_transactions", d.tripTransactions),
+    ...d.tripTags.map((t): [string, (string | number | null)[]] => ["INSERT INTO transaction_tags (transaction_id, tag, position, trip_id) VALUES (?, ?, ?, ?)", t]),
+    ...d.exclusions.map((x): [string, (string | number | null)[]] => ["INSERT INTO analytics_exclusions (kind, value) VALUES (?, ?)", x]),
   ];
 }
 

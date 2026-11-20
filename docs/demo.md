@@ -20,6 +20,10 @@ Plaid is never called, and everything resets on reload.
 - **AI connector** (demo only, coming soon): a dialog with four example questions. The answers
   are worked out from the demo's data; nothing is connected.
 - **Bills** (⋯ menu, a calendar): four statements per card, with the latest planned to show each state: one paid, one partly paid, one due in 3 days (Needs attention), one not paid yet. Plus the household's own bills: last month's PG&E matched to its payment, this month's not paid yet, a quarterly water bill "from a PDF", and a trash bill marked paid. Adding bills from your own PDFs works in the demo too, still only in the browser.
+- **JET** (⋯ menu, `jet/`): the trips app on the demo's data, with two past trips (one tagged
+  "reimbursed", so CFA and the dashboard leave it out), Tokyo coming up, and its map. Its pages are
+  copied from `public/jet/` with checked edits, the same as the dashboard's; it opens as its own
+  page, so its data starts afresh like a reload. No Gmail pull, screenshot reader or install.
 - Links that need a real Minty (`/connect`, `/add-user`, `/status`) show a note instead.
 - The demo opens in light mode, registers no service worker and has no install prompt.
 
@@ -27,7 +31,7 @@ Plaid is never called, and everything resets on reload.
 
 `demo/data.ts`: a made-up household, Alex and Sam (plus Kate, Adam, Andy and Maurice, with one
 transaction each), generated in the browser relative to the
-visitor's date (the same for a given day). About 500 transactions, kept small so the demo starts
+visitor's date (the same for a given day). About 400 to 520 transactions (more as the year goes on, with the card credits), kept small so the demo starts
 fast: everyday spending, bills and pay for the last 160 days, and card credits back to last
 January 1, planted so ABC shows used, partly used,
 missed, open and tick-box credits on an Amex Platinum, an Amex Business Gold and a Citi Strata

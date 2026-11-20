@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, exportFile, importFile, keepData, store } from "./store.js";
+import { MODE, exportFile, importFile, keepData, shiftSample, store } from "./store.js";
 import * as gmail from "./gmail.js";
 
 const app = document.getElementById("app");
@@ -94,10 +94,14 @@ function home() {
     <div class="meta">${t.start_date > today ? `<span class="pill info">in ${Math.round((asDay(t.start_date) - asDay(today)) / 864e5)} days</span>` : t.end_date >= today ? `<span class="pill good">On now</span>` : ""}
       ${["flight", "lodging"].map((k) => { const n = t.items.filter((i) => i.kind === k).length; return n ? `<span class="pill dim">${n} ${k === "flight" ? (n === 1 ? "flight" : "flights") : (n === 1 ? "stay" : "stays")}</span>` : ""; }).join("")}
       ${t.transactions ? `<span class="pill dim">${money(t.spent_cents)} spent</span>` : ""}</div></a>`;
-  return `${flights.length ? `<div class="section-title"><h2>Next flight</h2><span class="muted">${flights.length > 1 ? `${flights.length - 1} more after it` : ""}</span></div>
+  const sample = MODE === "device" && sampleIds();
+  const empty = !data.trips.length && !data.unassigned.length;
+  return `${sample ? `<div class="card sample-note"><span class="grow"><b>Sample trips.</b> Made up, to show what JET does: open one, look at its flights and map, change anything. They're only in this browser.</span><button type="button" class="btn small" data-sample-remove>Remove them</button></div>` : ""}
+    ${flights.length ? `<div class="section-title"><h2>Next flight</h2><span class="muted">${flights.length > 1 ? `${flights.length - 1} more after it` : ""}</span></div>
       <div class="hero">${flightCard(flights[0], { countdown: true })}</div>` : ""}
     <div class="section-title"><h2>Trips</h2><a class="btn small" href="#/new">New trip</a></div>
-    ${upcoming.length ? `<div class="trips">${upcoming.map(tripCard).join("")}</div>` : `<div class="card muted">No trips coming up. Make one, or add a booking and JET will hold it until you do.</div>`}
+    ${upcoming.length ? `<div class="trips">${upcoming.map(tripCard).join("")}</div>` : `<div class="card muted">No trips coming up. Make one, or add a booking and JET will hold it until you do.${MODE === "device" && empty ? `
+      <div class="actions"><button type="button" class="btn primary" data-sample>Try a sample trip</button><span class="err" id="sampleErr"></span></div>` : ""}</div>`}
     ${data.unassigned.length ? `<div class="section-title"><h2>Bookings waiting for a trip</h2><span class="muted">${data.unassigned.length}</span></div>
       <div class="list">${data.unassigned.map((i) => `<label class="row"><input type="checkbox" data-pick="${i.id}" /><span class="grow"><b>${esc(itemTitle(i))}</b><span class="muted">${esc(KIND[i.kind])} · ${esc(fmtDay(dateOf(i.start_at)) || "no date")}</span></span><a href="#/item/${i.id}" class="btn small ghost">Edit</a></label>`).join("")}</div>
       <div class="actions"><button type="button" class="btn primary" data-make-trip>Make a trip from the ticked ones</button></div>` : ""}
@@ -385,11 +389,33 @@ function dataView() {
         <label class="btn">Import…<input type="file" accept="application/json,.json" id="importFile" hidden /></label><span class="err" id="formErr"></span></div></div>`;
 }
 async function doImport(file) {
-  const parsed = importFile(JSON.parse(await file.text()));
-  const ids = new Map();
+  const r = await importData(JSON.parse(await file.text()));
+  return { trips: r.trips.length, items: r.items.length };
+}
+/** A JET export's trips and bookings into this store, bookings re-tied to their trips; the new ids. */
+async function importData(obj) {
+  const parsed = importFile(obj);
+  const ids = new Map(), items = [];
   for (const { old, trip } of parsed.trips) ids.set(old, (await store.saveTrip(null, trip)).id);
-  for (const { oldTrip, item } of parsed.items) await store.saveItem(null, { ...item, trip_id: oldTrip !== null && ids.has(oldTrip) ? ids.get(oldTrip) : null });
-  return { trips: parsed.trips.length, items: parsed.items.length };
+  for (const { oldTrip, item } of parsed.items) items.push((await store.saveItem(null, { ...item, trip_id: oldTrip !== null && ids.has(oldTrip) ? ids.get(oldTrip) : null })).id);
+  return { trips: [...ids.values()], items };
+}
+
+// --- JET on its own: the sample trips (docs/trips.md §17.3) -----------------------------------
+const SAMPLE = "jet-sample";
+const sampleIds = () => { try { return JSON.parse(localStorage.getItem(SAMPLE) ?? "null"); } catch { return null; } };
+async function loadSample() {
+  const r = await fetch("/jet/sample.json");
+  if (!r.ok) throw new Error("The sample trips couldn't load.");
+  const ids = await importData(shiftSample(await r.json(), localDay()));
+  try { localStorage.setItem(SAMPLE, JSON.stringify(ids)); } catch { /* they stay; removed by hand */ }
+}
+async function removeSample() {
+  const ids = sampleIds();
+  if (!ids) return;
+  for (const id of ids.items ?? []) await store.deleteItem(id).catch(() => {});
+  for (const id of ids.trips ?? []) await store.deleteTrip(id).catch(() => {});
+  try { localStorage.removeItem(SAMPLE); } catch { /* none */ }
 }
 
 // --- Gmail pull: its set-up (docs/trips.md §17.1) ---------------------------------------------
@@ -602,6 +628,15 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-sample]")) {
+      at("[data-sample]").disabled = true;
+      try { await loadSample(); data = null; await render(); } catch (e2) { at("[data-sample]").disabled = false; document.getElementById("sampleErr").textContent = e2.message; }
+      return;
+    }
+    if (at("[data-sample-remove]")) {
+      if (!confirm("Remove the sample trips and their bookings from this browser?")) return;
+      await removeSample(); data = null; await render(); return;
+    }
     if (at("[data-add-tag]")) {
       const input = app.querySelector("#tripForm [name=tags]"), tag = at("[data-add-tag]").dataset.addTag;
       input.value = splitTags(`${input.value},${tag}`).join(", ");

@@ -123,6 +123,17 @@ describe("JET on its own (public/jet/store.js)", () => {
     expect(back.items.map((i: any) => [i.oldTrip, i.item.name, i.item.trip_id])).toEqual([[7, "Hotel", null], [null, "Later", null]]);
     expect(() => importFile({ app: "Other", version: 1, trips: [], items: [] })).toThrow(/isn't a JET export/);
   });
+  it("the sample trips move to today: dates and times shift by whole days, keeping their time and offset", async () => {
+    const { shiftSample, importFile } = await import("../public/jet/store.js");
+    const file = { app: "JET", version: 1, sample_from: "2026-01-15",
+      trips: [{ id: 3, name: "Tokyo", start_date: "2026-02-08", end_date: "2026-02-16", travellers: [] }],
+      items: [{ id: 9, trip_id: 3, kind: "flight", airline: "UA", start_at: "2026-02-07T11:05-08:00", end_at: "2026-02-08T15:00+09:00" }, { id: 10, trip_id: null, kind: "event", start_at: null }] };
+    const moved = shiftSample(file, "2026-11-19");                                        // 308 days later
+    expect(moved.trips[0]).toMatchObject({ start_date: "2026-12-13", end_date: "2026-12-21" });
+    expect(moved.items.map((i: any) => [i.start_at, i.end_at])).toEqual([["2026-12-12T11:05-08:00", "2026-12-13T15:00+09:00"], [null, undefined]]);
+    expect(file.trips[0].start_date).toBe("2026-02-08");                                  // the file itself is left as it was
+    expect(importFile(moved).items[0].oldTrip).toBe(3);                                     // and it imports as an export does
+  });
   it("on a Minty it's in Minty mode; the standalone build sets device mode", async () => {
     const raw = (p: string) => SELF.fetch(`https://minty.example.workers.dev${p}`);
     expect(await (await raw("/jet/mode.js")).text()).toContain('window.JET_MODE = "minty";');
