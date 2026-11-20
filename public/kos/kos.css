@@ -199,3 +199,11 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 .sum-more { display: inline-block; margin-top: 6px; font-weight: 750; font-size: 13.5px; color: var(--text); }
 @media (max-width: 720px) { .summary { grid-template-columns: 1fr; } .sum-kind { min-width: 0; flex: 1 0 22%; } }
 
+/* Kos on its own: the first screen's set-up, and the lock's last step */
+.welcome h2 { margin: 0 0 6px; font-size: 22px; }
+.steps { margin: 14px 0; padding-left: 22px; display: grid; gap: 14px; }
+.steps li { line-height: 1.5; }
+.steps li::marker { font-weight: 800; color: var(--accent); }
+.steps .actions { margin-top: 8px; }
+.lock-later { margin-top: 18px; }
+

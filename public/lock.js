@@ -7,7 +7,12 @@
 // On by default where the device can do it: the first visit offers "Turn on" (one setup prompt)
 // or "Not on this device". Devices without a built-in authenticator are never locked, so nobody
 // can be locked out. Loaded render-blocking in <head> with lock.css, so nothing shows first.
+//
+// Kos on its own (window.KOS_MODE === "device", set by mode.js before this loads; docs/trips.md
+// §17.4): it says Kos and trips, and never offers itself on arrival. A newcomer's first screen is
+// Kos's set-up, which offers the lock as its last step (MintyLock.turnOn); once on, it unlocks as here.
 (function () {
+  const KOS = window.KOS_MODE === "device";
   const KEY = "minty_lock";            // localStorage: {state: "on", cred} | {state: "off"}
   const SEEN = "minty_lock_seen";      // sessionStorage: this tab was last open and unlocked at (ms)
   const RELOCK_MS = 5 * 60 * 1000;     // away longer than this: locked again
@@ -58,7 +63,12 @@
 
   // ---- the cover ---------------------------------------------------------------------------
   let cover = null, mode = null;
-  const TEXT = {
+  const TEXT = KOS ? {
+    setup: ["Lock Kos on this device?",
+            "Ask for Face ID, your fingerprint or this device's screen lock before Kos shows your trips here. Nothing leaves the device.",
+            "Turn on", "Not on this device"],
+    unlock: ["Kos is locked", "Unlock with Face ID, your fingerprint or this device's screen lock.", "Unlock", null],
+  } : {
     setup: ["Lock Minty on this device?",
             "Ask for Face ID, your fingerprint or this device's screen lock before Minty shows your money here. Nothing leaves the device.",
             "Turn on", "Not on this device"],
@@ -75,7 +85,7 @@
       cover.setAttribute("role", "dialog");
       cover.setAttribute("aria-modal", "true");
       cover.setAttribute("aria-labelledby", "minty-lock-title");
-      cover.innerHTML = `<div class="card"><img src="/favicon.svg" alt="" width="48" height="48" />
+      cover.innerHTML = `<div class="card"><img src="${KOS ? "/kos/icon-64.png" : "/favicon.svg"}" alt="" width="48" height="48" />
         <h1 id="minty-lock-title"></h1><p class="why"></p>
         <button type="button" class="primary"></button><button type="button" class="secondary"></button>
         <button type="button" class="secondary again" hidden>Set up again</button><p class="err" role="alert"></p></div>`;
@@ -127,6 +137,7 @@
     const st = read();
     if (st && st.state === "off") return;
     if (st && st.state === "on" && recent()) { seen(); return; }
+    if (KOS && !(st && st.state === "on")) return;            // Kos on its own: offered by its set-up, never on arrival
     root.classList.add("minty-locked");                       // before first paint
     available().then((ok) => {
       if (!ok) { root.classList.remove("minty-locked"); return; }   // nothing to unlock with: never locked out
@@ -150,6 +161,7 @@
     },
     async turnOn() { await create(); seen(); },
     async turnOff() { await verify(); save({ state: "off" }); },
+    notHere() { save({ state: "off" }); },                    // "Not on this device", from a page's own offer (Kos's set-up)
   };
 
   lockIfNeeded();

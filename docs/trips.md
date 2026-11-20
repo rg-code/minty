@@ -639,6 +639,24 @@ Kos's own:
   trips in the browser, marked by localStorage `kos-sample`, and **Remove them** deletes them and
   their bookings.
 
+### 17.4 Kos on its own: set-up first, the device lock last (owner, 2026-11-20)
+
+- **A newcomer's first screen is Kos's set-up** (`welcome()` in `kos.js`), not the device lock:
+  1. add a trip or a booking (or try the sample);
+  2. bookings from email (Gmail pull, or sharing to Kos on Android);
+  3. put Kos on the home screen (Install Kos when the browser offers it);
+  4. **last:** lock Kos on this device (Turn on / Not on this device), or what this device can't do.
+- **`lock.js` on Kos on its own** (`window.KOS_MODE === "device"`, set by `mode.js` before it loads)
+  says Kos and trips, shows Kos's icon, and never offers itself on arrival. Once it's on, it unlocks
+  as on Minty. Minty, and Kos on a Minty, are unchanged.
+- **Once there are trips of the person's own** (not only the sample's) and the lock was never set, the
+  home screen ends with **Last step: lock Kos on this device?** until they choose.
+
+**Kos's icon** (the owner's, 2026-11-20): `public/kos/icon-64.png` (favicon, header, the lock),
+`icon-192.png`, `icon-512.png`, `maskable-512.png` (the artwork at 80% on its own background,
+#014147, inside the safe zone) and `apple-touch-icon.png`, all made from the owner's 1254 px image.
+The old SVG is gone.
+
 ### 17.1 Gmail pull (both modes)
 
 **Why:** on a phone, the Gmail app can't save a message as an `.eml`, so "Email file" alone left Kos
