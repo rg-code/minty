@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { SELF } from "cloudflare:test";
 import { greatCircle, latinLabels } from "../public/kos/map.js";
 import { nightStyle } from "../public/kos/map-style.js";
@@ -128,6 +128,59 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
     expect(code).toContain('sentTo.indexOf("+" + c + "@")');
     expect(code).toContain("trip: trip");
     expect(code).not.toMatch(/GmailApp\.(send|move|mark|delete|create)|addLabel|UrlFetchApp|MailApp/);    // still only reads
+  });
+  it("on a Minty, the script's Bills view returns the Bills label's emails as text and PDFs, still only reading (docs/bills.md)", async () => {
+    const g = await import("../public/kos/gmail.js");
+    const code = g.script(g.newKey(), "Kos", true);
+    expect(code).toContain("|| /\\.pdf$/i.test(a.getName())");
+    expect(code).toContain('if (e.parameter.view === "bills") return out({ view: "bills", messages: bills(skip), v: 3 });');
+    expect(code).toContain(`GmailApp.search('newer_than:90d label:"' + BILLS + '"', 0, 30)`);
+    expect(code).toContain("getAttachments({ includeInlineImages: false })");
+    expect(code).toContain("a.getSize() <= 5000000");
+    expect(code).not.toMatch(/GmailApp\.(send|move|mark|delete|create)|addLabel|UrlFetchApp|MailApp|DriveApp/);
+    expect(() => new Function(code)).not.toThrow();
+    // Kos on its own has no Bills: its script never reads a Bills label
+    const alone = g.script(g.newKey());
+    expect(alone).not.toMatch(/bills\(|BILLS|Bills/);
+    expect(() => new Function(alone)).not.toThrow();
+  });
+  it("Bills by email: a complete new bill is added, an incomplete one listed, card statements and known ones left (splitBills)", async () => {
+    const { splitBills } = await import("../public/kos/store.js");
+    const pge = { file: "pge.pdf", sha: "a", biller: "PG&E", amount_cents: 12033, due_date: "2026-12-05" };
+    const out = splitBills([pge, { ...pge, sha: "b", due_date: null }, { ...pge, sha: "c", biller: null }, { ...pge, sha: "d", amount_cents: null },
+                            { ...pge, sha: "e", card: true }, { ...pge, sha: "f", known: true }, { file: "x.pdf", sha: "g", error: "Couldn't read this PDF" },
+                            { ...pge, sha: "h", amount_cents: 0 }]);
+    expect(out.add.map((r: any) => r.sha)).toEqual(["a", "h"]);                  // a $0 bill is still a bill
+    expect(out.incomplete.map((r: any) => r.sha)).toEqual(["b", "c", "d"]);
+    expect(out.cards.map((r: any) => r.sha)).toEqual(["e"]);
+    expect(out.known.map((r: any) => r.sha)).toEqual(["f"]);
+    expect(out.unreadable.map((r: any) => r.sha)).toEqual(["g"]);
+  });
+  it("pullBills asks with view=bills, decodes the PDFs, and leaves out what Bills already offered", async () => {
+    const store = new Map<string, string>();
+    const was = (globalThis as any).localStorage;
+    (globalThis as any).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) };
+    try {
+      const g = await import("../public/kos/gmail.js");
+      await expect(g.pullBills()).rejects.toThrow(/isn't set up/);
+      g.save("https://script.google.com/macros/s/AKfycbx_example_deployment_id_1234/exec");
+      const asked: string[] = [];
+      let reply: any = { view: "bills", v: 3, messages: [
+        { id: "m1", date: "2026-11-01T10:00:00Z", subject: "Your PG&E bill", text: "", pdfs: [{ name: "bill.pdf", data: btoa("%PDF-1.4 x") }] },
+        { id: "m2", date: "2026-11-02T10:00:00Z", subject: "Water bill", text: "Amount due $42.10 by 11/20/2026", pdfs: [] }] };
+      const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (u: any) => { asked.push(String(u)); return new Response(JSON.stringify(reply)); });
+      const got = await g.pullBills();
+      expect(new URL(asked[0]).searchParams.get("view")).toBe("bills");
+      expect(got.map((m: any) => m.id)).toEqual(["m1", "m2"]);
+      expect(new TextDecoder().decode(got[0].pdfs[0].bytes)).toBe("%PDF-1.4 x");
+      g.markBillsSeen(["m1"]);
+      expect((await g.pullBills()).map((m: any) => m.id)).toEqual(["m2"]);
+      expect(new URL(asked[1]).searchParams.get("seen")).toBe("m1");
+      expect(store.get("kos-gmail-seen") ?? null).toBeNull();                 // Kos's own list is separate
+      reply = { label: "Kos", v: 2, messages: [] };                             // a script from before Bills by email
+      await expect(g.pullBills()).rejects.toThrow(/older than Bills by email/);
+      spy.mockRestore();
+    } finally { (globalThis as any).localStorage = was; }
   });
   it("an export keeps each trip's code, and an import brings it back", async () => {
     const { exportFile, importFile } = await import("../public/kos/store.js");

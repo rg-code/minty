@@ -119,6 +119,7 @@
         <button type="button" class="pill" data-act="add">+ Add a bill</button>
         <button type="button" class="pill" data-act="pdf">Add from PDFs</button>
         <button type="button" class="pill bill-folder" data-act="folder">${folder ? "Change folder" : "Add a folder"}</button>
+        <a class="pill" href="/kos/#/bills" title="Forward bills to your Gmail with +bills: Kos reads them and adds them here">From Gmail…</a>
       </div>
     </div>${folderHtml()}
     <div class="bill-controls">

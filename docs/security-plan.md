@@ -349,6 +349,22 @@ from `#/gmail` after "Forget on this device".
 - No write scopes.
 - Nothing reaches Minty's Worker from Google.
 
+### 7.1 The same script for Bills, through Kos (owner, 2026-11-20)
+
+[bills.md](bills.md), "By email". The script gets a second view, `view=bills`, only in a script made
+on a Minty: the **Bills** label's emails from the last 90 days, as text and PDF attachments. Same key,
+same `gmail.readonly`; still only reads.
+- **No page policy changes.** Kos asks the script, as it does for bookings: `/kos/*` already allows
+  `script.google.com` and `script.googleusercontent.com`. The dashboard's `connect-src` stays `'self'`
+  (the owner chose this over allowing the hosts on the dashboard, 2026-11-20).
+- **The PDFs are read in the browser**, in Kos, like any picked PDF; the Worker never sees an email or
+  a PDF. Kos adds a complete bill through Minty's own `POST /bills` (same origin, behind Access): only
+  its fields and a SHA-256.
+- **The key's reach grows, on a Minty only:** with the URL and key, someone can now also read the
+  **Bills** label's emails from the last 90 days, with their PDFs (bills carry account numbers and
+  addresses). The set-up page's phone-link warning says so. Kos on its own makes a script without the
+  Bills view, so a standalone user's "Bills" label is never read.
+
 ## 8. Kos following a Google Maps short link (owner's request, 2026-11-20)
 
 The design is [trips.md](trips.md) §22. `POST /trips/place-link` (behind Access, like every route) is the

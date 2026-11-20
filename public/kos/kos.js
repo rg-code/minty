@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, shiftSample, store, tripAddress, tripFor, tripSummary } from "./store.js";
+import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, shiftSample, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 import { parseWhere } from "./where.js";
@@ -111,7 +111,7 @@ function home() {
   const ready = data.trips.filter((t) => t.end_date < today && t.end_date >= recent
     && (MODE === "device" ? !seenHere.includes(t.id) : t.journal_ready_at && !t.journal_seen_at)).slice(0, 2);
   const ownTrips = data.trips.filter((t) => !(sample?.trips ?? []).includes(t.id));
-  return `${backupReminder(ownTrips.length ? ownTrips : null)}${ready.map((t) => `<a class="card j-ready" href="#/trip/${t.id}/journal"><span class="grow"><b>Your ${esc(t.name)} journal is ready.</b> <span class="muted">Its days, its map and room for your notes.</span></span><span class="btn small primary">Open</span></a>`).join("")}
+  return `${billsBanner()}${backupReminder(ownTrips.length ? ownTrips : null)}${ready.map((t) => `<a class="card j-ready" href="#/trip/${t.id}/journal"><span class="grow"><b>Your ${esc(t.name)} journal is ready.</b> <span class="muted">Its days, its map and room for your notes.</span></span><span class="btn small primary">Open</span></a>`).join("")}
     ${sample ? `<div class="card sample-note"><span class="grow"><b>Sample trips.</b> Made up, to show what Kos does: open one, look at its flights and map, change anything. They're only in this browser.
       Start your own with <a href="#/new">New trip</a> or <a href="#/add">Add a booking</a>.</span><button type="button" class="btn small" data-sample-remove>Remove them</button></div>` : ""}
     ${flights.length ? `<div class="section-title"><h2>Next flight</h2><span class="muted">${flights.length > 1 ? `${flights.length - 1} more after it` : ""}</span></div>
@@ -929,7 +929,7 @@ function gmailView() {
       <p class="muted"><b>iPhone:</b> paste the link into the set-up page <i>inside the installed Kos app</i> (its storage is separate from Safari's).</p></div></div>
       <textarea class="paste" id="phoneLink" rows="3" readonly>${esc(link)}</textarea>
       <div class="actions"><button type="button" class="btn small" data-copy="phoneLink">Copy the link</button>${navigator.share ? `<button type="button" class="btn small" data-share-link>Send…</button>` : ""}</div>
-      <p class="muted" style="margin-bottom:0">Anyone with this link can read your Kos label: send it only to yourself.</p></div>`
+      <p class="muted" style="margin-bottom:0">Anyone with this link can read ${MODE === "minty" ? "your Kos and Bills labels" : "your Kos label"}: send it only to yourself.</p></div>`
     : `<div class="card" style="margin-bottom:12px"><h3 style="margin:0 0 8px">Set up on another device already?</h3>
       <p style="margin-top:0">Open its set-up page, and scan the QR code with this phone, or paste its phone link here:</p>
       <form id="connectForm" class="form"><label class="wide">Phone link<input name="link" placeholder="…/kos/#/gmail?connect=…" autocomplete="off" /></label></form>
@@ -939,8 +939,9 @@ function gmailView() {
     <p class="muted">Forward a booking to your Gmail with <b>+${PLUS}</b> before the @ (Gmail delivers <b>you+${PLUS}@gmail.com</b> to <b>you@gmail.com</b>), and Kos reads it with the same reader Minty uses. Kos works out which trip it belongs to from its dates; to file one in a trip for certain, send it to that trip's own address, <b>you+<i>its code</i>@gmail.com</b> (shown on the trip), which needs no filter. A small script in your own Gmail hands Kos the emails with one label; it only reads, and only for this device's key. No server is involved, yours or anyone's.</p>
     <p class="muted"><b>Recommended:</b> a Gmail account made just for this. Google's read-only permission covers a whole mailbox, so in an account that only gets what you forward, that's all the script can see.</p>
     ${c ? "" : phone}
-    ${step(1, "A label and a filter, in Gmail (on a computer)", `<p>Make a label named <b>Kos</b>. Then Settings → <b>Filters and blocked addresses</b> → Create a new filter: in <b>To</b>, put your address with +${PLUS} (e.g. <b>you+${PLUS}@gmail.com</b>) → Create filter → <b>Apply the label: Kos</b> → Create filter. Anything you label Kos by hand counts too${MODE === "minty" ? ", and so does a filter you made earlier for +kos" : ""}.</p>`)}
-    ${step(2, "The script", `<p>Signed in to that Gmail, open <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → New project</a>. Replace what's there with this (your key is in it):</p>${copy("gsCode", gmail.script(key), 10)}
+    ${step(1, "A label and a filter, in Gmail (on a computer)", `<p>Make a label named <b>Kos</b>. Then Settings → <b>Filters and blocked addresses</b> → Create a new filter: in <b>To</b>, put your address with +${PLUS} (e.g. <b>you+${PLUS}@gmail.com</b>) → Create filter → <b>Apply the label: Kos</b> → Create filter. Anything you label Kos by hand counts too${MODE === "minty" ? ", and so does a filter you made earlier for +kos" : ""}.</p>
+      ${MODE === "minty" ? `<p><b>For Bills too:</b> make a second label, <b>Bills</b>, and a filter for <b>you+bills@gmail.com</b> → <b>Apply the label: Bills</b>. Forward bills there (an email with the bill as a PDF, or the bill in the email itself), and Kos reads them on this device and adds them to Bills (<a href="#/bills">Bills from Gmail</a>): only the bill's details are saved. Its script is this one: one set-up for both.</p>` : ""}`)}
+    ${step(2, "The script", `<p>Signed in to that Gmail, open <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → New project</a>. Replace what's there with this (your key is in it):</p>${copy("gsCode", gmail.script(key, "Kos", MODE === "minty"), 10)}
       <p>Project Settings (⚙) → tick <b>Show "appsscript.json"</b> → open it in the editor and replace it with:</p>${copy("gsManifest", gmail.MANIFEST, 6)}`)}
     ${step(3, "Deploy it as a web app", `<p><b>Deploy → New deployment</b> → type <b>Web app</b> → Execute as: <b>Me</b>, Who has access: <b>Anyone</b> → Deploy. Allow it: Google says it isn't verified, because it's your own script → Advanced → Go to the project → Allow (it asks only to read Gmail). Copy the <b>Web app URL</b>.</p>
       <p class="muted">"Anyone" lets Kos call it without your Google sign-in; the key in the script is what keeps others out. To stop it, archive the deployment (Deploy → Manage deployments).</p>`)}
@@ -959,6 +960,87 @@ async function drawQr(el, text) {
     for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + q} ${r + q}h1v1h-1z`;
     el.innerHTML = `<svg viewBox="0 0 ${n + 2 * q} ${n + 2 * q}" shape-rendering="crispEdges" role="img" aria-label="QR code"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
   } catch { el.hidden = true; }
+}
+
+// --- Bills by email (docs/bills.md), on a Minty: Kos reads the bills forwarded to +bills (the Gmail
+// script's Bills view, label Bills) on this device, as Bills reads PDFs (pdf.js, bill-parse.js), and
+// adds the complete ones to Minty's Bills through its API; only their fields and a SHA-256 leave. Kos
+// does it, not the dashboard, because Kos's page policy already lets it ask the Gmail script.
+let lastBills = null, billsRunning = false;                  // the last check's results, for the page and the banner
+const BILLS_CHECKED = "minty-bills-gmail-checked";
+const hexOf = async (bytes) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
+async function checkBills(quiet) {
+  if (billsRunning) return;
+  billsRunning = true;
+  const box = document.getElementById("billsResult");
+  if (box && !quiet) box.innerHTML = `<div class="suggest muted">Asking your Gmail…</div>`;
+  try {
+    const msgs = await gmail.pullBills();
+    lsSet(BILLS_CHECKED, Date.now());
+    if (!msgs.length) { lastBills = { at: Date.now(), added: [], incomplete: [], cards: 0, emails: 0 }; return; }
+    const [pr, { parseBill }, { parsePoints }] = await Promise.all([import("/pdf-read.js"), import("/bill-parse.js"), import("/points-parse.js")]);
+    const files = msgs.flatMap((m) => m.pdfs.map((p) => Object.assign(new File([p.bytes], /\.pdf$/i.test(p.name) ? p.name : `${p.name}.pdf`, { type: "application/pdf", lastModified: Date.parse(m.date) || Date.now() }), { subject: m.subject })));
+    let rows = [];
+    if (files.length) rows = (await pr.readPdfs(files, { view: "bills", known: store.bills.known, max: 100,
+      parse: (text) => ({ ...parseBill(text), card: parsePoints(text).program !== null }) })).rows;
+    // an email with no PDF may hold the bill in its own text; a receipt or notice finds nothing
+    const texts = [];
+    for (const m of msgs.filter((x) => !x.pdfs.length)) {
+      const f = parseBill(`${m.subject}\n${m.text}`);
+      if (f.amount_cents === null && !f.due_date) continue;
+      texts.push({ file: m.subject || "(no subject)", sha: await hexOf(new TextEncoder().encode(m.text)), fromText: true, ...f });
+    }
+    const have = await store.bills.known(texts.map((r) => r.sha)).catch(() => []);
+    for (const r of texts) if (have.includes(r.sha)) r.known = true;
+    const split = splitBills(rows.concat(texts));
+    const added = [];
+    for (const r of split.add) {
+      try {
+        const { id } = await store.bills.add({ biller: r.biller, amount_cents: r.amount_cents, due_date: r.due_date, statement_date: r.statement_date || null,
+          account_hint: r.account_hint || null, source: r.fromText ? "manual" : "pdf", file_sha256: r.sha });
+        added.push({ ...r, id });
+      } catch (e) { if (!/already added/i.test(e.message)) split.incomplete.push({ ...r, error: e.message }); }
+    }
+    gmail.markBillsSeen(msgs.map((m) => m.id));                   // read once: the person adds by hand what Kos couldn't
+    lastBills = { at: Date.now(), added, incomplete: split.incomplete.concat(split.unreadable), cards: split.cards.length, emails: msgs.length };
+  } catch (e) {
+    if (!quiet) lastBills = { at: Date.now(), error: e.message, added: [], incomplete: [], cards: 0, emails: 0 };
+  } finally {
+    billsRunning = false;
+    const { parts } = route();
+    if (parts[0] === "bills") { const b = document.getElementById("billsResult"); if (b) b.innerHTML = billsResultHtml(); }
+    else if (!parts.length && lastBills?.added.length && !document.getElementById("billsBanner")) app.insertAdjacentHTML("afterbegin", billsBanner());
+  }
+}
+function quietBills() {
+  if (Date.now() - lsNum(BILLS_CHECKED) < 30 * 6e4) return;
+  checkBills(true).catch(() => {});
+}
+const billLine = (r) => `<b>${esc(r.biller || "A bill")}</b>${Number.isInteger(r.amount_cents) ? ` ${money(r.amount_cents)}` : ""}${r.due_date ? `, due ${esc(fmtDay(r.due_date))}` : ""}`;
+function billsBanner() {
+  const n = lastBills?.added.length ?? 0;
+  if (!n || lastBills.seenBanner) return "";
+  return `<a class="card j-ready" id="billsBanner" href="#/bills"><span class="grow"><b>Kos added ${n} bill${n === 1 ? "" : "s"} to Bills</b> <span class="muted">from your Gmail: ${lastBills.added.slice(0, 3).map(billLine).join("; ")}.</span></span><span class="btn small">See</span></a>`;
+}
+function billsResultHtml() {
+  const b = lastBills;
+  if (!b) return `<div class="suggest muted">Not checked yet.</div>`;
+  if (b.error) return `<div class="suggest err">${esc(b.error)}</div>`;
+  b.seenBanner = true;
+  if (!b.emails) return `<div class="suggest muted">No new emails in your Bills label.</div>`;
+  return `${b.added.length ? `<div class="section-title"><h2>Added to Bills</h2><span class="muted">${b.added.length}</span></div>
+      <div class="list">${b.added.map((r) => `<div class="row"><span class="grow">${billLine(r)}<span class="muted bill-src">${esc(r.file)}</span></span>${r.undone ? `<span class="muted">Undone</span>` : `<button type="button" class="btn small ghost" data-bill-undo="${r.id}">Undo</button>`}</div>`).join("")}</div>` : ""}
+    ${b.incomplete.length ? `<div class="section-title"><h2>To add by hand</h2><span class="muted">Kos couldn't read all of it</span></div>
+      <div class="list">${b.incomplete.map((r) => `<div class="row"><span class="grow">${billLine(r)}<span class="muted bill-src">${esc(r.file)}${r.error ? ` · ${esc(r.error)}` : !r.due_date ? " · no due date found" : r.amount_cents === null ? " · no amount found" : !r.biller ? " · no biller found" : ""}</span></span></div>`).join("")}</div>
+      <div class="actions"><a class="btn" href="/?bills">Open Bills to add them</a></div>` : ""}
+    ${b.cards ? `<p class="muted">${b.cards} card statement${b.cards === 1 ? "" : "s"} set aside: Bills shows those from your bank.</p>` : ""}
+    ${!b.added.length && !b.incomplete.length && !b.cards ? `<div class="suggest muted">${b.emails} new email${b.emails === 1 ? "" : "s"}, with no bill Kos could read (or ones Bills already has).</div>` : ""}`;
+}
+function billsView() {
+  return `<div class="section-title"><h2>Bills from Gmail</h2><a class="btn small" href="/?bills">Open Bills</a></div>
+    <div class="card"><p style="margin-top:0">Forward a bill to your Gmail with <b>+bills</b> (a filter labels it <b>Bills</b>: see <a href="#/gmail">the Gmail set-up</a>), and Kos reads it on this device, the PDF or the bill in the email, and adds it to Minty's Bills. Kos checks when it opens, at most every half hour. Only the bill's details are saved; the PDF stays here.</p>
+      <div class="actions"><button type="button" class="btn primary" data-bills-check>Check now</button></div></div>
+    <div id="billsResult">${gmail.config() ? billsResultHtml() : `<div class="suggest muted">Set up Gmail first: <a href="#/gmail">Gmail set-up</a>.</div>`}</div>`;
 }
 
 /** New emails from the Kos label, each read with the email reader, as suggestions. quiet: the
@@ -1091,6 +1173,7 @@ async function render() {
   }
   if (parts[0] === "new") { app.innerHTML = tripForm(null, (q.get("items") ?? "").split(",").filter(Boolean)); tagPicker(); return; }
   if (parts[0] === "data") { app.innerHTML = dataView(); return; }
+  if (parts[0] === "bills" && store.bills) { app.innerHTML = billsView(); if (gmail.config() && !lastBills) checkBills(false); return; }
   if (parts[0] === "gmail") {
     const code = q.get("connect");
     if (code) {                                  // a phone link: keep it, and take it out of the address
@@ -1133,6 +1216,7 @@ async function render() {
   }
   app.innerHTML = home();
   applyPhotos();
+  if (store.bills && gmail.config()) quietBills();               // Bills by email: at most every 30 minutes
   if (document.getElementById("backupNote")) setTimeout(() => { const n = document.getElementById("backupNote"); if (n) { n.classList.add("leaving"); setTimeout(() => n.remove(), 400); lsSet(SNOOZE, Date.now() + 3 * 864e5); } }, 15000);
   setupTabs();
   lockOffer();
@@ -1166,6 +1250,13 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-bills-check]")) { lastBills = null; await checkBills(false); return; }
+    if (at("[data-bill-undo]")) {
+      const id = Number(at("[data-bill-undo]").dataset.billUndo);
+      try { await store.bills.remove(id); const r = lastBills?.added.find((x) => x.id === id); if (r) r.undone = true; document.getElementById("billsResult").innerHTML = billsResultHtml(); }
+      catch (e2) { at("[data-bill-undo]").insertAdjacentHTML("afterend", `<span class="err"> ${esc(e2.message)}</span>`); }
+      return;
+    }
     if (at("[data-make-album]")) {
       const id = Number(at("[data-make-album]").dataset.makeAlbum), btn = at("[data-make-album]");
       btn.disabled = true;

@@ -44,6 +44,13 @@ describe("adding bills", () => {
     expect((await send("POST", "/bills/known", { sha256: [SHA, "b".repeat(64)] })).body).toEqual({ known: [SHA] });
   });
 
+  it("a bill read from an email's own text is saved as typed, with the text's SHA-256, and known after (Bills by email)", async () => {
+    const TEXT = "c".repeat(64);
+    expect((await send("POST", "/bills", pge({ source: "manual", file_sha256: TEXT }))).status).toBe(201);
+    expect((await send("POST", "/bills/known", { sha256: [TEXT] })).body).toEqual({ known: [TEXT] });
+    expect((await send("POST", "/bills", pge({ source: "manual", file_sha256: TEXT }))).status).toBe(409);
+  });
+
   it("refuses what isn't a bill", async () => {
     for (const bad of [pge({ biller: "" }), pge({ amount_cents: -1 }), pge({ amount_cents: 12.5 }), pge({ due_date: "2026-02-30" }),
                        pge({ statement_date: "soon" }), pge({ account_hint: "12345" }), pge({ owner: "nobody" }), pge({ source: "pdf" }),

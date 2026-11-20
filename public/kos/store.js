@@ -297,6 +297,12 @@ const mintyStore = {
   placeLink: async (url) => (await api("POST", "/trips/place-link", { url })).url,   // a maps.app.goo.gl link, followed by the Worker
   // K2 (docs/trips.md §25): the trip's Immich album, made by the cron; a photo's thumbnail comes through the Worker
   photos: (id) => api("GET", `/trips/${id}/photos`),
+  // Bills by email (docs/bills.md): Kos reads the +bills emails and adds the bills to Minty's Bills
+  bills: {
+    known: async (shas) => (shas.length ? (await api("POST", "/bills/known", { sha256: shas })).known : []),
+    add: (b) => api("POST", "/bills", b),
+    remove: (id) => api("DELETE", `/bills/${id}`),
+  },
   makeAlbum: (id) => api("POST", `/trips/${id}/photos`, { make: true }),
   photoUrl: (id, asset) => `/trips/${id}/photos/${encodeURIComponent(asset)}`,
   tags: () => api("GET", "/tags").catch(() => []),       // the household's tags, to suggest for a trip
@@ -473,6 +479,7 @@ const deviceStore = {
   async allNotes() { return tx(["notes"], "readonly", async (x) => req(x.objectStore("notes").getAll())); },
   placeLink: null,                                       // no server here to follow a short link
   photos: null, makeAlbum: null, photoUrl: null,         // no Immich without a server
+  bills: null,                                           // no Bills without a Minty
   async deleteItem(id) { return tx(["items"], "readwrite", async (x) => { await req(x.objectStore("items").delete(id)); return { id, removed: true }; }); },
   /** An email file, read in this browser with the same reader Minty runs (src/kos/). Nothing is kept. */
   async readEmail(buf) {
@@ -494,3 +501,20 @@ export const store = MODE === "device" ? deviceStore : mintyStore;
 export async function keepData() {
   try { return Boolean(await navigator.storage?.persist?.()); } catch { return false; }
 }
+
+/** Bills by email (docs/bills.md): what Kos does with each bill it read from a +bills email. A new
+ * one with a biller, an amount and a due date is added to Bills (`add`); one missing any of them is
+ * listed for the person to add by hand (`incomplete`); a card statement is set aside (Bills shows those
+ * from the bank); one Bills already has (`known`, by its SHA-256) or that couldn't be read is left. */
+export function splitBills(rows) {
+  const out = { add: [], incomplete: [], cards: [], known: [], unreadable: [] };
+  for (const r of rows) {
+    if (r.known) out.known.push(r);
+    else if (r.error && !r.card) out.unreadable.push(r);
+    else if (r.card) out.cards.push(r);
+    else if (r.biller && Number.isInteger(r.amount_cents) && r.amount_cents >= 0 && /^\d{4}-\d{2}-\d{2}$/.test(r.due_date ?? "")) out.add.push(r);
+    else out.incomplete.push(r);
+  }
+  return out;
+}
+

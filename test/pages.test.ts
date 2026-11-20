@@ -495,6 +495,11 @@ describe("security headers (docs/security-plan.md, step 4)", () => {
     expect(r.headers.get("permissions-policy")).toContain("camera=()");
   });
 
+  it("the dashboard keeps connect-src 'self': Bills by email goes through Kos, whose policy already allows the Gmail script", async () => {
+    expect(csp(await raw("/"))).toContain("connect-src 'self';");
+    for (const path of ["/", "/add-user", "/connect", "/app.js", "/bills.js"]) expect(csp(await raw(path)), path).not.toContain("script.google");
+  });
+
   it("/connect has its own policy, with Plaid Link's script, frame and API hosts only", async () => {
     const r = await raw("/connect");
     const policy = csp(r);
