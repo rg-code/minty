@@ -6,7 +6,7 @@
 //   node scripts/build-jet.mjs --out ../minty-site/public
 //
 // Writes <out>/jet/ (with mode.js set to "device", and the email reader as plain JS in jet/mail/),
-// <out>/vendor/{maplibre,pdfjs,tesseract}/, the screenshot reader (/sub-scan) and what it and JET
+// <out>/vendor/{maplibre,pdfjs,tesseract,qrcode}/, the screenshot reader (/sub-scan) and what it and JET
 // share with Minty (pdf-read.js, lock.js, theme.js…), and <out>/_headers.jet: the pages' security
 // policy, for a host that reads Cloudflare-style _headers (minty-site's deploy.mjs merges it).
 import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
@@ -46,7 +46,7 @@ const html = await readFile(join(out, "jet/index.html"), "utf8");
 if (!html.includes('id="mintyLink"')) throw new Error("build-jet: jet/index.html lost its Minty link; update the edit here");
 
 // 2. What JET loads from the site's root, as on a Minty
-for (const d of ["maplibre", "pdfjs", "tesseract"]) await copyDir(join(root, "public/vendor", d), join(out, "vendor", d));
+for (const d of ["maplibre", "pdfjs", "tesseract", "qrcode"]) await copyDir(join(root, "public/vendor", d), join(out, "vendor", d));
 for (const f of ["pdf-read.js", "lock.js", "lock.css", "theme.js", "sub-scan.html", "sub-scan.js", "sub.css"]) await copyFile(join(root, "public", f), join(out, f));
 
 // 3. The security policy, as Minty's public/_headers gives these paths

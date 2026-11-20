@@ -18,6 +18,27 @@ export function save(url) {
   if (!isWebApp(url)) throw new Error("That isn't a web app address: it should look like https://script.google.com/macros/s/…/exec");
   ls.set(CONFIG, JSON.stringify({ url: url.trim(), key: pendingKey(), label: "JET" }));
 }
+/** The link that connects another device (a phone) to the same script: its address and key after a
+ * #, so neither is sent to any server; the page saves them and drops them from the address bar. */
+export const linkFor = (origin, url, key) =>
+  `${origin}/jet/#/gmail?connect=${btoa(JSON.stringify({ u: url, k: key })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+export function phoneLink(origin = location.origin) { const c = config(); return c ? linkFor(origin, c.url, c.key) : null; }
+/** A phone link (or just its code) back to { url, key }, or null when it isn't one. */
+export function readLink(text) {
+  const t = String(text ?? "").trim(), code = /[?&]connect=([\w-]+)/.exec(t)?.[1] ?? (/^[\w-]+$/.test(t) ? t : "");
+  try {
+    const v = JSON.parse(atob(code.replace(/-/g, "+").replace(/_/g, "/")));
+    return isWebApp(v?.u) && /^[0-9a-f]{48}$/.test(v?.k ?? "") ? { url: v.u, key: v.k } : null;
+  } catch { return null; }
+}
+/** Connect this device with a phone link, as made on the device that's set up. */
+export function connect(text) {
+  const v = readLink(text);
+  if (!v) throw new Error("That isn't a JET phone link: copy it again from the set-up page on the device that's connected.");
+  ls.set(`${CONFIG}-key`, v.key);
+  ls.set(CONFIG, JSON.stringify({ url: v.url, key: v.key, label: "JET" }));
+  return config();
+}
 export function forget() { ls.set(CONFIG, "null"); ls.set(`${CONFIG}-key`, ""); }
 
 const seenSet = () => { try { return new Set(JSON.parse(ls.get(SEEN) ?? "[]")); } catch { return new Set(); } };

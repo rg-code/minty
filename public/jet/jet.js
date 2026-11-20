@@ -300,7 +300,7 @@ function suggestionsHtml(list, from) {
       <button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" || from === "gmail" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}</div>`).join("")}</div>
     ${(from === "email" || from === "gmail") && list.length > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${list.length}</button></div>` : ""}</div>`;
 }
-let found = [], foundFrom = "", pulled = [];
+let found = [], foundFrom = "", pulled = [], tabSwitch = false;
 /** A suggestion (from the email reader or jet-parse.js) as the booking API's fields. */
 function asItem(b, tripId) {
   const out = { kind: b.kind, trip_id: tripId ?? null, name: b.name ?? null, confirmation: b.confirmation ?? null, guest: b.guest ?? null,
@@ -379,30 +379,77 @@ function gmailView() {
   const c = gmail.config(), key = c?.key ?? gmail.pendingKey();
   const step = (n, title, body) => `<div class="card" style="margin-bottom:12px"><div class="muted" style="font-size:12px;font-weight:750;letter-spacing:.06em;text-transform:uppercase">Step ${n}</div><h3 style="margin:4px 0 8px">${title}</h3>${body}</div>`;
   const copy = (id, text, rows) => `<textarea class="paste" id="${id}" rows="${rows}" readonly>${esc(text)}</textarea><div class="actions"><button type="button" class="btn small" data-copy="${id}">Copy</button></div>`;
-  return `<div class="section-title"><h2>Read bookings from Gmail</h2><span class="muted">${c ? "set up on this device" : ""}</span></div>
+  const link = gmail.phoneLink();
+  const phone = c ? `<div class="card" style="margin-bottom:12px"><h3 style="margin:0 0 8px">Connect your phone</h3>
+      <div class="qr-row"><div id="gmailQr" class="qr" aria-label="QR code of the phone link"></div>
+      <div class="grow"><p style="margin-top:0">Scan this with the phone's camera, or send yourself the link and open it in JET on the phone. It connects the phone to the same script.</p>
+      <p class="muted"><b>iPhone:</b> paste the link into the set-up page <i>inside the installed JET app</i> (its storage is separate from Safari's).</p></div></div>
+      <textarea class="paste" id="phoneLink" rows="3" readonly>${esc(link)}</textarea>
+      <div class="actions"><button type="button" class="btn small" data-copy="phoneLink">Copy the link</button>${navigator.share ? `<button type="button" class="btn small" data-share-link>Send…</button>` : ""}</div>
+      <p class="muted" style="margin-bottom:0">Anyone with this link can read your JET label: send it only to yourself.</p></div>`
+    : `<div class="card" style="margin-bottom:12px"><h3 style="margin:0 0 8px">Set up on another device already?</h3>
+      <p style="margin-top:0">Open its set-up page, and scan the QR code with this phone, or paste its phone link here:</p>
+      <form id="connectForm" class="form"><label class="wide">Phone link<input name="link" placeholder="…/jet/#/gmail?connect=…" autocomplete="off" /></label></form>
+      <div class="actions"><button type="button" class="btn primary" data-gmail-connect>Connect</button><span class="err" id="connectErr"></span></div><div id="connectResult"></div></div>`;
+  return `<div class="section-title"><h2>Read bookings from Gmail</h2><span class="muted">${c ? "connected on this device" : ""}</span></div>
+    ${c ? `${phone}<div id="gmailResult"></div>` : ""}
     <p class="muted">Forward a booking to your Gmail with <b>+jet</b> before the @ (Gmail delivers <b>you+jet@gmail.com</b> to <b>you@gmail.com</b>), and JET reads it with the same reader Minty uses. A small script in your own Gmail hands JET the emails with one label; it only reads, and only for this device's key. No server is involved, yours or anyone's.</p>
     <p class="muted"><b>Recommended:</b> a Gmail account made just for this. Google's read-only permission covers a whole mailbox, so in an account that only gets what you forward, that's all the script can see.</p>
+    ${c ? "" : phone}
     ${step(1, "A label and a filter, in Gmail (on a computer)", `<p>Make a label named <b>JET</b>. Then Settings → <b>Filters and blocked addresses</b> → Create a new filter: in <b>To</b>, put your address with +jet (e.g. <b>you+jet@gmail.com</b>) → Create filter → <b>Apply the label: JET</b> → Create filter. Anything you label JET by hand counts too.</p>`)}
     ${step(2, "The script", `<p>Signed in to that Gmail, open <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → New project</a>. Replace what's there with this (your key is in it):</p>${copy("gsCode", gmail.script(key), 10)}
       <p>Project Settings (⚙) → tick <b>Show "appsscript.json"</b> → open it in the editor and replace it with:</p>${copy("gsManifest", gmail.MANIFEST, 6)}`)}
     ${step(3, "Deploy it as a web app", `<p><b>Deploy → New deployment</b> → type <b>Web app</b> → Execute as: <b>Me</b>, Who has access: <b>Anyone</b> → Deploy. Allow it: Google says it isn't verified, because it's your own script → Advanced → Go to the project → Allow (it asks only to read Gmail). Copy the <b>Web app URL</b>.</p>
       <p class="muted">"Anyone" lets JET call it without your Google sign-in; the key in the script is what keeps others out. To stop it, archive the deployment (Deploy → Manage deployments).</p>`)}
     ${step(4, "Paste the web app's address here", `<form id="gmailForm" class="form"><label class="wide">Web app URL<input name="url" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(c?.url ?? "")}" /></label></form>
-      <div class="actions"><button type="button" class="btn primary" data-gmail-save>Save and check</button>${c ? `<button type="button" class="btn danger" data-gmail-forget>Forget on this device</button>` : ""}<span class="err" id="formErr"></span></div><div id="gmailResult"></div>`)}`;
+      <div class="actions"><button type="button" class="btn primary" data-gmail-save>Save and check</button>${c ? `<button type="button" class="btn danger" data-gmail-forget>Forget on this device</button>` : ""}<span class="err" id="formErr"></span></div>${c ? "" : `<div id="gmailResult"></div>`}`)}`;
 }
-/** New emails from the JET label, each read with the email reader, as suggestions. */
-async function gmailPull(box) {
-  box.innerHTML = `<div class="suggest muted">Asking your Gmail…</div>`;
+/** The phone link as a QR code (vendored qrcode-generator, drawn as SVG: dark on white, always). */
+async function drawQr(el, text) {
+  if (!el || !text) return;
+  try {
+    const { qrcode } = await import("/vendor/qrcode/qrcode.mjs");
+    const qr = qrcode(0, "M"); qr.addData(text); qr.make();
+    const n = qr.getModuleCount(), q = 4;
+    let d = "";
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + q} ${r + q}h1v1h-1z`;
+    el.innerHTML = `<svg viewBox="0 0 ${n + 2 * q} ${n + 2 * q}" shape-rendering="crispEdges" role="img" aria-label="QR code"><rect width="100%" height="100%" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+  } catch { el.hidden = true; }
+}
+
+/** New emails from the JET label, each read with the email reader, as suggestions. quiet: the
+ * Add page's own check when it opens; it shows only bookings, never "nothing new" or an error. */
+let pullSeq = 0;
+async function gmailPull(box, quiet = false) {
+  const mine = ++pullSeq;
+  if (!quiet) box.innerHTML = `<div class="suggest muted">Asking your Gmail…</div>`;
   const msgs = await gmail.pull();
-  found = []; foundFrom = "gmail"; pulled = msgs.map((m) => m.id);
-  const empty = [];
+  const got = [], empty = [];
   for (const m of msgs) {
     const r = await store.readEmail(gmail.rawBytes(m.raw).buffer);
     if (!r.bookings.length) empty.push(m);
-    for (const b of r.bookings) found.push({ ...b, sha256: r.sha256, msgId: m.id, quote: m.subject });
+    for (const b of r.bookings) got.push({ ...b, sha256: r.sha256, msgId: m.id, quote: m.subject });
   }
-  box.innerHTML = suggestionsHtml(found, "gmail") + (empty.length ? `<div class="suggest muted">${empty.length} email${empty.length === 1 ? "" : "s"} with no booking details JET can read (${empty.slice(0, 3).map((m) => `“${esc(m.subject)}”`).join(", ")}): paste their text instead.</div>` : "")
+  // the page moved on, a newer check ran, or (quietly) something else is being suggested: leave it
+  if (!box.isConnected || mine !== pullSeq || (quiet && (!got.length || (found.length && foundFrom !== "gmail")))) return;
+  found = got; foundFrom = "gmail"; pulled = msgs.map((m) => m.id);
+  box.innerHTML = (quiet ? `<div class="suggest-head muted">New in your Gmail</div>` : "") + suggestionsHtml(found, "gmail") + (empty.length ? `<div class="suggest muted">${empty.length} email${empty.length === 1 ? "" : "s"} with no booking details JET can read (${empty.slice(0, 3).map((m) => `“${esc(m.subject)}”`).join(", ")}): paste their text instead.</div>` : "")
     + (msgs.length ? `<div class="actions"><button type="button" class="btn ghost" data-gmail-skip>Don't show these again</button></div>` : "");
+}
+
+/** After connecting (the URL, or a phone link): ask the script once, and show what it has. */
+async function checkConnected(box, errSel = "#formErr") {
+  const err = app.querySelector(errSel);
+  try {
+    await gmailPull(box);
+    if (err) err.textContent = "";
+    box.insertAdjacentHTML("afterbegin", `<p class="pill good" style="white-space:normal;display:inline-block">Connected. JET checks Gmail when you open "Add a booking".</p>`);
+    return true;
+  } catch (e) {
+    if (err) err.textContent = e.message;
+    box.innerHTML = `<div class="suggest err">${esc(e.message)}</div>`;
+    return false;
+  }
 }
 
 /** What was shared to JET (Android's share menu, the installed app): kept by sw.js in IndexedDB. */
@@ -472,7 +519,20 @@ async function render() {
   }
   if (parts[0] === "new") { app.innerHTML = tripForm(null, (q.get("items") ?? "").split(",").filter(Boolean)); return; }
   if (parts[0] === "data") { app.innerHTML = dataView(); return; }
-  if (parts[0] === "gmail") { app.innerHTML = gmailView(); return; }
+  if (parts[0] === "gmail") {
+    const code = q.get("connect");
+    if (code) {                                  // a phone link: keep it, and take it out of the address
+      history.replaceState(null, "", "#/gmail");
+      try { gmail.connect(code); } catch (e) { app.innerHTML = gmailView(); document.getElementById("connectErr").textContent = e.message; return; }
+      app.innerHTML = gmailView();
+      drawQr(document.getElementById("gmailQr"), gmail.phoneLink());
+      await checkConnected(document.getElementById("gmailResult"));
+      return;
+    }
+    app.innerHTML = gmailView();
+    drawQr(document.getElementById("gmailQr"), gmail.phoneLink());
+    return;
+  }
   if (parts[0] === "item" && parts[1]) {
     const i = itemById(Number(parts[1]));
     app.innerHTML = i ? `<div class="section-title"><h2>${esc(itemTitle(i))}</h2></div>${i.kind === "flight" ? `<div style="margin-bottom:14px">${flightCard(i)}</div>` : ""}${itemForm(i, i.trip_id)}` : `<p class="pad muted center">That booking isn't here any more.</p>`;
@@ -492,6 +552,10 @@ async function render() {
     if (scan?.text) await readText(scan.text, "screenshot");
     if (q.get("shared") === "1") await readShared();
     if (q.get("shared") === "0") document.getElementById("suggestBox").innerHTML = `<div class="suggest err">The shared file couldn't be kept on this device.</div>`;
+    const box = document.getElementById("suggestBox"), plain = !scan?.text && q.get("shared") === null;
+    if (tabSwitch) { if (foundFrom === "gmail" && found.length && plain) box.innerHTML = suggestionsHtml(found, "gmail"); }   // kept across the tabs
+    // opening the page: Gmail is checked by itself
+    else if (gmail.config() && plain) { if (foundFrom === "gmail") found = []; gmailPull(box, true).catch(() => { /* quiet: "Check Gmail" says why */ }); }
     return;
   }
   app.innerHTML = home();
@@ -528,12 +592,21 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at("[data-gmail-save]")) {
-      gmail.save(app.querySelector("#gmailForm [name=url]").value);
-      const box = document.getElementById("gmailResult");
-      try { await gmailPull(box); app.querySelector("#formErr").textContent = ""; box.insertAdjacentHTML("afterbegin", `<p class="pill good" style="white-space:normal;display:inline-block">Connected. Check Gmail from "Add a booking" any time.</p>`); }
-      catch (e2) { app.querySelector("#formErr").textContent = e2.message; }
+      try { gmail.save(app.querySelector("#gmailForm [name=url]").value); } catch (e2) { app.querySelector("#formErr").textContent = e2.message; return; }
+      app.innerHTML = gmailView();                 // now with "Connect your phone", at the top
+      window.scrollTo(0, 0);
+      drawQr(document.getElementById("gmailQr"), gmail.phoneLink());
+      await checkConnected(document.getElementById("gmailResult"), "#formErr");
       return;
     }
+    if (at("[data-gmail-connect]")) {
+      try { gmail.connect(app.querySelector("#connectForm [name=link]").value); } catch (e2) { app.querySelector("#connectErr").textContent = e2.message; return; }
+      app.innerHTML = gmailView();
+      drawQr(document.getElementById("gmailQr"), gmail.phoneLink());
+      await checkConnected(document.getElementById("gmailResult"));
+      return;
+    }
+    if (at("[data-share-link]")) { try { await navigator.share({ title: "JET: connect your phone", url: gmail.phoneLink() }); } catch { /* cancelled */ } return; }
     if (at("[data-gmail-forget]")) { if (confirm("Forget the Gmail script on this device? (Archive its deployment in Apps Script to stop it entirely.)")) { gmail.forget(); render(); } return; }
     if (at("[data-export]")) {
       const file = new Blob([JSON.stringify(exportFile(data), null, 1)], { type: "application/json" });
@@ -546,7 +619,7 @@ app.addEventListener("click", async (ev) => {
       if (!ids.length) { alert("Tick the bookings to put in the trip first."); return; }
       location.hash = `#/new?items=${ids.join(",")}`; return;
     }
-    if (at("button[data-source]")) { source = at("button[data-source]").dataset.source; draft = null; render(); return; }   // the source tabs (the form has a data-source too)
+    if (at("button[data-source]")) { source = at("button[data-source]").dataset.source; draft = null; tabSwitch = true; await render(); tabSwitch = false; return; }   // the source tabs (the form has a data-source too)
     if (at("[data-read-paste]")) { await readText(document.getElementById("pasteText").value, "paste"); return; }
     if (at("[data-scan]")) {
       try { sessionStorage.setItem("minty.jet.scan", JSON.stringify({ trip: route().q.get("trip") ? Number(route().q.get("trip")) : null })); } catch { /* private window */ }

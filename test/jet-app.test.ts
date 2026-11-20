@@ -51,6 +51,14 @@ describe("the page", () => {
     }
     expect((await raw("/")).headers.get("content-security-policy")).not.toContain("openfreemap");
   });
+  it("the QR library is vendored (no CDN), loaded only by the Gmail set-up page, with no eval", async () => {
+    const r = await raw("/vendor/qrcode/qrcode.mjs");
+    expect(r.status).toBe(200);
+    const js = await r.text();
+    expect(js).toContain("export const qrcode");
+    expect(js).not.toMatch(/\beval\(|new Function\(/);
+    expect(await (await raw("/jet/jet.js")).text()).toContain('import("/vendor/qrcode/qrcode.mjs")');
+  });
   it("airports are there, by IATA code", async () => {
     const a = await (await raw("/jet/airports.json")).json() as Record<string, [string, string, string, number, number]>;
     expect(Object.keys(a).length).toBeGreaterThan(2500);
@@ -72,6 +80,17 @@ describe("Gmail pull (public/jet/gmail.js)", () => {
     expect(code).toContain('e.parameter.key !== KEY');
     expect(code).not.toMatch(/GmailApp\.(send|move|mark|delete|create)|addLabel|UrlFetchApp|MailApp/);  // it only reads
     expect(JSON.parse(g.MANIFEST).oauthScopes).toEqual(["https://www.googleapis.com/auth/gmail.readonly"]);
+  });
+  it("the phone link carries the address and the key after a #, and reads back; anything else is refused", async () => {
+    const g = await import("../public/jet/gmail.js");
+    const url = "https://script.google.com/macros/s/AKfycbx1234567890abcdefghij/exec", key = g.newKey();
+    const link = g.linkFor("https://jet.example", url, key);
+    expect(link).toMatch(/^https:\/\/jet\.example\/jet\/#\/gmail\?connect=[\w-]+$/);   // nothing before the # but the page
+    expect(g.readLink(link)).toEqual({ url, key });
+    expect(g.readLink(link.split("connect=")[1])).toEqual({ url, key });                 // the code alone
+    expect(g.readLink(g.linkFor("https://jet.example", "https://evil.example/exec", key))).toBe(null);
+    expect(g.readLink(g.linkFor("https://jet.example", url, "short"))).toBe(null);
+    expect(g.readLink("not a link")).toBe(null);
   });
   it("a raw message becomes its bytes: one per character, or UTF-8 when there's a wide one", async () => {
     const { rawBytes } = await import("../public/jet/gmail.js");

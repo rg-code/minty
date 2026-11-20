@@ -647,8 +647,21 @@ on its own with no way to read a forwarded booking.
   bookings found, with Add and Add all.
 - **Read emails are remembered** on this device (localStorage `jet-gmail-seen`, the last 1,000 ids).
   An email counts as read once one of its bookings is added, or after "Don't show these again".
-- **The web app's address and the key stay in this browser** (localStorage `jet-gmail`). Each
-  device sets up its own key, by pasting the script again, or the same script on both.
+- **The web app's address and the key stay in this browser** (localStorage `jet-gmail`).
+- **It checks by itself:** opening "Add a booking" asks the script, and shows only what's new
+  ("New in your Gmail"). It says nothing when there's nothing new or the script can't be reached;
+  "Check Gmail" on the Gmail tab says why. Switching tabs doesn't ask again. A web app can't check
+  in the background on a phone, so nothing happens while JET is closed.
+- **The phone link:** setting up needs a computer (Google's script editor), but the key is made on
+  that device. Once connected, the set-up page shows **Connect your phone**:
+  - a link, `…/jet/#/gmail?connect=<code>`, where the code is the script's address and the key
+    (`linkFor` / `readLink`), and a QR code of it (vendored `qrcode-generator`,
+    `public/vendor/qrcode/`, loaded only there);
+  - the code is after the `#`, so it's never sent to any server; the page saves it and takes it out
+    of the address bar (`history.replaceState`);
+  - on a phone not yet connected, the set-up page has a box to paste the link. On an iPhone that's
+    the way: the installed app's storage is separate from Safari's, where a scanned link opens;
+  - the page says that anyone with the link can read the JET label.
 - **The policy:** `/jet/*`'s `connect-src` allows `https://script.google.com` and
   `https://script.googleusercontent.com`. Apps Script answers from the first by redirecting to the
   second. Nothing else gets those hosts.

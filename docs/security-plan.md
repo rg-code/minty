@@ -284,6 +284,11 @@ The design is [trips.md](trips.md) §17.1. Minty's Worker, Access and D1 are unc
 - The key travels in the query string, so it's in the browser's history on that device and in
   Google's logs, not in Minty's.
 
+- **The phone link** (`#/gmail?connect=…`) carries the address and the key, to connect another
+  device. It's after the `#`, so it's never sent to a server, and the page drops it from the address
+  bar once read. But wherever it's sent (a message to yourself) holds the key. The page says to send
+  it only to yourself.
+
 **Why it's acceptable:**
 - The label holds bookings the person chose to forward.
 - With the recommended Gmail account made only for Minty, there's nothing else in the mailbox.
