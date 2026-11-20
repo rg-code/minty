@@ -95,6 +95,17 @@ export function tripSummary(t, spending) {
   return { count, money: spending ? { spent: t.spent_cents ?? 0, transactions: t.transactions ?? 0 } : { booked } };
 }
 
+// --- a trip's city photo (kos.js cityPhoto): which city, and which addresses are Wikimedia's --------
+/** The names to look up for a trip's photo, best first: its place as typed ("Tokyo, Japan"), its first
+ * part ("Tokyo"), then the city its first flight lands in (airports: IATA → [name, city, …]). */
+export function cityNames(t, airports = {}) {
+  const place = String(t.place ?? "").trim();
+  const flight = (t.items ?? []).filter((i) => i.kind === "flight" && i.arr_airport).sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1))[0];
+  return [...new Set([place, place.split(",")[0].trim(), flight ? airports[flight.arr_airport]?.[1] ?? "" : ""].filter(Boolean))].slice(0, 3);
+}
+/** Only Wikimedia's own image hosts, over https (the page's policy allows just these for photos). */
+export const isWikimediaImage = (u) => /^https:\/\/(upload|thumb)\.wikimedia\.org\/[^\s"'()\\]+$/.test(String(u ?? ""));
+
 // --- Minty: its API ---------------------------------------------------------------------------
 async function api(method, path, body, raw) {
   const r = await fetch(path, { method, headers: raw ? { "content-type": "message/rfc822" } : body ? { "content-type": "application/json" } : {},

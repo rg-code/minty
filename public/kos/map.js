@@ -3,7 +3,7 @@
 // arcs between airports (airports.json, from OurAirports, public domain); places with coordinates
 // are pins. Tiles, the style and its fonts come from tiles.openfreemap.org, which the /kos/ page's
 // policy allows (public/_headers); nothing else is loaded from another host.
-import { LIBERTY_STYLE, nightStyle, satelliteStyle } from "./map-style.js";
+import { LIBERTY_STYLE, POSITRON_STYLE, minimalStyle, nightStyle, quietStyle } from "./map-style.js";
 
 /** Latin names only. Liberty prints "name:latin" over "name:nonlatin"; OpenFreeMap's fonts have
  * no Japanese, Chinese or Korean glyphs, so the second line drew as empty boxes. A label with both
@@ -46,13 +46,13 @@ const KIND_COLOR = { flight: "#4c6ef5", lodging: "#e8590c", car: "#1098ad", trai
 
 /** A map in `el`, dark or light. Resolves to the map once its style has loaded; null when the map
  * can't load (no WebGL, or the tiles are unreachable), so the page can say so and carry on. */
-export async function createMap(el, { dark, satellite = false }) {
+export async function createMap(el, { dark, minimal = false }) {
   const gl = window.maplibregl;
   if (!gl) return null;
   try {
     gl.setWorkerUrl("/vendor/maplibre/maplibre-gl-csp-worker.js");
-    const style = latinLabels(await (await fetch(LIBERTY_STYLE)).json());
-    const map = new gl.Map({ container: el, style: satellite ? satelliteStyle(style) : dark ? nightStyle(style) : style, center: [0, 20], zoom: 1, attributionControl: { compact: true },
+    const style = latinLabels(await (await fetch(minimal ? POSITRON_STYLE : LIBERTY_STYLE)).json());
+    const map = new gl.Map({ container: el, style: minimal ? minimalStyle(style, dark) : dark ? nightStyle(quietStyle(style)) : quietStyle(style, false), center: [0, 20], zoom: 1, attributionControl: { compact: true },
                              cooperativeGestures: matchMedia("(hover: none)").matches });
     map.addControl(new gl.NavigationControl({ showCompass: false }), "top-right");
     await new Promise((ok, fail) => { map.once("load", ok); map.once("error", fail); setTimeout(() => fail(new Error("timeout")), 15000); });
@@ -68,7 +68,7 @@ const near = (lon, ref) => lon + 360 * Math.round((ref - lon) / 360);
 
 /** Draws a trip: arcs [{from, to, label, id}] ([lon, lat]) and pins [{lon, lat, kind, label, id, color}].
  * `onPick(id)` is called when a pin or arc is tapped. `fit`: "pins" frames the trip's places (the
- * itinerary, like Wanderlog), "all" frames the flights too (like Flighty). */
+ * itinerary, like Wanderlog), "lodging" the stays (the Lodging tab), "all" the flights too (like Flighty). */
 export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit = "all", dark = true) {
   const gl = window.maplibregl;
   // everything around one reference longitude: the trip's first place, else the first flight's arrival
@@ -82,7 +82,7 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
     ...arcLines.map((a) => ({ type: "Feature", properties: { id: a.id ?? "", kind: "flight", label: a.label ?? "" }, geometry: { type: "LineString", coordinates: a.coords } })),
     ...paths.map((p) => ({ type: "Feature", properties: { id: p.id ?? "", kind: "path", color: p.color ?? "#868e96" }, geometry: { type: "LineString", coordinates: p.coords } })),
   ] };
-  const points = { type: "FeatureCollection", features: pins.map((p) => ({ type: "Feature", properties: { id: p.id ?? "", kind: p.kind, label: p.label ?? "", color: p.color ?? KIND_COLOR[p.kind] ?? KIND_COLOR.other },
+  const points = { type: "FeatureCollection", features: pins.map((p) => ({ type: "Feature", properties: { id: p.id ?? "", kind: p.kind, label: p.label ?? "", color: p.color ?? KIND_COLOR[p.kind] ?? KIND_COLOR.other, ...(p.num ? { num: p.num } : {}) },
     geometry: { type: "Point", coordinates: [p.lon, p.lat] } })) };
   for (const [id, data] of [["kos-lines", lines], ["kos-pins", points]]) {
     if (map.getSource(id)) map.getSource(id).setData(data); else map.addSource(id, { type: "geojson", data });
@@ -95,10 +95,14 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
     // Flighty's glow under the flight arcs
     map.addLayer({ id: "kos-arcs-glow", type: "line", source: "kos-lines", filter: ["==", ["get", "kind"], "flight"],
                    paint: { "line-color": KIND_COLOR.flight, "line-width": 8, "line-blur": 6, "line-opacity": 0.45 } }, "kos-arcs");
+    // a pin with its place in the trip (num, the journal's) is bigger, with the number inside
     map.addLayer({ id: "kos-pins", type: "circle", source: "kos-pins",
-                   paint: { "circle-radius": 7, "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
+                   paint: { "circle-radius": ["case", ["has", "num"], 12, 7], "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
+    map.addLayer({ id: "kos-nums", type: "symbol", source: "kos-pins", filter: ["has", "num"],
+                   layout: { "text-field": ["get", "num"], "text-font": ["Noto Sans Bold"], "text-size": 12.5, "text-allow-overlap": true, "text-ignore-placement": true },
+                   paint: { "text-color": "#ffffff", "text-halo-color": "rgba(0,0,0,0.35)", "text-halo-width": 0.6 } });
     map.addLayer({ id: "kos-labels", type: "symbol", source: "kos-pins", minzoom: 3,
-                   layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 12, "text-offset": [0, 1.2], "text-anchor": "top", "text-optional": true },
+                   layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 12, "text-offset": ["case", ["has", "num"], ["literal", [0, 1.6]], ["literal", [0, 1.2]]], "text-anchor": "top", "text-optional": true },
                    paint: { "text-color": dark ? "#eef1f8" : "#11162a", "text-halo-color": dark ? "#0b1020" : "#ffffff", "text-halo-width": 1.6 } });
     for (const layer of ["kos-pins", "kos-arcs"]) {
       map.on("click", layer, (e) => { const id = e.features?.[0]?.properties?.id; if (id && onPick) onPick(String(id)); });
@@ -107,7 +111,9 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
     }
   }
   const placed = points.features.map((f) => f.geometry.coordinates);
-  const all = fit === "pins" && placed.length ? placed : [...lines.features.flatMap((f) => f.geometry.coordinates), ...placed];
+  const stays = points.features.filter((f) => f.properties.kind === "lodging").map((f) => f.geometry.coordinates);
+  // "lodging" frames the stays (falling back to the places), "pins" the places, "all" the flights too
+  const all = fit === "lodging" && stays.length ? stays : (fit === "pins" || fit === "lodging") && placed.length ? placed : [...lines.features.flatMap((f) => f.geometry.coordinates), ...placed];
   if (all.length) {
     const b = all.reduce((bb, c) => bb.extend(c), new gl.LngLatBounds(all[0], all[0]));
     map.fitBounds(b, { padding: 48, maxZoom: all.length === 1 ? 12 : 14, duration: 0 });

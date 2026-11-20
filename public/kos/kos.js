@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SUM_KINDS, exportFile, importFile, keepData, shiftSample, store, tripSummary } from "./store.js";
+import { MODE, SUM_KINDS, cityNames, exportFile, importFile, isWikimediaImage, keepData, shiftSample, store, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 
@@ -91,7 +91,7 @@ function home() {
   const upcoming = data.trips.filter((t) => t.end_date >= today).sort((a, b) => (a.start_date < b.start_date ? -1 : 1));
   const past = data.trips.filter((t) => t.end_date < today);
   const tripCard = (t) => `<a class="trip-card" href="#/trip/${t.id}">
-    <div class="cover" style="--h:${hue(t.name)}"><h3>${esc(t.name)}</h3><div class="when">${esc(fmtShort(t.start_date))} – ${esc(fmtShort(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div></div>
+    <div class="cover" style="--h:${hue(t.name)}" data-photo="${t.id}"><h3>${esc(t.name)}</h3><div class="when">${esc(fmtShort(t.start_date))} – ${esc(fmtShort(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div></div>
     <div class="meta">${t.start_date > today ? `<span class="pill info">in ${Math.round((asDay(t.start_date) - asDay(today)) / 864e5)} days</span>` : t.end_date >= today ? `<span class="pill good">On now</span>` : ""}
       ${["flight", "lodging"].map((k) => { const n = t.items.filter((i) => i.kind === k).length; return n ? `<span class="pill dim">${n} ${k === "flight" ? (n === 1 ? "flight" : "flights") : (n === 1 ? "stay" : "stays")}</span>` : ""; }).join("")}
       ${t.transactions ? `<span class="pill dim">${money(t.spent_cents)} spent</span>` : ""}</div></a>`;
@@ -125,18 +125,71 @@ function home() {
 
 // --- Kos on its own: the first screen, and the device lock as the last step (docs/trips.md §17.4) ----
 function welcome() {
-  return `<section class="card welcome"><h2>Welcome to Kos</h2>
-    <p class="muted">Your trips, their flights and a map, kept in this browser. No account, and nothing is sent anywhere (the map's tiles come from OpenFreeMap).</p>
-    <ol class="steps">
-      <li><b>Add a trip, or a booking.</b> Type it in, paste a confirmation, or read a PDF or an email file; bookings without a trip wait until you make one.
-        <div class="actions"><a class="btn primary" href="#/new">New trip</a><a class="btn" href="#/add">Add a booking</a><button type="button" class="btn ghost" data-sample>Try a sample trip</button><span class="err" id="sampleErr"></span></div></li>
-      <li><b>Bookings from your email.</b> Forward confirmations to your Gmail with <b>+kos</b> in the address, and Kos reads them, on your phone too. <a href="#/gmail">Set up Gmail</a>. Once Kos is installed on Android, you can also share a PDF or a screenshot to it.</li>
-      <li><b>Put Kos on your home screen.</b> iPhone: Safari's Share button → <b>Add to Home Screen</b>. Android: Chrome's ⋮ menu → <b>Install app</b>.
-        <div class="actions" id="installRow" hidden><button type="button" class="btn" data-install>Install Kos</button></div></li>
-      <li id="lockStep"><b>Last: lock Kos on this device.</b> <span class="muted">Checking what this device can do…</span></li>
-    </ol>
-    <p class="muted" style="margin-bottom:0">Trips stay in this browser only: export a copy now and then (the database icon at the top, then Your data).</p></section>`;
+  // a made-up flight, drawn by the real flight card (decorative: the page's own look, not a screenshot)
+  const out = addDays(localDay(), 23);                      // always about three weeks away, so it always reads "Scheduled"
+  const demo = { id: 0, kind: "flight", airline: "UA", flight_number: "837", dep_airport: "SFO", arr_airport: "NRT", name: "United",
+                 start_at: `${out}T11:05:00-08:00`, end_at: `${addDays(out, 1)}T15:00:00+09:00`, dep_terminal: "I", seat: "34K", confirmation: "KOS837" };
+  const step = (n, id, label) => `<button type="button" role="tab" class="w-tab" data-wstep="${id}" data-goatcounter-click="kos-setup-${id}" aria-selected="${n === 1}"><i>${n}</i>${label}</button>`;
+  return `<section class="welcome">
+    <header class="w-hero">
+      <p class="w-kicker">Kos <span>by</span> <a href="https://minty.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-by-minty">Minty</a></p>
+      <h1>Every trip,<br />in one place.</h1>
+      <p class="w-lede">Flights like Flighty, days like Wanderlog, and a journal written for you when you're home.
+        <b>Forward your booking emails and Kos reads them for you</b>: no typing them in.
+        No account: your trips stay in this browser.</p>
+      <div class="w-cta"><button type="button" class="w-primary" data-sample data-goatcounter-click="kos-sample">Try a sample trip</button>
+        <a class="w-pill" href="#/new" data-goatcounter-click="kos-new-trip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>New trip</a>
+        <a class="w-pill" href="#/add" data-goatcounter-click="kos-add-booking"><svg viewBox="0 0 24 24" aria-hidden="true">${GLYPH.flight}</svg>Add a booking</a></div>
+      <span class="err" id="sampleErr"></span>
+    </header>
+    <div class="w-visual" aria-hidden="true"><div class="w-card">${flightCard(demo, { compact: true })}</div>
+      <div class="w-day"><span class="w-dot"></span><b>Day 2</b><span>Dinner at Sushi Mitsuba · 19:30</span></div></div>
+    <section class="w-setup" aria-label="Set Kos up">
+      <h2>Set it up in three steps</h2>
+      <div class="w-tabs" role="tablist"><span class="w-thumb" aria-hidden="true"></span>${step(1, "add", "Add trips")}${step(2, "home", "Install")}${step(3, "lock", "Lock")}</div>
+      <div class="w-panel" role="tabpanel" data-wpanel="add"><b>Add trips: automatically, or by hand.</b>
+        <div class="w-ways"><div><span class="w-way">Automatically</span> Forward booking emails to your Gmail with <b>+kos</b> in the address, and Kos reads them, on your phone too. <a href="#/gmail" data-goatcounter-click="kos-setup-gmail">Set up Gmail</a> (about 5 minutes, once).</div>
+        <div><span class="w-way">By hand</span> Paste a confirmation, read a PDF, an email file or a screenshot, or type it in. Once Kos is installed on Android, share a booking to it.</div></div></div>
+      <div class="w-panel" role="tabpanel" data-wpanel="home" hidden><b>Put Kos on your home screen.</b> iPhone: Safari's Share button → <b>Add to Home Screen</b>. Android: Chrome's ⋮ menu → <b>Install app</b>.
+        <div class="actions" id="installRow" hidden><button type="button" class="w-pill" data-install data-goatcounter-click="kos-install">Install Kos</button></div></div>
+      <div class="w-panel" role="tabpanel" data-wpanel="lock" hidden><div id="lockStep"><b>Last: lock Kos on this device.</b> <span class="muted">Checking what this device can do…</span></div></div>
+    </section>
+    <section class="w-support" aria-label="Support Kos">
+      <p>Free, with no ads. If Kos helps:</p>
+      <div class="w-cta"><a class="w-pill" href="https://ko-fi.com/mintyme" target="_blank" rel="noopener" data-goatcounter-click="kos-kofi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Support on Ko-fi</a>
+        <a class="w-pill" href="https://github.com/rg-code/minty" target="_blank" rel="noopener" data-goatcounter-click="kos-star"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>Star Minty on GitHub</a></div>
+    </section>
+    <footer class="w-foot">
+      <p>Trips stay in this browser only, so export a copy now and then (<a href="#/data" data-goatcounter-click="kos-your-data">Your data</a>). Maps come from OpenFreeMap, and each trip's city photo from Wikipedia, which is asked for it by the city's name.</p>
+      <p>Also from rg-code: <a href="https://milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-miles">Miles Maximizer</a>, for point transfers;
+        <a href="https://milesmaximizer.com/inkling/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-inkling">Inkling</a>, for inKind restaurants;
+        the <a href="https://milesmaximizer.com/museum_problem/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-museums">museum finder</a>, for free museum entry;
+        <a href="https://graze.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-graze">GRAZE</a>, for free EV charging;
+        and <a href="https://minty.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-minty">Minty</a>, for private money tracking.
+        On a Minty, Kos also shows what each trip cost, and live flight tracking like Flighty's, with gate, delay and landing updates, is on its way.</p>
+    </footer>
+    <p class="w-copy">© rg-code, ${new Date().getFullYear()}</p></section>`;
 }
+/** The set-up's pill navigation (after EasyUI's Pill navigation, MIT, as Minty's header and GRAZE's
+ * theme switch): one track, a thumb that slides to the step chosen, its panel under it. */
+function setupTabs(pick) {
+  const tabs = app.querySelector(".w-tabs");
+  if (!tabs) return;
+  const on = tabs.querySelector(`[data-wstep="${pick}"]`) ?? tabs.querySelector("[aria-selected=true]");
+  for (const b of tabs.querySelectorAll("[data-wstep]")) b.setAttribute("aria-selected", String(b === on));
+  for (const p of app.querySelectorAll("[data-wpanel]")) p.hidden = p.dataset.wpanel !== on.dataset.wstep;
+  const thumb = tabs.querySelector(".w-thumb");
+  thumb.style.width = `${on.offsetWidth}px`;
+  thumb.style.transform = `translateX(${on.offsetLeft - 4}px)`;
+  requestAnimationFrame(() => thumb.setAttribute("data-ready", ""));
+}
+addEventListener("resize", () => setupTabs());
+// Taps on what Kos draws (data-goatcounter-click), counted when GoatCounter is on the page: only Kos
+// on its own, on the landing site (scripts/build-kos.mjs --goatcounter). Never on a Minty.
+document.addEventListener("click", (e) => {
+  const el = e.target.closest?.("[data-goatcounter-click]");
+  if (el && window.goatcounter?.count) window.goatcounter.count({ path: el.dataset.goatcounterClick, title: el.textContent.trim().slice(0, 80), event: true });
+}, true);
 let installPrompt = null;
 addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; const r = document.getElementById("installRow"); if (r) r.hidden = false; });
 /** The lock's step in the set-up, or its card on the home screen once there are trips: what this
@@ -170,7 +223,10 @@ function plan(t) {
     if (i.kind === "lodging" && dateOf(i.end_at) && dateOf(i.end_at) !== dateOf(i.start_at)) put(dateOf(i.end_at), { item: i, at: timeOf(i.end_at), role: "Check out", repeat: true });
   }
   for (const d of days) d.entries.sort((a, b) => (a.at || "99") < (b.at || "99") ? -1 : 1);
-  days.forEach((d, n) => { d.color = DAY_COLORS[n % DAY_COLORS.length]; let k = 0; for (const e of d.entries) e.n = ++k; });
+  // numbered across the whole trip, 1, 2, 3… (the map's dots carry the same numbers); a stay's
+  // check-out keeps its check-in's number
+  const num = new Map();
+  days.forEach((d, n) => { d.color = DAY_COLORS[n % DAY_COLORS.length]; for (const e of d.entries) { if (!e.repeat) num.set(e.item.id, num.size + 1); e.n = num.get(e.item.id); } });
   return { days, before, after, unscheduled };
 }
 function entryHtml(e) {
@@ -213,16 +269,18 @@ const tripTags = (t) => (store.spending ? t.tags ?? [] : []);
 const tagChips = (tags) => tags.length ? `<div class="trip-tags">${tags.map((g) => `<span class="pill ${leftOutTag(g) ? "warn" : "dim"}" title="${leftOutTag(g) ? "Left out of CFA and the dashboard's totals" : "Its transactions have this tag"}">${esc(g)}${leftOutTag(g) ? " · left out" : ""}</span>`).join("")}</div>` : "";
 function tripView(t, tab) {
   const p = plan(t);
-  const tabs = [["", "Itinerary"], ["flights", "Flights"], ...(store.spending ? [["spending", "Spending"]] : [])];
+  const tabs = [["", "Itinerary"], ["flights", "Flights"], ["lodging", "Lodging"], ...(store.spending ? [["spending", "Spending"]] : [])];
+  const stays = t.items.filter((i) => i.kind === "lodging").sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
   const flights = t.items.filter((i) => i.kind === "flight").sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
   let body;
   if (tab === "flights") body = flights.length ? flights.map((f) => flightCard(f)).join("") : `<div class="card muted">No flights in this trip yet.</div>`;
+  else if (tab === "lodging") body = stays.length ? stays.map(stayCard).join("") : `<div class="card muted">No stays in this trip yet. <a href="#/add?trip=${t.id}&kind=lodging">Add one</a></div>`;
   else if (tab === "spending") body = `<div id="spending"><p class="muted">Loading the trip's spending…</p></div>`;
   else body = `${p.before.length ? dayHtml({ label: "Before the trip", entries: p.before, color: "#8c96ad" }) : ""}
     ${p.days.map((d, n) => dayHtml({ label: `Day ${n + 1}`, sub: fmtDay(d.date), entries: d.entries, color: d.color })).join("")}
     ${p.after.length ? dayHtml({ label: "After the trip", entries: p.after, color: "#8c96ad" }) : ""}
     ${p.unscheduled.length ? dayHtml({ label: "No date yet", entries: p.unscheduled, color: "#8c96ad" }) : ""}`;
-  return `<section class="trip-head"><div class="cover" style="--h:${hue(t.name)}">
+  return `<section class="trip-head"><div class="cover" style="--h:${hue(t.name)}" data-photo="${t.id}" data-photo-link>
       <div class="cover-actions"><a class="btn small" href="#/trip/${t.id}/journal">Journal</a><a class="btn small" href="#/trip/${t.id}/edit">Edit</a><a class="btn small" href="#/add?trip=${t.id}">Add booking</a></div>
       <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div>
       ${t.travellers.length ? `<div class="avatars">${t.travellers.map((k) => `<span title="${esc(label(k))}">${esc(label(k).slice(0, 1).toUpperCase())}</span>`).join("")}</div>` : ""}
@@ -233,6 +291,19 @@ function tripView(t, tab) {
       ${body}</div>
       <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div></div></div>
     <a class="fab" href="#/add?trip=${t.id}" aria-label="Add a booking" title="Add a booking">+</a>`;
+}
+/** A stay, on the Lodging tab: its nights, check-in and check-out, where, and its booking. A tap
+ * centres the map on it (the same [data-item] as the itinerary's). */
+function stayCard(i) {
+  const a = dateOf(i.start_at), b = dateOf(i.end_at);
+  const nights = a && b ? Math.max(0, Math.round((asDay(b) - asDay(a)) / 864e5)) : null;
+  const when = (d, at, word) => d ? `<div><span>${word}</span><b>${esc(fmtDay(d))}</b>${at ? `<small>${esc(at)}</small>` : ""}</div>` : "";
+  return `<button type="button" class="item stay" data-item="${i.id}">
+    <div class="row1"><span class="what">${esc(i.name || "A stay")}</span>${nights !== null ? `<span class="pill dim">${nights} night${nights === 1 ? "" : "s"}</span>` : ""}</div>
+    ${i.place ? `<div class="sub">${esc(i.place)}</div>` : ""}
+    <div class="stay-dates">${when(a, timeOf(i.start_at), "Check in")}${when(b, timeOf(i.end_at), "Check out")}</div>
+    ${i.confirmation || i.price_cents || i.points ? `<div class="sub">${[i.confirmation ? `Conf. ${esc(i.confirmation)}` : "", i.points ? `${i.points.toLocaleString()} pts` : i.price_cents ? money(i.price_cents, i.currency) : ""].filter(Boolean).join(" · ")}</div>` : ""}
+    ${Number.isFinite(i.lat) && Number.isFinite(i.lon) ? "" : `<div class="sub muted">No address on the map yet: edit the stay to add one.</div>`}</button>`;
 }
 function dayHtml({ label: l, sub, entries, color }) {
   return `<section class="day" style="--day:${color}"><div class="day-head"><span class="day-dot"></span><h3>${esc(l)}</h3>${sub ? `<span class="muted">${esc(sub)}</span>` : ""}</div>
@@ -247,8 +318,8 @@ function mapData(t) {
       if (i.kind === "flight") {
         const a = airport(i.dep_airport), b = airport(i.arr_airport);
         if (a && b && !e.repeat) arcs.push({ from: [a.lon, a.lat], to: [b.lon, b.lat], id: String(i.id), label: `${i.dep_airport}→${i.arr_airport}` });
-        if (a && !e.repeat) pins.push({ lon: a.lon, lat: a.lat, kind: "flight", label: `${e.n} ${i.dep_airport}`, id: String(i.id), color: d.color });
-      } else if (Number.isFinite(i.lat) && Number.isFinite(i.lon) && !e.repeat) pins.push({ lon: i.lon, lat: i.lat, kind: i.kind, label: `${e.n} ${i.name ?? ""}`.trim(), id: String(i.id), color: d.color });
+        if (a && !e.repeat) pins.push({ lon: a.lon, lat: a.lat, kind: "flight", num: String(e.n), label: i.dep_airport, id: String(i.id), color: d.color });
+      } else if (Number.isFinite(i.lat) && Number.isFinite(i.lon) && !e.repeat) pins.push({ lon: i.lon, lat: i.lat, kind: i.kind, num: String(e.n), label: i.name ?? "", id: String(i.id), color: d.color });
     }
   });
   // flights outside the trip's days (the flight home after the last day, say) still draw
@@ -270,11 +341,14 @@ async function showMap(t, tab = "") {
   mapKey = key;
   if (!map) { note.hidden = false; note.textContent = "The map couldn't load here (it needs WebGL and OpenFreeMap's tiles). The plan is all here."; return; }
   const d = mapData(t);
+  // the places joined in the trip's order (the numbers), as on the journal's map
+  const seq = d.pins.filter((p) => p.num).sort((x, y) => Number(x.num) - Number(y.num));
+  if (seq.length > 1) d.paths = [{ coords: seq.map((p) => [p.lon, p.lat]), color: dark ? "#ffffff" : "#11162a" }];
   // pins take their day's colour (Wanderlog), flights the accent (Flighty)
   drawTrip(map, d, (id) => {
     const card = app.querySelector(`[data-item="${CSS.escape(id)}"]`);
     if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); card.animate?.([{ outline: "2px solid var(--accent)" }, { outline: "2px solid transparent" }], 1200); }
-  }, tab === "flights" ? "all" : "pins", dark);
+  }, tab === "flights" ? "all" : tab === "lodging" ? "lodging" : "pins", dark);   // Lodging zooms in on the stays
 }
 
 // --- the trip's spending ----------------------------------------------------------------------
@@ -302,6 +376,49 @@ async function spending(t) {
   } catch (e) { box.innerHTML = `<p class="err">Couldn't load the spending: ${esc(e.message)}</p>`; }
 }
 
+// --- a city's photo on a trip's cover (docs/trips.md §19.1): Wikipedia's lead image for one of the
+// trip's cities, hotlinked from Wikimedia (a 960 px thumbnail), with its photographer and licence.
+// Each city's answer (or "none") is kept in localStorage, so a list of trips asks once per city.
+const PHOTOS = "kos-photos";
+const photoCache = () => { try { return JSON.parse(localStorage.getItem(PHOTOS) ?? "{}"); } catch { return {}; } };
+const keepPhoto = (k, v) => { try { const c = photoCache(); c[k] = v; localStorage.setItem(PHOTOS, JSON.stringify(c)); } catch { /* not kept */ } };
+const WIKI = "https://en.wikipedia.org/w/api.php?format=json&origin=*&action=query";
+async function wikiPhoto(name) {
+  const page = Object.values((await (await fetch(`${WIKI}&redirects=1&prop=pageimages|pageprops&piprop=name&ppprop=disambiguation&titles=${encodeURIComponent(name)}`)).json()).query?.pages ?? {})[0];
+  if (!page?.pageimage || page.pageprops?.disambiguation !== undefined) return null;      // none, or "Portland" (which one?)
+  const info = Object.values((await (await fetch(`${WIKI}&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=960&iiextmetadatafilter=Artist|LicenseShortName&titles=${encodeURIComponent(`File:${page.pageimage}`)}`)).json()).query?.pages ?? {})[0]?.imageinfo?.[0];
+  if (!info || !isWikimediaImage(info.thumburl)) return null;
+  const text = (h) => new DOMParser().parseFromString(String(h ?? ""), "text/html").body.textContent.trim().slice(0, 80);
+  const who = text(info.extmetadata?.Artist?.value), licence = text(info.extmetadata?.LicenseShortName?.value);
+  return { src: info.thumburl, href: /^https:\/\/commons\.wikimedia\.org\//.test(info.descriptionurl) ? info.descriptionurl : "https://commons.wikimedia.org/",
+           credit: `Photo: ${[who, licence].filter(Boolean).join(", ") || "Wikimedia Commons"}` };
+}
+async function cityPhoto(t) {
+  const names = cityNames(t, airports), key = names[0];
+  if (!key) return null;
+  const cached = photoCache()[key];
+  if (cached) return cached.none ? null : cached;
+  for (const n of names) {
+    try { const p = await wikiPhoto(n); if (p) { keepPhoto(key, p); return p; } } catch { return null; }   // offline: try again next time
+  }
+  keepPhoto(key, { none: 1 });
+  return null;
+}
+/** After a page is drawn: each cover with data-photo gets its trip's city photo under its scrim. */
+async function applyPhotos() {
+  for (const el of app.querySelectorAll("[data-photo]")) {
+    const t = tripById(Number(el.dataset.photo));
+    const p = t && await cityPhoto(t);
+    if (!p || !el.isConnected || !isWikimediaImage(p.src)) continue;
+    el.style.backgroundImage = `linear-gradient(180deg, rgba(0, 0, 0, .18), rgba(0, 0, 0, .55)), url("${p.src}")`;
+    el.classList.add("has-photo");
+    const c = document.createElement(el.hasAttribute("data-photo-link") ? "a" : "span");
+    c.className = "photo-credit"; c.textContent = p.credit;
+    if (c.tagName === "A") Object.assign(c, { href: p.href, target: "_blank", rel: "noopener" });
+    el.append(c);
+  }
+}
+
 // --- the trip journal (docs/trips.md §20): written from the bookings, with the household's notes --
 function journalView(t) {
   const st = tripStats(t, airports), p = plan(t);
@@ -320,7 +437,7 @@ function journalView(t) {
       <div class="j-actions"><a class="btn small" href="#/trip/${t.id}">Back to the trip</a><button type="button" class="btn small" data-print>Print or save as PDF</button></div></header>
     ${note("trip", "How was it? A few lines to remember it by.")}
     <div class="j-map"><div id="jmap" class="map"></div><div class="map-note" id="jmapNote" hidden></div></div>
-    <p class="j-credit muted">Satellite: <a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2024). Names: OpenFreeMap, OpenMapTiles, OpenStreetMap.</p>
+    <p class="j-credit muted">Map: <a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · © OpenMapTiles · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
     ${p.before.length ? day("Getting there", null, p.before, "#8c96ad") : ""}
     ${p.days.map((d, n) => day(`Day ${n + 1}`, d.date, d.entries, d.color)).join("")}
     ${p.after.length ? day("Getting home", null, p.after, "#8c96ad") : ""}
@@ -347,18 +464,29 @@ async function journalLoad(t) {
       }
     }).catch(() => {});
   }
-  // the map: satellite, the flights, and each day's stops joined in its colour
+  await journalMap(t);
+}
+/** The journal's map: minimal, in the page's theme; the trip's places numbered in order and joined. */
+async function journalMap(t) {
   const el = document.getElementById("jmap");
-  map = await createMap(el, { dark: true, satellite: true });
+  if (!el) return;
+  if (map) { map.remove(); map = null; }
+  const dark = document.documentElement.dataset.theme !== "light";
+  map = await createMap(el, { dark, minimal: true });
   if (!document.body.contains(el)) { map?.remove(); map = null; return; }
-  if (!map) { const n = document.getElementById("jmapNote"); n.hidden = false; n.textContent = "The map couldn't load here (it needs WebGL, and the satellite and map tiles)."; return; }
-  const d = mapData(t), paths = [];
-  for (const dd of plan(t).days) {
-    const pts = dd.entries.filter((e) => e.item.kind !== "flight" && !e.repeat && Number.isFinite(e.item.lat) && Number.isFinite(e.item.lon)).map((e) => [e.item.lon, e.item.lat]);
-    if (pts.length > 1) paths.push({ coords: pts, color: dd.color });
+  if (!map) { const n = document.getElementById("jmapNote"); n.hidden = false; n.textContent = "The map couldn't load here (it needs WebGL and OpenFreeMap's tiles)."; return; }
+  // the places, in the order the trip went: numbered 1, 2, 3… across the whole trip, in their day's
+  // colour, joined by one line; the map frames them (zoomed in), and the flights draw without widening it
+  const stops = [];
+  for (const dd of plan(t).days) for (const e of dd.entries) {
+    const i = e.item;
+    if (i.kind === "flight" || e.repeat || !Number.isFinite(i.lat) || !Number.isFinite(i.lon)) continue;
+    stops.push({ lon: i.lon, lat: i.lat, kind: i.kind, num: String(stops.length + 1), label: i.name ?? "", id: String(i.id), color: dd.color });
   }
-  drawTrip(map, { ...d, paths }, null, d.pins.length ? "pins" : "all", true);    // the places, like the itinerary; flights only when there are none
-  el.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");   // the credits fold behind ⓘ; EOX's is also under the map
+  const d = mapData(t);
+  const paths = stops.length > 1 ? [{ coords: stops.map((p) => [p.lon, p.lat]), color: "#ffffff" }] : [];
+  drawTrip(map, stops.length ? { arcs: d.arcs, pins: stops, paths: paths.map((x) => ({ ...x, color: dark ? "#ffffff" : "#11162a" })) } : d, null, stops.length ? "pins" : "all", dark);
+  el.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");   // the credits fold behind ⓘ, and are also under the map
   mapKey = `journal:${t.id}`;
 }
 let noteTimers = {};
@@ -703,6 +831,7 @@ async function render() {
     if (map) { map.remove(); map = null; mapKey = ""; }
     if (parts[2] === "journal") { app.innerHTML = journalView(t); window.scrollTo(0, 0); journalLoad(t); return; }
     app.innerHTML = tripView(t, parts[2] ?? "");
+    applyPhotos();
     showMap(t, parts[2] ?? "");
     if (parts[2] === "spending") spending(t);
     return;
@@ -750,6 +879,8 @@ async function render() {
     return;
   }
   app.innerHTML = home();
+  applyPhotos();
+  setupTabs();
   lockOffer();
 }
 async function loadPrograms() {
@@ -776,6 +907,7 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-wstep]")) { setupTabs(at("[data-wstep]").dataset.wstep); return; }
     if (at("[data-lock-on]")) {
       try { await window.MintyLock.turnOn(); } catch { const e2 = document.getElementById("lockErr"); if (e2) e2.textContent = "It wasn't turned on. Try again."; return; }
       lockOffer(); return;
@@ -942,7 +1074,8 @@ document.getElementById("themeBtn").addEventListener("click", () => {
   document.documentElement.dataset.theme = next;
   try { localStorage.setItem("kos-theme", next); } catch { /* not remembered */ }
   const { parts } = route();
-  if (parts[0] === "trip" && parts[1] && parts[2] !== "edit" && parts[2] !== "journal") { mapKey = ""; showMap(tripById(Number(parts[1])), parts[2] ?? ""); }
+  if (parts[0] === "trip" && parts[1] && parts[2] === "journal") journalMap(tripById(Number(parts[1])));   // its light or dark map
+  else if (parts[0] === "trip" && parts[1] && parts[2] !== "edit") { mapKey = ""; showMap(tripById(Number(parts[1])), parts[2] ?? ""); }
 });
 if (MODE === "device") {
   document.getElementById("mintyLink").hidden = true;

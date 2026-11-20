@@ -133,12 +133,19 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 }
 .tabs { margin: 4px 0 14px; position: sticky; top: 64px; z-index: 5; }
 
-.day { margin-bottom: 18px; }
-.day-head { display: flex; align-items: center; gap: 10px; padding: 6px 2px 10px; position: sticky; top: 112px; z-index: 4; background: var(--bg); }
+.day { margin-bottom: 18px; position: relative; }
+.day-head { display: flex; align-items: center; gap: 10px; padding: 6px 2px 10px 8px; position: sticky; top: 112px; z-index: 4; background: var(--bg); }
 .day-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--day); box-shadow: 0 0 0 4px color-mix(in srgb, var(--day) 22%, transparent); }
 .day-head h3 { font-size: 16px; font-weight: 800; } .day-head .muted { font-size: 13px; }
 .stops { position: relative; display: grid; gap: 10px; padding-left: 38px; }
-.stops::before { content: ""; position: absolute; left: 13px; top: 6px; bottom: 6px; width: 2px; background: color-mix(in srgb, var(--day) 35%, transparent); border-radius: 2px; }
+/* the itinerary's rail: one line from the first day to the last, through each day's heading (which is
+   sticky, with a background, so it draws its own piece), in each day's colour, under the dots */
+.day::before, .day > .day-head::before { content: ""; position: absolute; left: 13px; width: 2px; background: color-mix(in srgb, var(--day) 35%, transparent); }
+.day::before { top: 0; bottom: -18px; }                    /* through the gap to the next day */
+.day > .day-head::before { top: 0; bottom: 0; }
+.plan .day:first-of-type::before, .plan .day:first-of-type > .day-head::before { top: 20px; }   /* it starts at the first dot */
+.plan .day:last-of-type::before { bottom: 0; }
+.day-dot { position: relative; z-index: 1; }
 .stop { position: relative; }
 .marker { position: absolute; left: -38px; top: 12px; width: 28px; height: 28px; border-radius: 50%; background: var(--day); color: #fff; display: grid; place-items: center;
           font-size: 13px; font-weight: 800; border: 2px solid var(--bg); box-shadow: 0 2px 6px rgba(0, 0, 0, .25); }
@@ -199,12 +206,83 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 .sum-more { display: inline-block; margin-top: 6px; font-weight: 750; font-size: 13.5px; color: var(--text); }
 @media (max-width: 720px) { .summary { grid-template-columns: 1fr; } .sum-kind { min-width: 0; flex: 1 0 22%; } }
 
-/* Kos on its own: the first screen's set-up, and the lock's last step */
-.welcome h2 { margin: 0 0 6px; font-size: 22px; }
-.steps { margin: 14px 0; padding-left: 22px; display: grid; gap: 14px; }
-.steps li { line-height: 1.5; }
-.steps li::marker { font-weight: 800; color: var(--accent); }
-.steps .actions { margin-top: 8px; }
+/* Kos on its own: the first screen (docs/trips.md §17.4). Inkling's restraint (a narrow column, a big
+   tight headline, plain words, raised pills and one solid button), the icon's saffron and teal as
+   accents, and EasyUI's pill navigation for the set-up's steps. Scoped to .welcome. */
+.welcome { --kos-teal: #024248; --kos-saffron: #feab0a; --kos-cream: #fcf1dd; max-width: 720px; margin: 0 auto; padding: 8px 4px 0; }
+.w-hero { position: relative; isolation: isolate; padding: 28px 0 8px; }   /* the glow is drawn inside it, not under the page */
+.w-hero::before { content: ""; position: absolute; inset: -30px 0 auto 0; height: 320px; z-index: -1; pointer-events: none; opacity: .55;
+                  background: radial-gradient(30% 50% at 32% 40%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
+                              radial-gradient(24% 40% at 68% 28%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%); }   /* both fade out inside the box: no edge */
+:root[data-theme="light"] .w-hero::before { opacity: .22; }
+.w-kicker { margin: 0; display: inline-flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--kos-saffron); }
+.w-kicker span { opacity: .65; font-weight: 700; } .w-kicker a { color: inherit; text-decoration: none; border-bottom: 1.5px solid color-mix(in srgb, currentColor 40%, transparent); }
+:root[data-theme="light"] .w-kicker { color: #b86f00; }
+.welcome h1 { margin: 14px 0 14px; font-size: clamp(36px, 7vw, 54px); line-height: 1.02; font-weight: 750; letter-spacing: -.035em; }
+.w-lede { margin: 0; max-width: 34em; font-size: 17px; line-height: 1.55; color: var(--muted); }
+.w-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.w-primary { appearance: none; border: 0; cursor: pointer; border-radius: 999px; padding: 12px 22px; font-weight: 750; font-size: 15px;
+             background: var(--kos-cream); color: var(--kos-teal); box-shadow: 0 1px 0 rgba(255, 255, 255, .4) inset, 0 8px 22px -8px rgba(254, 171, 10, .55);
+             transition: transform .15s, box-shadow .15s; }
+:root[data-theme="light"] .w-primary { background: var(--kos-teal); color: var(--kos-cream); box-shadow: 0 8px 22px -10px rgba(2, 66, 72, .8); }
+.w-primary:hover { transform: translateY(-1px); } .w-primary:active { transform: translateY(0); }
+.w-primary:disabled { opacity: .6; cursor: progress; }
+.w-pill { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; border: 1px solid var(--hairline-2); background: var(--surface); color: var(--ink); text-decoration: none; cursor: pointer;
+          border-radius: 999px; padding: 11px 18px 11px 14px; font-weight: 650; font-size: 15px;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 4px 12px -6px rgba(0, 0, 0, .3); transition: box-shadow .15s, transform .15s; }
+.w-pill svg { width: 17px; height: 17px; fill: currentColor; opacity: .85; }
+.w-pill:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0, 0, 0, .14), 0 8px 18px -8px rgba(0, 0, 0, .35); }
+.w-primary:focus-visible, .w-pill:focus-visible, .w-tab:focus-visible { outline: 2px solid var(--kos-saffron); outline-offset: 2px; }
+.welcome #sampleErr:empty { display: none; }
+/* the made-up flight, the page's own card, tilted, with a day of the plan over its corner */
+.w-visual { position: relative; margin: 40px 0 8px; padding: 0 0 26px; }
+.w-card { transform: rotate(-1.6deg); width: calc(100% - 20px); max-width: 560px; margin-left: 6px; filter: drop-shadow(0 24px 40px rgba(0, 0, 0, .35)); }
+.w-card .flight { pointer-events: none; } .w-card .flight-foot { display: none; }
+.w-day { position: absolute; right: 6%; bottom: 0; transform: rotate(2.2deg); display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 14px;
+         background: var(--surface); border: 1px solid var(--hairline-2); box-shadow: 0 14px 30px -12px rgba(0, 0, 0, .5); font-size: 13.5px; }
+.w-day span:last-child { color: var(--muted); }
+.w-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--kos-saffron); box-shadow: 0 0 0 4px color-mix(in srgb, var(--kos-saffron) 25%, transparent); }
+/* the set-up: EasyUI's pill navigation (a track, a thumb that slides to the step) and its panel */
+.w-setup { margin-top: 44px; }
+.w-setup h2 { margin: 0 0 14px; font-size: 20px; letter-spacing: -.01em; }
+.w-tabs { position: relative; display: inline-flex; gap: 2px; padding: 4px; border-radius: 999px; border: 1px solid var(--hairline-2);
+          background: color-mix(in srgb, var(--bg) 60%, black 10%); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .35); max-width: 100%; }
+:root[data-theme="light"] .w-tabs { background: var(--raise); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .06); }
+.w-thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: 0; border-radius: 999px; background: var(--ink); pointer-events: none;
+           box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+.w-thumb[data-ready] { transition: transform .38s cubic-bezier(.23, 1, .32, 1), width .38s cubic-bezier(.23, 1, .32, 1); }
+.w-tab { position: relative; z-index: 1; appearance: none; border: 0; background: transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+         padding: 8px 15px; border-radius: 999px; font-weight: 650; font-size: 14px; color: var(--muted); transition: color .2s; white-space: nowrap; }
+.w-tab i { font-style: normal; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; font-weight: 800;
+           background: var(--hairline-2); color: inherit; }
+.w-tab[aria-selected="true"] { color: var(--bg); } .w-tab[aria-selected="true"] i { background: var(--kos-saffron); color: var(--kos-teal); }
+.w-panel { margin-top: 14px; padding: 16px 18px; border-radius: 18px; background: var(--surface); border: 1px solid var(--hairline); line-height: 1.55; }
+.w-panel .actions { margin-top: 10px; }
+.w-ways { display: grid; gap: 10px; margin-top: 10px; }
+.w-way { display: inline-block; margin-right: 6px; padding: 1px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+         background: color-mix(in srgb, var(--kos-saffron) 16%, transparent); color: var(--kos-saffron); }
+:root[data-theme="light"] .w-way { color: #9a5d00; }
+.w-lede b { color: var(--ink); font-weight: 650; }
+.w-support { margin-top: 48px; } .w-support p { margin: 0; color: var(--muted); } .w-support .w-cta { margin-top: 12px; }
+.w-support .w-pill svg { color: var(--kos-saffron); opacity: 1; }
+.w-foot { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--hairline); color: var(--muted); font-size: 13px; line-height: 1.6; }
+main:has(> .welcome) { padding-bottom: calc(env(safe-area-inset-bottom) + 14px); }   /* no + button here: no room kept for it */
+.w-copy { margin: 28px 0 0; text-align: center; font-size: 12.5px; color: var(--faint); }
+.w-foot a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--hairline-2); text-underline-offset: 3px; }
+@media (max-width: 640px) {
+  .welcome h1 { margin-top: 12px; }
+  .w-cta .w-pill { padding: 11px 12px; font-size: 14px; gap: 6px; }
+  .w-card .flight { padding: 14px; } .w-card .flight .time { white-space: nowrap; }
+  .w-visual { padding-bottom: 0; }
+  .w-day { position: relative; right: auto; bottom: auto; display: flex; width: fit-content; max-width: 100%; margin: -12px 0 0 auto; }
+  .w-lede { font-size: 16px; }
+  .w-cta .w-primary { flex: 1 0 100%; }
+  .w-cta .w-pill { flex: 1 1 0; justify-content: center; }
+  .w-tabs { display: flex; width: 100%; }
+  .w-tab { flex: 1 1 0; justify-content: center; min-width: 0; padding: 8px 4px; gap: 5px; font-size: 13px; }
+  .w-day { right: 2%; }
+}
+@media (prefers-reduced-motion: reduce) { .w-thumb[data-ready], .w-primary, .w-pill { transition: none; } }
 .lock-later { margin-top: 18px; }
 
 
@@ -220,7 +298,7 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 .j-stat { display: flex; flex-direction: column; } .j-stat b { font-size: 22px; font-weight: 800; } .j-stat span { font-size: 12px; opacity: .85; }
 .j-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
 .j-actions .btn { background: rgba(0, 0, 0, .28); color: #fff; border-color: rgba(255, 255, 255, .35); }
-.j-map { position: relative; height: 380px; border-radius: 18px; overflow: hidden; margin: 14px 0 4px; background: #0b1020; }
+.j-map { position: relative; height: 380px; border-radius: 18px; overflow: hidden; margin: 14px 0 4px; background: var(--surface-2); border: 1px solid var(--hairline); }
 .j-credit { font-size: 11px; margin: 0 0 22px; } .j-credit a { color: inherit; }
 .j-day { margin: 0 0 22px; }
 .j-day .day-head { position: static; }
@@ -243,3 +321,17 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
   .j-text { border: 0; padding: 0; background: none; color: #000; }
   .j-text:placeholder-shown { display: none; }
 }
+
+/* the trip's Lodging tab: its stays, as cards; the map zooms in on them */
+.item.stay { display: block; width: 100%; text-align: left; margin-bottom: 10px; }
+.item.stay .row1 { align-items: center; }
+.stay-dates { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0 4px; }
+.stay-dates span { display: block; font-size: 11px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.stay-dates b { font-size: 15px; } .stay-dates small { margin-left: 6px; color: var(--muted); }
+
+/* a trip's city photo on its cover (Wikimedia, with its credit): the scrim keeps the title readable */
+.cover.has-photo { background-size: cover; background-position: center; }
+.photo-credit { position: absolute; right: 10px; bottom: 6px; z-index: 2; max-width: 70%; font-size: 10px; line-height: 1.3; color: rgba(255, 255, 255, .78);
+                text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+a.photo-credit:hover { color: #fff; text-decoration: underline; }
+

@@ -641,11 +641,17 @@ Kos's own:
 
 ### 17.4 Kos on its own: set-up first, the device lock last (owner, 2026-11-20)
 
-- **A newcomer's first screen is Kos's set-up** (`welcome()` in `kos.js`), not the device lock:
-  1. add a trip or a booking (or try the sample);
-  2. bookings from email (Gmail pull, or sharing to Kos on Android);
-  3. put Kos on the home screen (Install Kos when the browser offers it);
-  4. **last:** lock Kos on this device (Turn on / Not on this device), or what this device can't do.
+- **A newcomer's first screen** (`welcome()` in `kos.js`, redesigned 2026-11-20 after Inkling, GRAZE and Minty: a
+  narrow column, a big tight headline, raised pills and one solid button, the icon's saffron and teal
+  as accents, a made-up flight drawn by the real flight card, and EasyUI's pill navigation, with its
+  sliding thumb, for the set-up's steps) is Kos's set-up, not the device lock. "Kos by Minty" heads it; it ends
+  with Support on Ko-fi and Star Minty on GitHub, and the rg-code footer. On the landing site only,
+  `build-kos.mjs --goatcounter` counts visits and taps (GoatCounter: no cookies, nothing about the
+  trips; `kos/gc.js` and the counting hosts in its policy); Kos on a Minty never has it. The set-up:
+  1. add trips, automatically (Gmail pull) or by hand (paste, a PDF, an email file, a screenshot,
+     typing, or sharing to Kos on Android): one step, since both add trips;
+  2. put Kos on the home screen (Install Kos when the browser offers it);
+  3. **last:** lock Kos on this device (Turn on / Not on this device), or what this device can't do.
 - **`lock.js` on Kos on its own** (`window.KOS_MODE === "device"`, set by `mode.js` before it loads)
   says Kos and trips, shows Kos's icon, and never offers itself on arrival. Once it's on, it unlocks
   as on Minty. Minty, and Kos on a Minty, are unchanged.
@@ -775,6 +781,24 @@ trip's spending left out too.
   working, since Kos never tells the script which label to read.
 - **Kept:** `0025_jet.sql` (an applied migration's name is how D1 tracks it), and history.
 
+**The Lodging tab** (2026-11-20, beside Itinerary and Flights): the trip's stays as cards (nights, check-in
+and check-out, where, the booking), and the map zooms in on them (`drawTrip`'s "lodging" fit).
+
+**A city photo on a trip's cover** (§19.1, owner, 2026-11-20): Wikipedia's lead image for one of the
+trip's cities, hotlinked from Wikimedia Commons, on the trip's card and its cover, under a scrim.
+- **Which city:** the trip's place as typed ("Tokyo, Japan"), then its first part, then the city its
+  first flight lands in (`cityNames`). A disambiguation page ("Portland") is skipped.
+- **Which photo:** the page's lead image (Wikipedia's PageImages gives only freely licensed ones), as a
+  960 px thumbnail from `thumb.wikimedia.org` or `upload.wikimedia.org`; nothing else is accepted
+  (`isWikimediaImage`), and it's set through the DOM, never the page's HTML.
+- **Credit:** its photographer and licence (from the file's metadata), on the cover; on the trip's
+  page it links to the file on Commons.
+- **Asked once per city:** each answer, or "none", is kept in localStorage (`kos-photos`).
+- **What Wikipedia learns:** the city's name and the browser's address, once per city, from the
+  browser (on a Minty too). The first screen says so.
+- **The policy:** `/kos/*` may reach `en.wikipedia.org` (the lookups) and the two Wikimedia image
+  hosts (the photos). Nothing else does.
+
 **The summary strip** (under a trip's cover, like Wanderlog's):
 - **Reservations:** Flight, Lodging, Rental car, Train (trains and buses), Restaurant, Activity, Other,
   each with its count. A tap opens "Add a booking" for that trip with that kind chosen
@@ -809,15 +833,22 @@ everywhere):
   its own they're in IndexedDB (database `kos` version 2, store `notes`), and an export carries them.
 - **Print or save as PDF:** the browser's print, with a print layout (no buttons, notes as text).
 
-**The journal's map:** satellite, like Wanderlog's (theirs is Stadia Maps' Alidade Satellite).
-- **EOX Sentinel-2 cloudless** (`tiles.maps.eox.at`, the 2024 mosaic): no key or account, free for
-  noncommercial use with its credit, which Minty is. It's 10 m imagery: sharp at country and city
-  zoom, softer at street level. The owner chose it over Stadia (an account, and likely a paid plan).
-- **Over it:** OpenFreeMap's place names, water names and borders, in white (`satelliteStyle`), the
-  flights, each day's stops in its colour, joined in order. It frames the trip's places.
-- **The credit** is under the map, and in the map's ⓘ.
-- **The policy:** `/kos/*` and `/vendor/maplibre/*` may reach `tiles.maps.eox.at` (images and
-  fetches); nothing else does.
+**The journal's map:** minimal (owner, 2026-11-20; it was EOX's satellite imagery, which the owner found
+too busy).
+- **OpenFreeMap's Positron**, cut down to land, water, the big roads as faint lines, country borders and
+  city names, in a quiet light or dark palette that follows Kos's theme (`minimalStyle`). It's
+  redrawn when the theme changes.
+- **Over it:** the flights, and the trip's places numbered in the order it went (1, 2, 3… across the
+  whole trip, inside the dot, in its day's colour), joined by one line. It opens zoomed in on those
+  places; the flights draw without widening it.
+- **The credit** (OpenFreeMap, OpenMapTiles, OpenStreetMap) is under the map, and in the map's ⓘ.
+- The itinerary numbers its places across the whole trip too (1, 2, 3…; a stay's check-out keeps its
+  check-in's number), inside the map's dots, and its map joins them in that order. Its rail is one
+  line from the first day to the last, in each day's colour.
+- **The trip's own map** (Itinerary, Flights, Lodging) stays OpenFreeMap's Liberty, a little quieter
+  (`quietStyle`): no points of interest, buildings, road names or shields, minor streets, footpaths,
+  tunnels or state names, and soft grey roads in light. The main roads, rail, parks, water and place
+  names stay.
 
 **Reads:** `GET /trips/{id}/journal` reads the trip by its key and its notes by the key's prefix
 (budget in `test/reads.test.ts`). The hourly step reads the trips (few).
