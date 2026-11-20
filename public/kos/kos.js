@@ -126,8 +126,9 @@ function home() {
 // --- Kos on its own: the first screen, and the device lock as the last step (docs/trips.md §17.4) ----
 function welcome() {
   // a made-up flight, drawn by the real flight card (decorative: the page's own look, not a screenshot)
+  const out = addDays(localDay(), 23);                      // always about three weeks away, so it always reads "Scheduled"
   const demo = { id: 0, kind: "flight", airline: "UA", flight_number: "837", dep_airport: "SFO", arr_airport: "NRT", name: "United",
-                 start_at: "2027-03-10T11:05:00-08:00", end_at: "2027-03-11T15:00:00+09:00", dep_terminal: "I", seat: "34K", confirmation: "KOS837" };
+                 start_at: `${out}T11:05:00-08:00`, end_at: `${addDays(out, 1)}T15:00:00+09:00`, dep_terminal: "I", seat: "34K", confirmation: "KOS837" };
   const feature = (k, title, line) => `<li><span class="w-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${GLYPH[k]}</svg></span><b>${title}</b><span>${line}</span></li>`;
   const step = (n, id, label) => `<button type="button" role="tab" class="w-tab" data-wstep="${id}" aria-selected="${n === 1}"><i>${n}</i>${label}</button>`;
   return `<section class="welcome">
@@ -151,11 +152,11 @@ function welcome() {
     <section class="w-setup" aria-label="Set Kos up">
       <h2>Set it up in four steps</h2>
       <div class="w-tabs" role="tablist"><span class="w-thumb" aria-hidden="true"></span>${step(1, "add", "Add")}${step(2, "email", "Email")}${step(3, "home", "Install")}${step(4, "lock", "Lock")}</div>
-      <div class="w-panel" data-wpanel="add"><b>Add a trip, or a booking.</b> Type it in, paste a confirmation, or read a PDF or an email file. Bookings without a trip wait until you make one.</div>
-      <div class="w-panel" data-wpanel="email" hidden><b>Bookings from your email.</b> Forward confirmations to your Gmail with <b>+kos</b> in the address, and Kos reads them, on your phone too: <a href="#/gmail">set up Gmail</a>. Once Kos is installed on Android, you can also share a PDF or a screenshot to it.</div>
-      <div class="w-panel" data-wpanel="home" hidden><b>Put Kos on your home screen.</b> iPhone: Safari's Share button → <b>Add to Home Screen</b>. Android: Chrome's ⋮ menu → <b>Install app</b>.
+      <div class="w-panel" role="tabpanel" data-wpanel="add"><b>Add a trip, or a booking.</b> Type it in, paste a confirmation, or read a PDF or an email file. Bookings without a trip wait until you make one.</div>
+      <div class="w-panel" role="tabpanel" data-wpanel="email" hidden><b>Bookings from your email.</b> Forward confirmations to your Gmail with <b>+kos</b> in the address, and Kos reads them, on your phone too: <a href="#/gmail">set up Gmail</a>. Once Kos is installed on Android, you can also share a PDF or a screenshot to it.</div>
+      <div class="w-panel" role="tabpanel" data-wpanel="home" hidden><b>Put Kos on your home screen.</b> iPhone: Safari's Share button → <b>Add to Home Screen</b>. Android: Chrome's ⋮ menu → <b>Install app</b>.
         <div class="actions" id="installRow" hidden><button type="button" class="w-pill" data-install>Install Kos</button></div></div>
-      <div class="w-panel" data-wpanel="lock" hidden><div id="lockStep"><b>Last: lock Kos on this device.</b> <span class="muted">Checking what this device can do…</span></div></div>
+      <div class="w-panel" role="tabpanel" data-wpanel="lock" hidden><div id="lockStep"><b>Last: lock Kos on this device.</b> <span class="muted">Checking what this device can do…</span></div></div>
     </section>
     <footer class="w-foot">
       <p>Free, with no ads. Trips stay in this browser only, so export a copy now and then (<a href="#/data">Your data</a>). The maps' tiles come from OpenFreeMap and EOX.</p>

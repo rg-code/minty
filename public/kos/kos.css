@@ -202,11 +202,11 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 /* Kos on its own: the first screen (docs/trips.md §17.4). Inkling's restraint (a narrow column, a big
    tight headline, plain words, raised pills and one solid button), the icon's saffron and teal as
    accents, and EasyUI's pill navigation for the set-up's steps. Scoped to .welcome. */
-.welcome { --kos-teal: #024248; --kos-saffron: #feab0a; --kos-cream: #fcf1dd; max-width: 720px; margin: 0 auto; padding: 8px 4px 24px; overflow-x: clip; }   /* the hero's glow and the tilted card stay inside: no sideways scroll */
-.w-hero { position: relative; padding: 28px 0 8px; }
-.w-hero::before { content: ""; position: absolute; inset: -40px -60px auto -60px; height: 340px; z-index: -1; pointer-events: none; filter: blur(40px); opacity: .5;
-                  background: radial-gradient(40% 55% at 18% 30%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 70%),
-                              radial-gradient(30% 40% at 62% 18%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 70%); }
+.welcome { --kos-teal: #024248; --kos-saffron: #feab0a; --kos-cream: #fcf1dd; max-width: 720px; margin: 0 auto; padding: 8px 4px 24px; }
+.w-hero { position: relative; isolation: isolate; padding: 28px 0 8px; }   /* the glow is drawn inside it, not under the page */
+.w-hero::before { content: ""; position: absolute; inset: -30px 0 auto 0; height: 320px; z-index: -1; pointer-events: none; opacity: .55;
+                  background: radial-gradient(30% 50% at 32% 40%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 100%),
+                              radial-gradient(24% 40% at 68% 28%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 100%); }   /* both fade out inside the box: no edge */
 :root[data-theme="light"] .w-hero::before { opacity: .22; }
 .w-kicker { margin: 0; display: inline-flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--kos-saffron); }
 .w-kicker i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .6; }
@@ -229,7 +229,7 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 .welcome #sampleErr:empty { display: none; }
 /* the made-up flight, the page's own card, tilted, with a day of the plan over its corner */
 .w-visual { position: relative; margin: 40px 0 8px; padding: 0 0 26px; }
-.w-card { transform: rotate(-1.6deg); max-width: 560px; filter: drop-shadow(0 24px 40px rgba(0, 0, 0, .35)); }
+.w-card { transform: rotate(-1.6deg); width: calc(100% - 20px); max-width: 560px; margin-left: 6px; filter: drop-shadow(0 24px 40px rgba(0, 0, 0, .35)); }
 .w-card .flight { pointer-events: none; } .w-card .flight-foot { display: none; }
 .w-day { position: absolute; right: 6%; bottom: 0; transform: rotate(2.2deg); display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 14px;
          background: var(--surface); border: 1px solid var(--hairline-2); box-shadow: 0 14px 30px -12px rgba(0, 0, 0, .5); font-size: 13.5px; }
