@@ -18,9 +18,25 @@
     document.head.append(s);
   });
 
-  $("shot").addEventListener("change", async e => {
-    const file = e.target.files[0];
-    if (!file) return;
+  $("shot").addEventListener("change", e => { if (e.target.files[0]) read(e.target.files[0]); });
+
+  // ?shared=1: a screenshot shared to JET (its share target, public/jet/sw.js), kept by JET in
+  // IndexedDB "jet-share" under "image"; read it at once, and drop it
+  if (FOR_JET && new URLSearchParams(location.search).get("shared") === "1") {
+    const req = indexedDB.open("jet-share", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("shared");
+    req.onsuccess = () => {
+      const st = req.result.transaction("shared", "readwrite").objectStore("shared"), g = st.get("image");
+      g.onsuccess = () => {
+        st.delete("image");
+        const f = g.result?.files?.[0];
+        if (f?.blob) read(new File([f.blob], f.name || "shared image", { type: f.type || f.blob.type }));
+        else status("The shared screenshot was already read: choose it again.");
+      };
+    };
+  }
+
+  async function read(file) {
     $("use").hidden = true;
     try {
       const buf = await file.arrayBuffer();
@@ -39,9 +55,9 @@
       $("use").hidden = false;
       status(data.text.trim() ? "Read. Check the text, correct anything misread, then use it." : "No text found in this image.");
     } catch (x) {
-      status(`Couldn't read this image: ${x.message}. You can paste the text into SUB instead.`);
+      status(`Couldn't read this image: ${x.message}. You can paste the text into ${FOR_JET ? "JET" : "SUB"} instead.`);
     }
-  });
+  }
 
   $("use").addEventListener("click", () => {
     let scan = {};

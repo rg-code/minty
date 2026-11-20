@@ -13,5 +13,16 @@
     { "src": "/jet/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/jet/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
     { "src": "/jet/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
-  ]
+  ],
+  "share_target": {
+    "action": "/jet/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [{ "name": "files", "accept": ["application/pdf", ".pdf", "image/*", "message/rfc822", ".eml", "text/plain"] }]
+    }
+  }
 }

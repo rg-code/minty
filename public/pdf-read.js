@@ -32,8 +32,8 @@ const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, 
 
 let pdfjsReady = null;
 function pdfjs() {
-  pdfjsReady ??= import(new URL("vendor/pdfjs/pdf.min.mjs", document.baseURI).href).then(lib => {
-    lib.GlobalWorkerOptions.workerSrc = new URL("vendor/pdfjs/pdf.worker.min.mjs", document.baseURI).href;
+  pdfjsReady ??= import(new URL("vendor/pdfjs/pdf.min.mjs", import.meta.url).href).then(lib => {
+    lib.GlobalWorkerOptions.workerSrc = new URL("vendor/pdfjs/pdf.worker.min.mjs", import.meta.url).href;
     return lib;
   });
   return pdfjsReady;

@@ -267,3 +267,37 @@ could be read or changed. Delete the token in Zero Trust and make a new one.
 
 **Rule update (with T2):** CLAUDE.md's Auth rule gains this one exception, worded as above.
 
+
+## 7. JET's Gmail pull: the person's own script, asked from the browser (for the owner's approval)
+
+The design is [trips.md](trips.md) §17.1. Minty's Worker, Access and D1 are unchanged. What's new:
+- **a web app in the person's Gmail** that reads one label;
+- **two hosts in `/jet/*`'s `connect-src`:** `script.google.com` and `script.googleusercontent.com`.
+
+**The exposure:**
+- The script is deployed for "Anyone", so its URL needs no Google sign-in.
+- What guards it is a 48-hex-character key (192 bits), made on the device and written into the
+  script.
+- Anyone with both the URL and the key can read that label's emails from the last 60 days. They can't
+  read anything else, or change or send mail. The script's text is generated, and a test checks it
+  only reads.
+- The key travels in the query string, so it's in the browser's history on that device and in
+  Google's logs, not in Minty's.
+
+- **The phone link** (`#/gmail?connect=…`) carries the address and the key, to connect another
+  device. It's after the `#`, so it's never sent to a server, and the page drops it from the address
+  bar once read. But wherever it's sent (a message to yourself) holds the key. The page says to send
+  it only to yourself.
+
+**Why it's acceptable:**
+- The label holds bookings the person chose to forward.
+- With the recommended Gmail account made only for Minty, there's nothing else in the mailbox.
+- The `gmail.readonly` permission covers the whole mailbox, but the script only searches the label.
+
+**If the key leaks:** archive the deployment (Deploy → Manage deployments), and paste a new script
+from `#/gmail` after "Forget on this device".
+
+**Not done:**
+- No `UrlFetchApp`: the script never sends mail anywhere.
+- No write scopes.
+- Nothing reaches Minty's Worker from Google.

@@ -145,6 +145,8 @@ there, gitignored here). If that folder exists, read it too.
    use ideas from a fork, with its author's permission.
 9. **JET, trips (a Flighty and Wanderlog hybrid)**, [trips.md](trips.md): **J1 built 2026-11-19**, the app at
    `/jet/` (§16): trips, bookings, itinerary, flight cards, the map, the trip's spending.
+   - **JET on its own** (§17): the same app with trips in the browser, for people without Minty,
+     at minty.milesmaximizer.com/jet/ (built by `scripts/build-jet.mjs`, deployed by minty-site).
    - Bookings (and bills) come from a Gmail account made for Minty, by forwarding to
      `+mintytrips` / `+mintybills` or labeling by hand, or by forwarding to the domain's address.
      No mailbox is connected to Minty.

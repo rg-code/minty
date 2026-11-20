@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="JET" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <script src="/jet/theme.js"></script>
+<script src="/jet/mode.js"></script>
 <link rel="stylesheet" href="/vendor/maplibre/maplibre-gl.css" />
 <link rel="stylesheet" href="/jet/jet.css" />
 <link rel="stylesheet" href="/lock.css" />
@@ -24,7 +25,8 @@
   <a class="brand" href="#/"><img src="/jet/icon.svg" alt="" width="28" height="28" /><span>JET</span></a>
   <nav class="bar-actions">
     <button type="button" class="icon-btn" id="themeBtn" aria-label="Light or dark" title="Light or dark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
-    <a class="icon-btn" href="/" title="Open Minty" aria-label="Open Minty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg></a>
+    <a class="icon-btn" href="#/data" title="Your data: export and import" aria-label="Your data"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z"/><path d="M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></a>
+    <a class="icon-btn" id="mintyLink" href="/" title="Open Minty" aria-label="Open Minty"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg></a>
   </nav>
 </header>
 <main id="app" aria-live="polite"><p class="muted center pad">Loading your trips…</p></main>

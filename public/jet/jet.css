@@ -157,6 +157,12 @@ textarea.paste { width: 100%; min-height: 140px; resize: vertical; }
 .bars .b i { display: block; height: 10px; border-radius: 6px; background: var(--accent); }
 .total { font-size: 34px; font-weight: 850; letter-spacing: -.03em; }
 .suggest { margin-top: 10px; padding: 12px; border-radius: 16px; border: 1px dashed var(--hairline-2); }
+.suggest-head { margin: 12px 0 -4px; font-size: 12px; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; }
+/* the Gmail set-up page's phone link (docs/trips.md §17.1): the QR stays dark on white in both themes */
+.qr-row { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.qr-row .grow { flex: 1 1 240px; }
+.qr { width: 168px; flex: none; padding: 6px; background: #fff; border-radius: 12px; }
+.qr svg { display: block; width: 100%; height: auto; }
 .suggest q { display: block; color: var(--muted); font-size: 12.5px; margin-top: 4px; }
 
 /* MapLibre in JET's colours */

@@ -1,6 +1,6 @@
 # Plan: JET, trips (a Flighty and Wanderlog hybrid)
 
-**Status: J1 built (2026-11-19): the JET app at `/jet/` (§16), with T1, T3, T6a and T6b. T0 started: the owner runs `scripts/jet-t0/`; T2, T5, T6c and T7 follow its results.** Its
+**Status: J1 built (2026-11-19): the JET app at `/jet/` (§16), with T1, T3, T6a and T6b, and JET on its own (§17). T0 started: the owner runs `scripts/jet-t0/`; T2, T5, T6c and T7 follow its results.** Its
 inbox (§2) also serves Bills. Named **JET** (owner, 2026-11-19).
 
 A trip view built from the household's bookings:
@@ -579,3 +579,112 @@ JET's own:
 - T7: the timeline;
 - T4: BAM's pending changes.
 
+## 17. JET on its own (option B, built 2026-11-19)
+
+**Owner's question:** what about someone who wants JET but doesn't have Minty? Of the three options
+(Minty without banks; JET in the browser alone; JET as its own Cloudflare app), the owner chose
+**B: JET in the browser**, with no setup at all.
+
+**One app, two places** (`public/jet/store.js`, chosen by `public/jet/mode.js`):
+
+| | **On a Minty** (`/jet/`, mode `minty`) | **On its own** (mode `device`) |
+|---|---|---|
+| Trips and bookings | Minty's API, on its D1 | IndexedDB in this browser (database `jet`) |
+| Email files | read by the Worker (`POST /trips/read-email`) | read in the browser by the same code (`src/jet/` with its types stripped, `jet/mail/`) |
+| The trip's spending | yes | no (no transactions); the tab isn't shown |
+| Travellers, BAM's programs | from `MINTY_USERS`, `/points` | none |
+| Gmail pull (§17.1), Share to JET (§17.2) | yes | yes |
+| The Gmail inbox on Minty (§6), Immich, live status (later) | yes | no: each needs a server |
+
+- **Both stores answer the same calls,** with the same shapes as Minty's API, so `jet.js` doesn't
+  care which it has.
+- **The device store checks fields** as the server does (`checkTrip`, `checkItem`).
+- **The map, the flight cards, the itinerary, paste, PDF and screenshot** work the same in both.
+
+**Your data** (`#/data`, in both modes):
+- **Export** writes every trip and booking to a JSON file (`app: "JET"`, `version: 1`).
+- **Import** reads one back, re-tying bookings to their trips. It's how trips move between
+  devices, and from JET on its own into a Minty.
+- On its own, JET asks the browser to keep its data (`navigator.storage.persist()`). The page says
+  that clearing the site's data loses the trips, and to export now and then.
+
+**Building and hosting:**
+- `node scripts/build-jet.mjs --out <dir>` writes:
+  - `jet/`, with `mode.js` set to `device`, the email reader in `jet/mail/` (types stripped by
+    Node's `stripTypeScriptTypes`), and those files in the service worker's shell;
+  - `vendor/` (MapLibre, pdf.js, Tesseract);
+  - the files JET loads from the root (the screenshot reader, `pdf-read.js`, `lock.js`, `theme.js`);
+  - `_headers.jet`: the same security policy as `public/_headers` gives those paths on a Minty.
+- **Hosted on the landing site,** `minty.milesmaximizer.com/jet/`. Its `deploy.mjs` runs the build
+  after the demo's and installs `_headers`, the same as the demo is built from this repo.
+  Nothing is committed there.
+
+**Fixed along the way:**
+- `pdf-read.js` found pdf.js relative to the page. From `/jet/` that pointed at `/jet/vendor/…`, so
+  reading a PDF in JET was broken on a Minty too. It now resolves relative to its own file.
+- **A JET bug:** saving a booking from a pasted suggestion did nothing. The form has a
+  `data-source` attribute, so a click on it also hit the source tabs, which re-rendered the page.
+
+### 17.1 Gmail pull (both modes)
+
+**Why:** on a phone, the Gmail app can't save a message as an `.eml`, so "Email file" alone left JET
+on its own with no way to read a forwarded booking.
+
+**How it works:**
+- The person forwards a booking to their Gmail with `+jet` before the @. A Gmail filter labels it
+  **JET** (labelling one by hand counts too).
+- A short Google Apps Script in their Gmail, deployed as a web app, hands JET the emails with that
+  label. `public/jet/gmail.js` writes the script on the set-up page (`#/gmail`).
+  - It runs as the person ("Execute as: Me") and is hosted by Google.
+  - It asks only for `gmail.readonly`, in the manifest JET gives (`appsscript.json`). It never
+    changes, moves or sends mail (a test checks the script's text).
+  - It answers only a request with the key written into it: 48 random hex characters, made on
+    this device. Access is "Anyone", so JET can call it without a Google sign-in; the key is what
+    keeps others out.
+  - It returns the label's emails from the last 60 days: at most 20 messages from 30 threads,
+    skipping any over 1.5 MB, and skipping the ids JET says it has already read.
+- **JET reads each email** with `store.readEmail`, the same reader as "Email file". It shows the
+  bookings found, with Add and Add all.
+- **Read emails are remembered** on this device (localStorage `jet-gmail-seen`, the last 1,000 ids).
+  An email counts as read once one of its bookings is added, or after "Don't show these again".
+- **The web app's address and the key stay in this browser** (localStorage `jet-gmail`).
+- **It checks by itself:** opening "Add a booking" asks the script, and shows only what's new
+  ("New in your Gmail"). It says nothing when there's nothing new or the script can't be reached;
+  "Check Gmail" on the Gmail tab says why. Switching tabs doesn't ask again. A web app can't check
+  in the background on a phone, so nothing happens while JET is closed.
+- **The phone link:** setting up needs a computer (Google's script editor), but the key is made on
+  that device. Once connected, the set-up page shows **Connect your phone**:
+  - a link, `…/jet/#/gmail?connect=<code>`, where the code is the script's address and the key
+    (`linkFor` / `readLink`), and a QR code of it (vendored `qrcode-generator`,
+    `public/vendor/qrcode/`, loaded only there);
+  - the code is after the `#`, so it's never sent to any server; the page saves it and takes it out
+    of the address bar (`history.replaceState`);
+  - on a phone not yet connected, the set-up page has a box to paste the link. On an iPhone that's
+    the way: the installed app's storage is separate from Safari's, where a scanned link opens;
+  - the page says that anyone with the link can read the JET label.
+- **The policy:** `/jet/*`'s `connect-src` allows `https://script.google.com` and
+  `https://script.googleusercontent.com`. Apps Script answers from the first by redirecting to the
+  second. Nothing else gets those hosts.
+- **Recommended:** a Gmail account made just for this, as for Minty's inbox (§6). Google's read-only
+  permission covers the whole mailbox, so in an account that only gets what's forwarded, that's all
+  the script can see.
+- **To stop it:** archive the deployment in Apps Script. "Forget on this device" drops the address
+  and the key from JET.
+
+**How it differs from Minty's inbox (§6):**
+- Minty's inbox is a script that sends mail to the Worker, through an Access service token.
+- Gmail pull is JET asking the person's own script from the browser.
+- It needs no server, so it works for JET on its own too.
+
+### 17.2 Share to JET (both modes)
+
+- **The installed app is a share target** (`share_target` in `jet/manifest.webmanifest`): on Android,
+  "Share" from Gmail, Files or the gallery lists JET. It takes a PDF, an image, an email file or text.
+- **The service worker takes the POST** to `/jet/share`. It keeps what was shared in IndexedDB
+  `jet-share` (at most 5 files, 20 MB each) and opens `#/add?shared=1`. Nothing leaves the device.
+- **The add page reads it once, then deletes it:**
+  - a PDF is read with pdf.js;
+  - an email file goes to the email reader;
+  - text, or a link, goes to the paste parser;
+  - a screenshot goes to `/sub-scan?for=jet&shared=1`, which reads it with Tesseract straight away.
+- **iPhones have no share targets for web apps.** There, Gmail pull (§17.1) is the way in, or paste.
