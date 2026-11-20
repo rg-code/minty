@@ -895,6 +895,16 @@ page asks for it (optional, kept on this device); until then the trip shows just
 - **Still a tap to add:** a mistyped code, or someone else's mail, never adds anything by itself.
 - **A script made before this** reads only the label; Kos says to copy it again and deploy a new version.
 
+### 21.1 Which trip, when it wasn't sent to one (owner, 2026-11-20)
+
+A booking from the Kos label (or pasted, a PDF, an email file) goes in the one trip whose dates cover
+its date, or the trip starting the next day (the flight out the night before): `tripFor` in `store.js`.
+When two trips fit, or none, it waits for the person to pick, as before. A trip's own address wins over
+the dates, and the trip being added to (its Add page) wins over them too. Still a tap to add.
+
+Under the trip's address the summary says so: Kos works this out from the dates, so forwarding to Kos is
+enough, and the address is for filing one there for certain (overlapping trips, dates Kos can't read).
+
 **On a Minty's inbox (T2, to come):** `+mintytrips` and `+mintybills` as planned, and a trip's
 `+<code>` files into that trip.
 
@@ -934,7 +944,9 @@ page asks for it (optional, kept on this device); until then the trip shows just
   itself. The link is taken out of the address bar, a link can't unpack into more than 256 KB, and
   everything in it is checked like an import. Shared to Kos on Android, a link opens the same preview.
 - **On a Minty,** the link opens Kos on its own (the household's /kos/ is behind Access); someone with a
-  Minty pastes it on Your data (Add a shared trip). **Download file** saves the same trip as a file.
+  Minty pastes it on Your data (Add a shared trip), or on **New trip** (above the form: "Someone shared a trip?"). **Download file** saves the same trip as a file.
+- **Before adding,** the link opens the whole trip as its page would show it: the cover (with its city photo), the
+  map and the plan day by day, read-only (a tap shows a place on the map). **Add this trip** and **Not now** sit on top.
 
 ## 24. Share a trip with the Kos team (owner, 2026-11-20)
 

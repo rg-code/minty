@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, shareLink, shareString, shiftSample, store, tripAddress, tripSummary } from "./store.js";
+import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, shareLink, shareString, shiftSample, store, tripAddress, tripFor, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 import { parseWhere } from "./where.js";
@@ -43,6 +43,8 @@ async function load() {
 const label = (k) => users.find((u) => u.key === k)?.label ?? k;
 const airport = (code) => (code && airports[code] ? { name: airports[code][0], city: airports[code][1], country: airports[code][2], lat: airports[code][3], lon: airports[code][4] } : null);
 const tripById = (id) => data.trips.find((t) => t.id === id);
+/** The trip a found booking goes in by its dates, when it wasn't sent to a trip's address (store.tripFor). */
+const tripGuess = (b) => tripFor(dateOf(b.start_at ?? b.start), data.trips)?.id ?? null;
 const itemById = (id) => [...data.trips.flatMap((t) => t.items), ...data.unassigned].find((i) => i.id === id);
 
 // --- Flighty: the flight card -----------------------------------------------------------------
@@ -262,9 +264,10 @@ function summaryHtml(t) {
         ? `<div class="sum-amt num">${money(cur[0][1], cur[0][0])}</div><div class="muted sum-sub">booked${cur.length > 1 ? `, plus ${cur.slice(1).map(([c, v]) => money(v, c)).join(", ")}` : ""}, from the bookings' prices</div>`
         : `<div class="sum-amt num muted">—</div><div class="muted sum-sub">add prices to the bookings to see what it costs</div>`; })();
   const addr = isTripCode(t.code) ? tripAddress(t.code, gmail.gmailAddress()) : "";
-  const mail = addr ? `<div class="sum-mail"><span class="muted">Email bookings to this trip:</span> <code id="tripAddr">${esc(addr)}</code>
+  const mail = addr ? `<div class="sum-mail"><span class="muted">This trip's own address:</span> <code id="tripAddr">${esc(addr)}</code>
       <button type="button" class="btn small ghost" data-copy-text="${esc(addr)}" data-goatcounter-click="kos-copy-trip-address">Copy</button>
-      ${addr.startsWith("+") ? `<a href="#/gmail">${gmail.config() ? "Add your Gmail address" : "Set up Gmail"}</a>` : ""}</div>` : "";
+      ${addr.startsWith("+") ? `<a href="#/gmail">${gmail.config() ? "Add your Gmail address" : "Set up Gmail"}</a>` : ""}
+      <p class="sum-mail-note muted">Kos works out which trip a booking belongs to from its dates, so forwarding it to Kos is enough. To file one here for certain (booked for overlapping trips, or with dates Kos can't read), send it to this address.</p></div>` : "";
   return `<div class="summary"><section class="card sum-res"><h3>Reservations</h3><div class="sum-kinds">${kinds}</div>${mail}</section>
     <section class="card sum-budget"><h3>Budgeting</h3>${budget}</section></div>`;
 }
@@ -367,15 +370,28 @@ async function fillShare(t) {
   document.getElementById("shareNote").textContent = link.length > 8000 ? "A long link: some chat apps may cut it short. Download file shares the same trip as a file." : MODE === "device" ? "" : "It opens Kos on its own (minty.milesmaximizer.com/kos/). Someone with a Minty can paste it on Your data instead.";
 }
 let pendingShare = null;
+/** A shared trip as the trip page draws it, before it's added: its bookings get stand-in ids (below zero,
+ * so they never match one of this device's) for the plan's numbers and the map's pins. */
+function previewTrip(f) {
+  if (!f?.trips?.[0]) return null;
+  return { ...f.trips[0], id: "shared", code: null, tags: [], travellers: [], items: f.items.map((i, n) => ({ ...i, id: -(n + 1) })) };
+}
 function importView(f) {
   if (!f) return `<div class="section-title"><h2>Add a shared trip</h2></div><div class="card muted">Open a shared Kos trip link, or paste one on <a href="#/data">Your data</a>.</div>`;
   if (f.error) return `<div class="section-title"><h2>Add a shared trip</h2></div><div class="card"><p class="err" style="margin-top:0">${esc(f.error)}</p><a class="btn" href="#/">All trips</a></div>`;
-  const t = f.trips[0], kinds = {};
-  for (const i of f.items) kinds[i.kind] = (kinds[i.kind] ?? 0) + 1;
-  return `<div class="section-title"><h2>Add a shared trip</h2></div>
-    <div class="card"><h3 style="margin:0 0 4px">${esc(t.name)}</h3><div class="muted">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${esc(String(t.end_date).slice(0, 4))}${t.place ? ` · ${esc(t.place)}` : ""}</div>
-      <p>${f.items.length} booking${f.items.length === 1 ? "" : "s"}${Object.keys(kinds).length ? `: ${Object.entries(kinds).map(([k, n]) => `${n} ${esc((KIND[k] ?? k).toLowerCase())}`).join(", ")}` : ""}.</p>
-      <div class="actions"><button type="button" class="btn primary" data-add-shared>Add this trip</button><a class="btn ghost" href="#/">Not now</a><span class="err" id="formErr"></span></div></div>`;
+  const t = previewTrip(f), kinds = {}, p = plan(t);
+  for (const i of t.items) kinds[i.kind] = (kinds[i.kind] ?? 0) + 1;
+  const days = `${p.before.length ? dayHtml({ label: "Before the trip", entries: p.before, color: "#8c96ad" }) : ""}
+    ${p.days.map((d, n) => dayHtml({ label: `Day ${n + 1}`, sub: fmtDay(d.date), entries: d.entries, color: d.color })).join("")}
+    ${p.after.length ? dayHtml({ label: "After the trip", entries: p.after, color: "#8c96ad" }) : ""}
+    ${p.unscheduled.length ? dayHtml({ label: "No date yet", entries: p.unscheduled, color: "#8c96ad" }) : ""}`;
+  return `<div class="card share-bar"><div class="grow"><b>Someone shared a trip with you.</b> <span class="muted">Look through it: nothing is added until you choose.</span></div>
+      <div class="actions"><button type="button" class="btn primary" data-add-shared data-goatcounter-click="kos-add-shared-trip">Add this trip</button><a class="btn ghost" href="#/">Not now</a><span class="err" id="formErr"></span></div></div>
+    <section class="trip-head"><div class="cover" style="--h:${hue(t.name)}" data-photo="shared">
+      <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${esc(String(t.end_date).slice(0, 4))}${t.place ? ` · ${esc(t.place)}` : ""}</div></div></section>
+    <p class="muted share-count">${t.items.length} booking${t.items.length === 1 ? "" : "s"}${Object.keys(kinds).length ? `: ${Object.entries(kinds).map(([k, n]) => `${n} ${esc((KIND[k] ?? k).toLowerCase())}`).join(", ")}` : ""}.</p>
+    <div class="trip preview"><div class="plan">${days}</div>
+      <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div></div></div>`;
 }
 
 // --- a place to go on a day (docs/trips.md §22): one box takes an address, a plus code, coordinates
@@ -525,7 +541,7 @@ async function cityPhoto(t) {
 /** After a page is drawn: each cover with data-photo gets its trip's city photo under its scrim. */
 async function applyPhotos() {
   for (const el of app.querySelectorAll("[data-photo]")) {
-    const t = tripById(Number(el.dataset.photo));
+    const t = el.dataset.photo === "shared" ? previewTrip(pendingShare) : tripById(Number(el.dataset.photo));
     const p = t && await cityPhoto(t);
     if (!p || !el.isConnected || !isWikimediaImage(p.src)) continue;
     el.style.backgroundImage = `linear-gradient(180deg, rgba(0, 0, 0, .18), rgba(0, 0, 0, .55)), url("${p.src}")`;
@@ -633,6 +649,9 @@ async function tagPicker() {
 const splitTags = (v) => [...new Map(String(v ?? "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => [x.toLowerCase(), x])).values()];
 function tripForm(t, picked = []) {
   return `<div class="section-title"><h2>${t ? "Edit trip" : "New trip"}</h2></div>
+    ${t ? "" : `<div class="card shared-paste"><b>Someone shared a trip?</b> <span class="muted">Paste its Kos link and the whole trip comes in, bookings and all.</span>
+      <div class="shared-row"><input id="sharedPaste" autocomplete="off" placeholder="https://minty.milesmaximizer.com/kos/#/import?t=1.…" />
+        <button type="button" class="btn" data-paste-shared data-goatcounter-click="kos-new-trip-paste-link">Look at it</button></div><span class="err"></span></div>`}
     <form class="card" id="tripForm" data-id="${t?.id ?? ""}" data-items="${picked.join(",")}"><div class="form">
       <label class="wide">Name<input name="name" required maxlength="100" value="${esc(t?.name ?? "")}" placeholder="Tokyo, spring 2027" /></label>
       <label>First day<input name="start_date" type="date" required value="${esc(t?.start_date ?? "")}" /></label>
@@ -709,11 +728,15 @@ function sourceBox(source) {
 function suggestionsHtml(list, from) {
   if (!list.length) return `<div class="suggest muted">${from === "gmail" ? "No new bookings in your Kos label." : "Nothing recognisable there: fill the form in yourself."}</div>`;
   return `<div class="suggest"><b>Found ${list.length} booking${list.length === 1 ? "" : "s"}</b> (check each):<div class="list" style="margin-top:8px">${list.map((b, n) => `<div class="row"><span class="grow"><b>${esc(itemTitle(b))}</b>
-      <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at ?? b.start)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}${b.tripId && tripById(b.tripId) ? ` · <b>→ ${esc(tripById(b.tripId).name)}</b>` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
+      <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at ?? b.start)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}${suggestTrip(b) ? ` · <b>→ ${esc(suggestTrip(b).name)}</b>` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
       <button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" || from === "gmail" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}</div>`).join("")}</div>
     ${(from === "email" || from === "gmail") && list.length > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${list.length}</button></div>` : ""}</div>`;
 }
 let found = [], foundFrom = "", pulled = [], tabSwitch = false;
+/** Where a found booking will go: the trip it was sent to, else the trip being added to, else the trip its dates fall in. */
+const pageTrip = () => (route().q.get("trip") ? Number(route().q.get("trip")) : null);
+const intoTrip = (b) => b.tripId ?? pageTrip() ?? tripGuess(b);
+const suggestTrip = (b) => { const id = b.tripId ?? (pageTrip() ? null : tripGuess(b)); return id ? tripById(id) : null; };
 /** A suggestion (from the email reader or kos-parse.js) as the booking API's fields. */
 function asItem(b, tripId) {
   const out = { kind: b.kind, trip_id: tripId ?? null, name: b.name ?? null, confirmation: b.confirmation ?? null, guest: b.guest ?? null,
@@ -1002,7 +1025,10 @@ async function render() {
   if (parts[0] === "import") {                                 // a shared trip's link: a preview, then Add
     const code = (location.hash.match(/[?&]t=([^&]+)/) ?? [])[1];
     if (code) { history.replaceState(null, "", "#/import"); try { pendingShare = await readShare(`t=${code}`); } catch (e) { pendingShare = { error: e.message }; } }
-    app.innerHTML = importView(pendingShare); return;
+    app.innerHTML = importView(pendingShare);
+    const pt = previewTrip(pendingShare);
+    if (pt) { mapKey = ""; showMap(pt); applyPhotos(); }
+    return;
   }
   if (parts[0] === "place") {
     const t = tripById(Number(q.get("trip")));
@@ -1072,7 +1098,12 @@ app.addEventListener("click", async (ev) => {
   const err = (m) => { const box = app.querySelector("#formErr, #sugErr"); if (box) box.textContent = m; else alert(m); };
   try {
     if (at("[data-tab]")) { const id = route().parts[1]; location.hash = `#/trip/${id}${at("[data-tab]").dataset.tab ? `/${at("[data-tab]").dataset.tab}` : ""}`; return; }
-    if (at("[data-ics]")) { ics(itemById(Number(at("[data-ics]").dataset.ics))); return; }
+    if (at("[data-ics]")) { const id = Number(at("[data-ics]").dataset.ics); ics(id < 0 ? previewTrip(pendingShare)?.items.find((x) => x.id === id) : itemById(id)); return; }
+    if (at(".preview [data-item]")) {                               // a shared trip's preview: show it on the map, never open it
+      const i = previewTrip(pendingShare)?.items.find((x) => x.id === Number(at("[data-item]").dataset.item));
+      if (map && i && Number.isFinite(i.lat) && Number.isFinite(i.lon)) focus(map, i.lon, i.lat);
+      return;
+    }
     if (at("button.item[data-item]")) {
       // Wanderlog: the first tap shows it on the map, a second opens it; no place on the map opens it at once
       const id = Number(at("[data-item]").dataset.item), i = itemById(id);
@@ -1162,8 +1193,9 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at("[data-paste-shared]")) {
-      try { pendingShare = await readShare(app.querySelector("#sharedPaste").value); location.hash = "#/import"; render(); }
-      catch (e2) { app.querySelector("#formErr").textContent = e2.message; }
+      const box = at("[data-paste-shared]").closest(".card");
+      try { pendingShare = await readShare(box.querySelector("#sharedPaste").value); location.hash = "#/import"; render(); }
+      catch (e2) { (box.querySelector(".err") ?? app.querySelector("#formErr")).textContent = e2.message; }
       return;
     }
     if (at("[data-backup]")) {
@@ -1184,7 +1216,7 @@ app.addEventListener("click", async (ev) => {
       location.href = "/sub-scan?for=kos"; return;
     }
     if (at("[data-use]")) {
-      const b = found[Number(at("[data-use]").dataset.use)], tripId = Number(app.querySelector("[name=trip_id]")?.value) || null;
+      const b = found[Number(at("[data-use]").dataset.use)], tripId = b.tripId ?? (Number(app.querySelector("[name=trip_id]")?.value) || tripGuess(b));
       draft = { ...asItem(b, tripId), source: foundFrom === "paste" ? "paste" : foundFrom, source_sha256: b.sha256 ?? null };
       document.getElementById("formBox").innerHTML = itemForm(draft, tripId);
       loadPrograms();
@@ -1192,12 +1224,11 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at("[data-add-now]") || at("[data-add-all]")) {
-      const tripId = route().q.get("trip") ? Number(route().q.get("trip")) : null;
       const list = at("[data-add-all]") ? found : [found[Number(at("[data-add-now]").dataset.addNow)]];
-      // a booking sent to a trip's own address goes in that trip; the rest in the trip being added to, if any
-      for (const b of list) await store.saveItem(null, { ...asItem(b, b.tripId ?? tripId), source: "email", source_sha256: b.sha256 ?? null });
+      // a booking sent to a trip's own address goes in that trip; the rest in the trip being added to, else the one its dates fall in
+      for (const b of list) await store.saveItem(null, { ...asItem(b, intoTrip(b)), source: "email", source_sha256: b.sha256 ?? null });
       if (foundFrom === "gmail") gmail.markSeen(list.map((b) => b.msgId).filter(Boolean));
-      const into = [...new Set(list.map((b) => b.tripId ?? tripId))];
+      const into = [...new Set(list.map(intoTrip))];
       data = null; draft = null; found = [];
       location.hash = into.length === 1 && into[0] ? `#/trip/${into[0]}` : "#/";
       return;
@@ -1300,6 +1331,7 @@ document.getElementById("themeBtn").addEventListener("click", () => {
   const { parts } = route();
   if (parts[0] === "trip" && parts[1] && parts[2] === "journal") journalMap(tripById(Number(parts[1])));   // its light or dark map
   else if (parts[0] === "trip" && parts[1] && parts[2] !== "edit") { mapKey = ""; showMap(tripById(Number(parts[1])), parts[2] ?? ""); }
+  else if (parts[0] === "import" && previewTrip(pendingShare)) { mapKey = ""; showMap(previewTrip(pendingShare)); }
 });
 if (MODE === "device") {
   document.getElementById("mintyLink").hidden = true;

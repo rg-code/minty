@@ -123,6 +123,19 @@ export const isWikimediaImage = (u) => /^https:\/\/(upload|thumb)\.wikimedia\.or
 // --- backups (Kos on its own, docs/trips.md §17.5): when to remind ------------------------------------
 /** Whether to show the backup reminder: trips of one's own, last backed up (or, never, the oldest of
  * them made) more than 30 days ago, and not snoozed. Times in ms. */
+/** The trip a booking on `day` (YYYY-MM-DD) belongs to, from the trips' dates: the one trip that covers it,
+ * else the one starting the next day (the flight out the night before). Two trips that both fit: none, the
+ * person picks (docs/trips.md §21.1). */
+export function tripFor(day, trips) {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(day ?? "")) return null;
+  day = day.slice(0, 10);
+  const inside = trips.filter((t) => t.start_date <= day && day <= t.end_date);
+  if (inside.length) return inside.length === 1 ? inside[0] : null;
+  const next = new Date(day + "T00:00:00Z"); next.setUTCDate(next.getUTCDate() + 1);
+  const eve = trips.filter((t) => t.start_date === next.toISOString().slice(0, 10));
+  return eve.length === 1 ? eve[0] : null;
+}
+
 export function backupDue({ now, backedUp, oldestOwn, snoozedUntil }) {
   if (!oldestOwn) return false;
   if (snoozedUntil && now < snoozedUntil) return false;
