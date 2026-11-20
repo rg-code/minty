@@ -1,6 +1,6 @@
 # Plan: JET, trips (a Flighty and Wanderlog hybrid)
 
-**Status: J1 built (2026-11-19): the JET app at `/jet/` (§16), with T1, T3, T6a and T6b. T0 started: the owner runs `scripts/jet-t0/`; T2, T5, T6c and T7 follow its results.** Its
+**Status: J1 built (2026-11-19): the JET app at `/jet/` (§16), with T1, T3, T6a and T6b, and JET on its own (§17). T0 started: the owner runs `scripts/jet-t0/`; T2, T5, T6c and T7 follow its results.** Its
 inbox (§2) also serves Bills. Named **JET** (owner, 2026-11-19).
 
 A trip view built from the household's bookings:
@@ -578,4 +578,49 @@ JET's own:
 - T6c: live status through AeroAPI;
 - T7: the timeline;
 - T4: BAM's pending changes.
+
+## 17. JET on its own (option B, built 2026-11-19)
+
+**Owner's question:** what about someone who wants JET but doesn't have Minty? Of the three options
+(Minty without banks; JET in the browser alone; JET as its own Cloudflare app), the owner chose
+**B: JET in the browser**, with no setup at all.
+
+**One app, two places** (`public/jet/store.js`, chosen by `public/jet/mode.js`):
+
+| | **On a Minty** (`/jet/`, mode `minty`) | **On its own** (mode `device`) |
+|---|---|---|
+| Trips and bookings | Minty's API, on its D1 | IndexedDB in this browser (database `jet`) |
+| Email files | read by the Worker (`POST /trips/read-email`) | read in the browser by the same code (`src/jet/` with its types stripped, `jet/mail/`) |
+| The trip's spending | yes | no (no transactions); the tab isn't shown |
+| Travellers, BAM's programs | from `MINTY_USERS`, `/points` | none |
+| Gmail inbox, Immich, live status (later) | yes | no: each needs a server |
+
+- **Both stores answer the same calls,** with the same shapes as Minty's API, so `jet.js` doesn't
+  care which it has.
+- **The device store checks fields** as the server does (`checkTrip`, `checkItem`).
+- **The map, the flight cards, the itinerary, paste, PDF and screenshot** work the same in both.
+
+**Your data** (`#/data`, in both modes):
+- **Export** writes every trip and booking to a JSON file (`app: "JET"`, `version: 1`).
+- **Import** reads one back, re-tying bookings to their trips. It's how trips move between
+  devices, and from JET on its own into a Minty.
+- On its own, JET asks the browser to keep its data (`navigator.storage.persist()`). The page says
+  that clearing the site's data loses the trips, and to export now and then.
+
+**Building and hosting:**
+- `node scripts/build-jet.mjs --out <dir>` writes:
+  - `jet/`, with `mode.js` set to `device`, the email reader in `jet/mail/` (types stripped by
+    Node's `stripTypeScriptTypes`), and those files in the service worker's shell;
+  - `vendor/` (MapLibre, pdf.js, Tesseract);
+  - the files JET loads from the root (the screenshot reader, `pdf-read.js`, `lock.js`, `theme.js`);
+  - `_headers.jet`: the same security policy as `public/_headers` gives those paths on a Minty.
+- **Hosted on the landing site,** `minty.milesmaximizer.com/jet/`. Its `deploy.mjs` runs the build
+  after the demo's and installs `_headers`, the same as the demo is built from this repo.
+  Nothing is committed there.
+
+**Fixed along the way:**
+- `pdf-read.js` found pdf.js relative to the page. From `/jet/` that pointed at `/jet/vendor/…`, so
+  reading a PDF in JET was broken on a Minty too. It now resolves relative to its own file.
+- **A JET bug:** saving a booking from a pasted suggestion did nothing. The form has a
+  `data-source` attribute, so a click on it also hit the source tabs, which re-rendered the page.
 

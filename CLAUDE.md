@@ -177,7 +177,10 @@ Design history and decisions: `docs/serverless-plan.md`.
   is the one route past the 16 KiB body cap (2 MB), reads an `.eml` with `src/jet/` and stores
   nothing. The map is vendored MapLibre (CSP build) on OpenFreeMap's tiles: only `/jet/*` and
   `/vendor/maplibre/*` may reach `tiles.openfreemap.org`. Its look follows Flighty (flights, theme,
-  map) and Wanderlog (trips).
+  map) and Wanderlog (trips). It also runs on its own (§17): `public/jet/store.js` is the only
+  thing that knows where trips live (Minty's API, or IndexedDB when `mode.js` says `device`);
+  `scripts/build-jet.mjs` builds that for the landing site. Keep both stores answering the same
+  calls, and `src/jet/` free of runtime imports (the build strips its types for the browser).
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

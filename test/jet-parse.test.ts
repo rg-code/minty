@@ -36,6 +36,12 @@ describe("parseBookings", () => {
       confirmation: "88213345", price_cents: 8800000, currency: "JPY" })]);
   });
 
+  it("a confirmation code is a code, not the word after 'booking'", () => {
+    expect(parseBookings("TAP TP 238 EWR → LIS May 1, 2027 9:20 PM 9:40 AM. Booking reference: ABC1234").bookings[0].confirmation).toBe("ABC1234");
+    expect(parseBookings("UA 837 SFO → NRT Mar 10 2027 11:05. Confirmation QXRTAB").bookings[0].confirmation).toBe("QXRTAB");
+    expect(parseBookings("UA 837 SFO → NRT Mar 10 2027 11:05. Your booking details").bookings[0].confirmation).toBe(null);
+  });
+
   it("finds nothing in text without a booking, and never guesses", () => {
     expect(parseBookings("Lovely to see you last week. See you in March!").bookings).toEqual([]);
   });

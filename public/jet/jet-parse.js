@@ -36,7 +36,9 @@ export function times(text) {
 }
 
 const after = (list, i) => list.find((x) => x.index >= i);
-const CONF = /\b(?:confirmation|booking|record locator|reservation|pnr)(?:\s+(?:number|code|no\.?|#))?\s*[:#]?\s*([A-Z0-9]{5,10})\b/i;
+const CONF = /\b(?:confirmation|booking|record locator|reservation|pnr)(?:\s+(?:number|code|no\.?|#|reference|ref\.?))?\s*[:#]?\s*([A-Za-z0-9]{5,10})\b/gi;
+// a code has a digit, or is six capitals (an airline's record locator), as written: "reference" isn't one
+const isCode = (c) => /^(?=.*\d)[A-Z0-9]{5,10}$/.test(c) || /^[A-Z]{6}$/.test(c);
 const TOTAL = /\b(?:total|amount paid|grand total|total price)\b[^$€£¥\d]{0,20}([$€£¥])\s?([\d,]+(?:\.\d{2})?)|\b(?:total|amount paid)\b[^\d]{0,20}([\d,]+(?:\.\d{2})?)\s?(USD|EUR|GBP|JPY|CAD|AUD)\b/i;
 const SYMBOL = { "$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY" };
 
@@ -47,7 +49,7 @@ export function parseBookings(raw, { year, isAirport = () => true } = {}) {
   const text = tidy(raw);
   const all = { dates: dates(text, year), times: times(text) };
   const bookings = [];
-  const conf = CONF.exec(text)?.[1]?.toUpperCase() ?? null;
+  const conf = [...text.matchAll(CONF)].map((m) => m[1]).find(isCode) ?? null;
   const total = TOTAL.exec(text);
   const price = total ? { price_cents: Math.round(Number((total[2] ?? total[3]).replace(/,/g, "")) * 100), currency: total[1] ? SYMBOL[total[1]] : total[4].toUpperCase() } : {};
 

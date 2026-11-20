@@ -2,8 +2,8 @@
 // own static files (and the vendored map library), network first so updates land at once. API
 // responses (trips, bookings, transactions) and map tiles are never cached: they always go to the
 // network (the API behind Cloudflare Access). A redirect (the Access sign-in) is never cached.
-const CACHE = "jet-v1";
-const SHELL = ["/jet/", "/jet/jet.js", "/jet/jet.css", "/jet/map.js", "/jet/map-style.js", "/jet/jet-parse.js", "/jet/theme.js", "/jet/airports.json",
+const CACHE = "jet-v2";               // v2: store.js, mode.js (JET on its own)
+const SHELL = ["/jet/", "/jet/jet.js", "/jet/jet.css", "/jet/map.js", "/jet/map-style.js", "/jet/jet-parse.js", "/jet/theme.js", "/jet/mode.js", "/jet/store.js", "/jet/airports.json",
                "/jet/manifest.webmanifest", "/jet/icon.svg", "/jet/icon-192.png", "/jet/icon-512.png", "/jet/apple-touch-icon.png",
                "/vendor/maplibre/maplibre-gl-csp.js", "/vendor/maplibre/maplibre-gl-csp-worker.js", "/vendor/maplibre/maplibre-gl.css",
                "/lock.js", "/lock.css", "/pdf-read.js"];

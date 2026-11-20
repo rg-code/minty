@@ -6,6 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
+import { MODE, exportFile, importFile, keepData, store } from "./store.js";
 
 const app = document.getElementById("app");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -30,15 +31,10 @@ const CAT = { FOOD_AND_DRINK: "Food & drink", TRAVEL: "Travel", TRANSPORTATION: 
 
 let data = null, users = [], airports = {}, programs = null, map = null, mapKey = "", focused = null;
 
-async function api(method, path, body, raw) {
-  const r = await fetch(path, { method, headers: raw ? { "content-type": "message/rfc822" } : body ? { "content-type": "application/json" } : {},
-                                body: raw ?? (body ? JSON.stringify(body) : undefined) });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.detail || `${r.status}`);
-  return d;
-}
+// Trips and bookings come from the store (store.js): Minty's API at /jet/ on a Minty, this
+// browser's IndexedDB when JET runs on its own.
 async function load() {
-  const [t, u, a] = await Promise.all([api("GET", "/trips"), api("GET", "/users").catch(() => []), loadAirports()]);
+  const [t, u, a] = await Promise.all([store.list(), store.users(), loadAirports()]);
   data = t; users = Array.isArray(u) ? u : []; airports = a;
 }
 const label = (k) => users.find((u) => u.key === k)?.label ?? k;
@@ -138,7 +134,7 @@ function entryHtml(e) {
 }
 function tripView(t, tab) {
   const p = plan(t);
-  const tabs = [["", "Itinerary"], ["flights", "Flights"], ["spending", "Spending"]];
+  const tabs = [["", "Itinerary"], ["flights", "Flights"], ...(store.spending ? [["spending", "Spending"]] : [])];
   const flights = t.items.filter((i) => i.kind === "flight").sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
   let body;
   if (tab === "flights") body = flights.length ? flights.map((f) => flightCard(f)).join("") : `<div class="card muted">No flights in this trip yet.</div>`;
@@ -204,7 +200,7 @@ async function showMap(t, tab = "") {
 async function spending(t) {
   const box = document.getElementById("spending");
   try {
-    const [s, rows] = await Promise.all([api("GET", `/trips/${t.id}/suggestions`), api("GET", `/transactions?trip_id=${t.id}&limit=1000`)]);
+    const [s, rows] = await Promise.all([store.suggestions(t.id), store.transactions(t.id)]);
     const out = rows.filter((r) => r.amount > 0), total = Math.round(out.reduce((a, r) => a + r.amount, 0) * 100);
     const byCat = {};
     for (const r of out) byCat[r.category ?? "OTHER"] = (byCat[r.category ?? "OTHER"] ?? 0) + Math.round(r.amount * 100);
@@ -288,7 +284,7 @@ function sourceBox(source) {
   if (source === "pdf") return `<div class="card"><p class="muted" style="margin-top:0">The PDF is read here, on this device; nothing is uploaded.</p><input type="file" accept="application/pdf,.pdf" id="pdfFile" /></div>`;
   if (source === "shot") return `<div class="card"><p class="muted" style="margin-top:0">A screenshot is read on this device too. On a phone, copying the text out of it (Live Text, Lens) and pasting is quickest.</p>
     <div class="actions"><button type="button" class="btn primary" data-scan>Read a screenshot</button></div></div>`;
-  if (source === "email") return `<div class="card"><p class="muted" style="margin-top:0">An email file (in Gmail: open the email → ⋮ → Download message). Minty reads its booking details and keeps nothing until you add them.</p><input type="file" accept=".eml,message/rfc822" id="emlFile" /></div>`;
+  if (source === "email") return `<div class="card"><p class="muted" style="margin-top:0">An email file (in Gmail: open the email → ⋮ → Download message). ${MODE === "device" ? "It's read here, on this device" : "Minty reads its booking details"}, and nothing is kept until you add them.</p><input type="file" accept=".eml,message/rfc822" id="emlFile" /></div>`;
   return "";
 }
 function suggestionsHtml(list, from) {
@@ -351,6 +347,27 @@ function ics(f) {
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+// --- your data: export and import (both modes; how device-only trips move into a Minty) --------
+function dataView() {
+  const n = data.trips.length, b = data.trips.reduce((s, t) => s + t.items.length, 0) + data.unassigned.length;
+  return `<div class="section-title"><h2>Your data</h2></div>
+    <div class="card">${MODE === "device"
+      ? `<p style="margin-top:0"><b>JET on its own.</b> Your trips are kept in this browser on this device, and nothing is sent anywhere. The map's tiles come from OpenFreeMap.</p>
+         <p class="muted">Clearing this site's data, or a private window, loses them. Export a copy now and then. To use JET on another device, export here and import there.</p>
+         <p class="muted">With a <a href="https://minty.milesmaximizer.com/">Minty</a> of your own, JET also shows each trip's spending, and an import brings these trips across.</p>`
+      : `<p style="margin-top:0"><b>JET on your Minty.</b> Trips are kept in your Minty's database. Import brings in trips exported from JET on another device or from JET on its own.</p>`}
+      <p class="muted">${n} trip${n === 1 ? "" : "s"} and ${b} booking${b === 1 ? "" : "s"} here.</p>
+      <div class="actions"><button type="button" class="btn primary" data-export>Export (a JSON file)</button>
+        <label class="btn">Import…<input type="file" accept="application/json,.json" id="importFile" hidden /></label><span class="err" id="formErr"></span></div></div>`;
+}
+async function doImport(file) {
+  const parsed = importFile(JSON.parse(await file.text()));
+  const ids = new Map();
+  for (const { old, trip } of parsed.trips) ids.set(old, (await store.saveTrip(null, trip)).id);
+  for (const { oldTrip, item } of parsed.items) await store.saveItem(null, { ...item, trip_id: oldTrip !== null && ids.has(oldTrip) ? ids.get(oldTrip) : null });
+  return { trips: parsed.trips.length, items: parsed.items.length };
+}
+
 // --- routing ------------------------------------------------------------------------------------
 function route() {
   const [path, query] = location.hash.replace(/^#/, "").split("?");
@@ -372,6 +389,7 @@ async function render() {
     return;
   }
   if (parts[0] === "new") { app.innerHTML = tripForm(null, (q.get("items") ?? "").split(",").filter(Boolean)); return; }
+  if (parts[0] === "data") { app.innerHTML = dataView(); return; }
   if (parts[0] === "item" && parts[1]) {
     const i = itemById(Number(parts[1]));
     app.innerHTML = i ? `<div class="section-title"><h2>${esc(itemTitle(i))}</h2></div>${i.kind === "flight" ? `<div style="margin-bottom:14px">${flightCard(i)}</div>` : ""}${itemForm(i, i.trip_id)}` : `<p class="pad muted center">That booking isn't here any more.</p>`;
@@ -393,7 +411,7 @@ async function render() {
   app.innerHTML = home();
 }
 async function loadPrograms() {
-  if (!programs) { try { programs = (await api("GET", "/points")).programs ?? []; } catch { programs = []; } }
+  if (!programs) programs = await store.programs();
   for (const sel of app.querySelectorAll("[data-programs]")) {
     const cur = sel.value;
     sel.innerHTML = `<option value="">—</option>${programs.map((p) => `<option value="${esc(p.id)}"${cur === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("")}`;
@@ -416,12 +434,18 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-export]")) {
+      const file = new Blob([JSON.stringify(exportFile(data), null, 1)], { type: "application/json" });
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(file), download: `jet-trips-${localDay()}.json` });
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      return;
+    }
     if (at("[data-make-trip]")) {
       const ids = [...app.querySelectorAll("[data-pick]:checked")].map((x) => x.dataset.pick);
       if (!ids.length) { alert("Tick the bookings to put in the trip first."); return; }
       location.hash = `#/new?items=${ids.join(",")}`; return;
     }
-    if (at("[data-source]")) { source = at("[data-source]").dataset.source; draft = null; render(); return; }
+    if (at("button[data-source]")) { source = at("button[data-source]").dataset.source; draft = null; render(); return; }   // the source tabs (the form has a data-source too)
     if (at("[data-read-paste]")) { await readText(document.getElementById("pasteText").value, "paste"); return; }
     if (at("[data-scan]")) {
       try { sessionStorage.setItem("minty.jet.scan", JSON.stringify({ trip: route().q.get("trip") ? Number(route().q.get("trip")) : null })); } catch { /* private window */ }
@@ -438,7 +462,7 @@ app.addEventListener("click", async (ev) => {
     if (at("[data-add-now]") || at("[data-add-all]")) {
       const tripId = route().q.get("trip") ? Number(route().q.get("trip")) : null;
       const list = at("[data-add-all]") ? found : [found[Number(at("[data-add-now]").dataset.addNow)]];
-      for (const b of list) await api("POST", "/trips/items", { ...asItem(b, tripId), source: "email", source_sha256: b.sha256 ?? null });
+      for (const b of list) await store.saveItem(null, { ...asItem(b, tripId), source: "email", source_sha256: b.sha256 ?? null });
       data = null; draft = null; found = [];
       location.hash = tripId ? `#/trip/${tripId}` : "#/";
       return;
@@ -446,22 +470,22 @@ app.addEventListener("click", async (ev) => {
     if (at("[data-del-item]")) {
       if (!confirm("Delete this booking?")) return;
       const i = itemById(Number(at("[data-del-item]").dataset.delItem));
-      await api("DELETE", `/trips/items/${i.id}`); data = null; location.hash = i.trip_id ? `#/trip/${i.trip_id}` : "#/"; return;
+      await store.deleteItem(i.id); data = null; location.hash = i.trip_id ? `#/trip/${i.trip_id}` : "#/"; return;
     }
     if (at("[data-del-trip]")) {
       if (!confirm("Delete this trip? Its bookings stay, waiting for a trip.")) return;
-      await api("DELETE", `/trips/${at("[data-del-trip]").dataset.delTrip}`); data = null; location.hash = "#/"; return;
+      await store.deleteTrip(Number(at("[data-del-trip]").dataset.delTrip)); data = null; location.hash = "#/"; return;
     }
     const sugIds = () => [...app.querySelectorAll("[data-sug]:checked")].map((x) => Number(x.dataset.sug));
     if (at("[data-sug-add]") || at("[data-sug-dismiss]")) {
       const id = Number(route().parts[1]), ids = sugIds();
       if (!ids.length) return;
-      await api("POST", `/trips/${id}/transactions`, at("[data-sug-add]") ? { confirm: ids } : { dismiss: ids });
+      await store.link(id, at("[data-sug-add]") ? { confirm: ids } : { dismiss: ids });
       data = null; await load(); spending(tripById(id)); return;
     }
     if (at("[data-unlink]")) {
       const id = Number(route().parts[1]);
-      await api("POST", `/trips/${id}/transactions`, { remove: [Number(at("[data-unlink]").dataset.unlink)] });
+      await store.link(id, { remove: [Number(at("[data-unlink]").dataset.unlink)] });
       data = null; await load(); spending(tripById(id)); return;
     }
   } catch (e) { err(e.message); }
@@ -475,6 +499,15 @@ app.addEventListener("change", async (ev) => {
     f.querySelector("[data-start-label]").textContent = k === "lodging" ? "Check in" : k === "flight" ? "Departs" : "Starts";
     f.querySelector("[data-end-label]").textContent = k === "lodging" ? "Check out" : k === "flight" ? "Arrives" : "Ends";
   }
+  if (t.id === "importFile" && t.files.length) {
+    try {
+      const n = await doImport(t.files[0]);
+      data = null; await load(); app.innerHTML = dataView();
+      app.querySelector("#formErr").textContent = "";
+      app.querySelector(".card").insertAdjacentHTML("beforeend", `<p class="pill good" style="margin-top:12px">Imported ${n.trips} trip${n.trips === 1 ? "" : "s"} and ${n.items} booking${n.items === 1 ? "" : "s"}.</p>`);
+    } catch (e) { app.querySelector("#formErr").textContent = e.message; }
+    return;
+  }
   if (t.id === "pdfFile" && t.files.length) {
     const { readPdfs } = await import("/pdf-read.js");
     const { rows } = await readPdfs(t.files, { view: "jet", known: async () => [], parse: (text) => ({ text }), max: 1 });
@@ -486,7 +519,7 @@ app.addEventListener("change", async (ev) => {
     const box = document.getElementById("suggestBox");
     box.innerHTML = `<div class="suggest muted">Reading…</div>`;
     try {
-      const r = await api("POST", "/trips/read-email", null, await t.files[0].arrayBuffer());
+      const r = await store.readEmail(await t.files[0].arrayBuffer());
       found = r.bookings.map((b) => ({ ...b, sha256: r.sha256 }));
       foundFrom = "email";
       box.innerHTML = r.bookings.length ? suggestionsHtml(found, "email")
@@ -503,12 +536,12 @@ app.addEventListener("submit", async (ev) => {
       const body = { name: e.name.value, start_date: e.start_date.value, end_date: e.end_date.value, place: e.place.value, notes: e.notes.value,
                      travellers: [...f.querySelectorAll("[name=trav]:checked")].map((x) => x.value) };
       if (!f.dataset.id && f.dataset.items) body.items = f.dataset.items.split(",").map(Number);
-      const r = f.dataset.id ? await api("PUT", `/trips/${f.dataset.id}`, body) : await api("POST", "/trips", body);
+      const r = await store.saveTrip(f.dataset.id ? Number(f.dataset.id) : null, body);
       data = null; location.hash = `#/trip/${r.id}`; return;
     }
     if (f.id === "itemForm") {
       const body = await itemBody(f);
-      const r = f.dataset.id ? await api("PUT", `/trips/items/${f.dataset.id}`, body) : await api("POST", "/trips/items", body);
+      const r = await store.saveItem(f.dataset.id ? Number(f.dataset.id) : null, body);
       data = null; draft = null; found = [];
       location.hash = body.trip_id ? `#/trip/${body.trip_id}` : r.id ? "#/" : "#/";
     }
@@ -522,5 +555,9 @@ document.getElementById("themeBtn").addEventListener("click", () => {
   const { parts } = route();
   if (parts[0] === "trip" && parts[1] && parts[2] !== "edit") { mapKey = ""; showMap(tripById(Number(parts[1])), parts[2] ?? ""); }
 });
+if (MODE === "device") {
+  document.getElementById("mintyLink").hidden = true;
+  keepData();                                              // ask the browser to keep the trips when space runs low
+}
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/jet/sw.js", { scope: "/jet/" }).catch(() => {});
 render();
