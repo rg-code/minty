@@ -31,7 +31,12 @@ describe("the page", () => {
     const m = await (await raw("/kos/manifest.webmanifest")).json() as any;
     expect(m).toMatchObject({ id: "/kos/", start_url: "/kos/", scope: "/kos/", name: "Kos" });
     const sw = await (await raw("/kos/sw.js")).text();
-    expect(sw).toContain('const CACHE = "kos-v1"');
+    expect(sw).toContain('const CACHE = "kos-v2"');
+    // its icon (the owner's, 2026-11-20): PNGs only, the old SVG gone
+    expect(html).toContain('<link rel="icon" href="/kos/icon-64.png" type="image/png" />');
+    expect(m.icons.map((i: any) => i.src)).toEqual(["/kos/icon-192.png", "/kos/icon-512.png", "/kos/maskable-512.png"]);
+    for (const f of ["icon-64.png", "icon-192.png", "icon-512.png", "maskable-512.png", "apple-touch-icon.png"]) expect((await raw(`/kos/${f}`)).headers.get("content-type"), f).toContain("image/png");
+    expect((await raw("/kos/icon.svg")).status).toBe(404);
     expect(sw).toContain('"/kos/gmail.js"');
     // Share to Kos (Android's share menu, once installed): sw.js takes the POST and keeps it on the device
     expect(m.share_target).toMatchObject({ action: "/kos/share", method: "POST", enctype: "multipart/form-data" });
@@ -83,6 +88,19 @@ describe("Kos was JET (until 2026-11-20)", () => {
     carryOverOldNames(ls);
     expect(Object.fromEntries(m)).toEqual({ "kos-gmail": "{\"url\":1}", "kos-gmail-seen": "[\"m1\"]", "kos-sample": "new" });   // a newer kos- one wins
     expect(importFile({ app: "JET", version: 1, trips: [], items: [] })).toEqual({ trips: [], items: [] });
+  });
+});
+
+describe("Kos on its own: set-up first, the device lock last (docs/trips.md §17.4)", () => {
+  it("lock.js says Kos and trips there, and never offers itself on arrival; Minty's offer is unchanged", async () => {
+    const js = await (await SELF.fetch("https://minty.example.workers.dev/lock.js")).text();
+    expect(js).toContain('const KOS = window.KOS_MODE === "device";');
+    expect(js).toContain('if (KOS && !(st && st.state === "on")) return;');
+    expect(js).toContain("Lock Kos on this device?");
+    expect(js).toContain('show(st && st.state === "on" ? "unlock" : "setup")');            // Minty: unset = offer it
+    const kos = await (await SELF.fetch("https://minty.example.workers.dev/kos/kos.js")).text();
+    expect(kos).toContain("Welcome to Kos");
+    expect(kos).toContain("Last: lock Kos on this device.");
   });
 });
 

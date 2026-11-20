@@ -195,7 +195,8 @@ Design history and decisions: `docs/serverless-plan.md`.
   10 ms of CPU.
 - Device lock (`public/lock.js`, `lock.css`, loaded at the end of `<head>` on every page with
   data): WebAuthn with a passkey on the device, on by default where the device has a built-in
-  authenticator, and never locking anyone out where it hasn't. A visibility gate only: it never
+  authenticator, and never locking anyone out where it hasn't. On Kos on its own (`KOS_MODE` "device") it's
+  never offered on arrival: Kos's set-up offers it as the last step (`docs/trips.md` §17.4). A visibility gate only: it never
   calls the Worker or stores anything in D1. The live demo strips it (`scripts/build-demo.mjs`).
 - Installable app (`public/manifest.webmanifest`, `public/sw.js`): the manifest link needs
   `crossorigin="use-credentials"` or Access answers it with the sign-in page. The service worker

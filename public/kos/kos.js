@@ -96,7 +96,11 @@ function home() {
       ${t.transactions ? `<span class="pill dim">${money(t.spent_cents)} spent</span>` : ""}</div></a>`;
   const sample = MODE === "device" && sampleIds();
   const empty = !data.trips.length && !data.unassigned.length;
-  return `${sample ? `<div class="card sample-note"><span class="grow"><b>Sample trips.</b> Made up, to show what Kos does: open one, look at its flights and map, change anything. They're only in this browser.</span><button type="button" class="btn small" data-sample-remove>Remove them</button></div>` : ""}
+  if (MODE === "device" && empty) return welcome();                  // a newcomer: how to set Kos up
+  // the device lock's offer, once there are trips of the person's own (not only the sample's)
+  const own = [...data.trips.map((t) => ["trips", t.id]), ...data.unassigned.map((i) => ["items", i.id])].some(([k, id]) => !(sample?.[k] ?? []).includes(id));
+  return `${sample ? `<div class="card sample-note"><span class="grow"><b>Sample trips.</b> Made up, to show what Kos does: open one, look at its flights and map, change anything. They're only in this browser.
+      Start your own with <a href="#/new">New trip</a> or <a href="#/add">Add a booking</a>.</span><button type="button" class="btn small" data-sample-remove>Remove them</button></div>` : ""}
     ${flights.length ? `<div class="section-title"><h2>Next flight</h2><span class="muted">${flights.length > 1 ? `${flights.length - 1} more after it` : ""}</span></div>
       <div class="hero">${flightCard(flights[0], { countdown: true })}</div>` : ""}
     <div class="section-title"><h2>Trips</h2><a class="btn small" href="#/new">New trip</a></div>
@@ -106,7 +110,38 @@ function home() {
       <div class="list">${data.unassigned.map((i) => `<label class="row"><input type="checkbox" data-pick="${i.id}" /><span class="grow"><b>${esc(itemTitle(i))}</b><span class="muted">${esc(KIND[i.kind])} · ${esc(fmtDay(dateOf(i.start_at)) || "no date")}</span></span><a href="#/item/${i.id}" class="btn small ghost">Edit</a></label>`).join("")}</div>
       <div class="actions"><button type="button" class="btn primary" data-make-trip>Make a trip from the ticked ones</button></div>` : ""}
     ${past.length ? `<div class="section-title"><h2>Past trips</h2></div><div class="trips">${past.map(tripCard).join("")}</div>` : ""}
+    ${MODE === "device" && own ? `<div id="lockLater"></div>` : ""}
     <a class="fab" href="#/add" aria-label="Add a booking" title="Add a booking">+</a>`;
+}
+
+// --- Kos on its own: the first screen, and the device lock as the last step (docs/trips.md §17.4) ----
+function welcome() {
+  return `<section class="card welcome"><h2>Welcome to Kos</h2>
+    <p class="muted">Your trips, their flights and a map, kept in this browser. No account, and nothing is sent anywhere (the map's tiles come from OpenFreeMap).</p>
+    <ol class="steps">
+      <li><b>Add a trip, or a booking.</b> Type it in, paste a confirmation, or read a PDF or an email file; bookings without a trip wait until you make one.
+        <div class="actions"><a class="btn primary" href="#/new">New trip</a><a class="btn" href="#/add">Add a booking</a><button type="button" class="btn ghost" data-sample>Try a sample trip</button><span class="err" id="sampleErr"></span></div></li>
+      <li><b>Bookings from your email.</b> Forward confirmations to your Gmail with <b>+kos</b> in the address, and Kos reads them, on your phone too. <a href="#/gmail">Set up Gmail</a>. Once Kos is installed on Android, you can also share a PDF or a screenshot to it.</li>
+      <li><b>Put Kos on your home screen.</b> iPhone: Safari's Share button → <b>Add to Home Screen</b>. Android: Chrome's ⋮ menu → <b>Install app</b>.
+        <div class="actions" id="installRow" hidden><button type="button" class="btn" data-install>Install Kos</button></div></li>
+      <li id="lockStep"><b>Last: lock Kos on this device.</b> <span class="muted">Checking what this device can do…</span></li>
+    </ol>
+    <p class="muted" style="margin-bottom:0">Trips stay in this browser only: export a copy now and then (the database icon at the top, then Your data).</p></section>`;
+}
+let installPrompt = null;
+addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installPrompt = e; const r = document.getElementById("installRow"); if (r) r.hidden = false; });
+/** The lock's step in the set-up, or its card on the home screen once there are trips: what this
+ * device can do, and Turn on / Not on this device (public/lock.js, MintyLock). */
+async function lockOffer() {
+  const step = document.getElementById("lockStep"), later = document.getElementById("lockLater");
+  if (!(step || later) || !window.MintyLock) return;
+  const st = await window.MintyLock.status();
+  const buttons = `<div class="actions"><button type="button" class="btn primary" data-lock-on>Turn on</button><button type="button" class="btn ghost" data-lock-off>Not on this device</button><span class="err" id="lockErr"></span></div>`;
+  const why = "Face ID, your fingerprint or this device's screen lock before Kos shows your trips here. Nothing leaves the device.";
+  if (step) step.innerHTML = `<b>Last: lock Kos on this device.</b> ${st === "unavailable" ? `<span class="muted">This browser can't use Face ID, a fingerprint or a screen lock here, so there's nothing to turn on.</span>`
+    : st === "on" ? `<span class="muted">On: Kos asks before it shows your trips.</span>` : st === "off" ? `<span class="muted">Off on this device.</span><div class="actions"><button type="button" class="btn" data-lock-on>Turn on</button></div>`
+    : `Ask for ${why}${buttons}`}`;
+  if (later) later.innerHTML = st === "unset" ? `<div class="card lock-later"><b>Last step: lock Kos on this device?</b> <span class="muted">Ask for ${why}</span>${buttons}</div>` : "";
 }
 const itemTitle = (i) => i.kind === "flight" ? [[i.airline, i.flight_number].filter(Boolean).join(" "), [i.dep_airport, i.arr_airport].filter(Boolean).join(" → ")].filter(Boolean).join(" · ") || "Flight" : i.name || KIND[i.kind];
 
@@ -631,6 +666,7 @@ async function render() {
     return;
   }
   app.innerHTML = home();
+  lockOffer();
 }
 async function loadPrograms() {
   if (!programs) programs = await store.programs();
@@ -656,6 +692,12 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-lock-on]")) {
+      try { await window.MintyLock.turnOn(); } catch { const e2 = document.getElementById("lockErr"); if (e2) e2.textContent = "It wasn't turned on. Try again."; return; }
+      lockOffer(); return;
+    }
+    if (at("[data-lock-off]")) { window.MintyLock.notHere(); lockOffer(); return; }
+    if (at("[data-install]")) { if (installPrompt) { installPrompt.prompt(); installPrompt = null; document.getElementById("installRow").hidden = true; } return; }
     if (at("[data-sample]")) {
       at("[data-sample]").disabled = true;
       try { await loadSample(); data = null; await render(); } catch (e2) { at("[data-sample]").disabled = false; document.getElementById("sampleErr").textContent = e2.message; }
