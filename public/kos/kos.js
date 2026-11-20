@@ -223,7 +223,10 @@ function plan(t) {
     if (i.kind === "lodging" && dateOf(i.end_at) && dateOf(i.end_at) !== dateOf(i.start_at)) put(dateOf(i.end_at), { item: i, at: timeOf(i.end_at), role: "Check out", repeat: true });
   }
   for (const d of days) d.entries.sort((a, b) => (a.at || "99") < (b.at || "99") ? -1 : 1);
-  days.forEach((d, n) => { d.color = DAY_COLORS[n % DAY_COLORS.length]; let k = 0; for (const e of d.entries) e.n = ++k; });
+  // numbered across the whole trip, 1, 2, 3… (the map's dots carry the same numbers); a stay's
+  // check-out keeps its check-in's number
+  const num = new Map();
+  days.forEach((d, n) => { d.color = DAY_COLORS[n % DAY_COLORS.length]; for (const e of d.entries) { if (!e.repeat) num.set(e.item.id, num.size + 1); e.n = num.get(e.item.id); } });
   return { days, before, after, unscheduled };
 }
 function entryHtml(e) {
@@ -338,6 +341,9 @@ async function showMap(t, tab = "") {
   mapKey = key;
   if (!map) { note.hidden = false; note.textContent = "The map couldn't load here (it needs WebGL and OpenFreeMap's tiles). The plan is all here."; return; }
   const d = mapData(t);
+  // the places joined in the trip's order (the numbers), as on the journal's map
+  const seq = d.pins.filter((p) => p.num).sort((x, y) => Number(x.num) - Number(y.num));
+  if (seq.length > 1) d.paths = [{ coords: seq.map((p) => [p.lon, p.lat]), color: dark ? "#ffffff" : "#11162a" }];
   // pins take their day's colour (Wanderlog), flights the accent (Flighty)
   drawTrip(map, d, (id) => {
     const card = app.querySelector(`[data-item="${CSS.escape(id)}"]`);
@@ -480,7 +486,7 @@ async function journalMap(t) {
   const d = mapData(t);
   const paths = stops.length > 1 ? [{ coords: stops.map((p) => [p.lon, p.lat]), color: "#ffffff" }] : [];
   drawTrip(map, stops.length ? { arcs: d.arcs, pins: stops, paths: paths.map((x) => ({ ...x, color: dark ? "#ffffff" : "#11162a" })) } : d, null, stops.length ? "pins" : "all", dark);
-  el.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");   // the credits fold behind ⓘ; EOX's is also under the map
+  el.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");   // the credits fold behind ⓘ, and are also under the map
   mapKey = `journal:${t.id}`;
 }
 let noteTimers = {};

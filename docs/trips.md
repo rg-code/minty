@@ -842,7 +842,9 @@ too busy).
   whole trip, inside the dot, in its day's colour), joined by one line. It opens zoomed in on those
   places; the flights draw without widening it.
 - **The credit** (OpenFreeMap, OpenMapTiles, OpenStreetMap) is under the map, and in the map's ⓘ.
-- The itinerary's map numbers its places inside the dots too (per day, as Wanderlog does).
+- The itinerary numbers its places across the whole trip too (1, 2, 3…; a stay's check-out keeps its
+  check-in's number), inside the map's dots, and its map joins them in that order. Its rail is one
+  line from the first day to the last, in each day's colour.
 - **The trip's own map** (Itinerary, Flights, Lodging) stays OpenFreeMap's Liberty, a little quieter
   (`quietStyle`): no points of interest, buildings, road names or shields, minor streets, footpaths,
   tunnels or state names, and soft grey roads in light. The main roads, rail, parks, water and place
