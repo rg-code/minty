@@ -101,7 +101,8 @@ describe("Kos on its own: set-up first, the device lock last (docs/trips.md §17
     expect(js).toContain("Lock Kos on this device?");
     expect(js).toContain('show(st && st.state === "on" ? "unlock" : "setup")');            // Minty: unset = offer it
     const kos = await (await SELF.fetch("https://minty.example.workers.dev/kos/kos.js")).text();
-    expect(kos).toContain("Welcome to Kos");
+    expect(kos).toContain(`<section class="welcome">`);                                     // a newcomer's first screen
+    expect(kos).toContain("Set it up in four steps");
     expect(kos).toContain("Last: lock Kos on this device.");
   });
 });

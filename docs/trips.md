@@ -641,7 +641,10 @@ Kos's own:
 
 ### 17.4 Kos on its own: set-up first, the device lock last (owner, 2026-11-20)
 
-- **A newcomer's first screen is Kos's set-up** (`welcome()` in `kos.js`), not the device lock:
+- **A newcomer's first screen** (`welcome()` in `kos.js`, redesigned 2026-11-20 after Inkling, GRAZE and Minty: a
+  narrow column, a big tight headline, raised pills and one solid button, the icon's saffron and teal
+  as accents, a made-up flight drawn by the real flight card, and EasyUI's pill navigation, with its
+  sliding thumb, for the set-up's steps) is Kos's set-up, not the device lock:
   1. add a trip or a booking (or try the sample);
   2. bookings from email (Gmail pull, or sharing to Kos on Android);
   3. put Kos on the home screen (Install Kos when the browser offers it);

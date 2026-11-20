@@ -199,12 +199,84 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 .sum-more { display: inline-block; margin-top: 6px; font-weight: 750; font-size: 13.5px; color: var(--text); }
 @media (max-width: 720px) { .summary { grid-template-columns: 1fr; } .sum-kind { min-width: 0; flex: 1 0 22%; } }
 
-/* Kos on its own: the first screen's set-up, and the lock's last step */
-.welcome h2 { margin: 0 0 6px; font-size: 22px; }
-.steps { margin: 14px 0; padding-left: 22px; display: grid; gap: 14px; }
-.steps li { line-height: 1.5; }
-.steps li::marker { font-weight: 800; color: var(--accent); }
-.steps .actions { margin-top: 8px; }
+/* Kos on its own: the first screen (docs/trips.md §17.4). Inkling's restraint (a narrow column, a big
+   tight headline, plain words, raised pills and one solid button), the icon's saffron and teal as
+   accents, and EasyUI's pill navigation for the set-up's steps. Scoped to .welcome. */
+.welcome { --kos-teal: #024248; --kos-saffron: #feab0a; --kos-cream: #fcf1dd; max-width: 720px; margin: 0 auto; padding: 8px 4px 24px; overflow-x: clip; }   /* the hero's glow and the tilted card stay inside: no sideways scroll */
+.w-hero { position: relative; padding: 28px 0 8px; }
+.w-hero::before { content: ""; position: absolute; inset: -40px -60px auto -60px; height: 340px; z-index: -1; pointer-events: none; filter: blur(40px); opacity: .5;
+                  background: radial-gradient(40% 55% at 18% 30%, color-mix(in srgb, var(--kos-teal) 70%, transparent), transparent 70%),
+                              radial-gradient(30% 40% at 62% 18%, color-mix(in srgb, var(--kos-saffron) 28%, transparent), transparent 70%); }
+:root[data-theme="light"] .w-hero::before { opacity: .22; }
+.w-kicker { margin: 0; display: inline-flex; align-items: center; gap: 9px; font-size: 12.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--kos-saffron); }
+.w-kicker i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; opacity: .6; }
+:root[data-theme="light"] .w-kicker { color: #b86f00; }
+.welcome h1 { margin: 14px 0 14px; font-size: clamp(36px, 7vw, 54px); line-height: 1.02; font-weight: 750; letter-spacing: -.035em; }
+.w-lede { margin: 0; max-width: 34em; font-size: 17px; line-height: 1.55; color: var(--muted); }
+.w-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.w-primary { appearance: none; border: 0; cursor: pointer; border-radius: 999px; padding: 12px 22px; font-weight: 750; font-size: 15px;
+             background: var(--kos-cream); color: var(--kos-teal); box-shadow: 0 1px 0 rgba(255, 255, 255, .4) inset, 0 8px 22px -8px rgba(254, 171, 10, .55);
+             transition: transform .15s, box-shadow .15s; }
+:root[data-theme="light"] .w-primary { background: var(--kos-teal); color: var(--kos-cream); box-shadow: 0 8px 22px -10px rgba(2, 66, 72, .8); }
+.w-primary:hover { transform: translateY(-1px); } .w-primary:active { transform: translateY(0); }
+.w-primary:disabled { opacity: .6; cursor: progress; }
+.w-pill { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; border: 1px solid var(--hairline-2); background: var(--surface); color: var(--ink); text-decoration: none; cursor: pointer;
+          border-radius: 999px; padding: 11px 18px 11px 14px; font-weight: 650; font-size: 15px;
+          box-shadow: 0 1px 2px rgba(0, 0, 0, .12), 0 4px 12px -6px rgba(0, 0, 0, .3); transition: box-shadow .15s, transform .15s; }
+.w-pill svg { width: 17px; height: 17px; fill: currentColor; opacity: .85; }
+.w-pill:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0, 0, 0, .14), 0 8px 18px -8px rgba(0, 0, 0, .35); }
+.w-primary:focus-visible, .w-pill:focus-visible, .w-tab:focus-visible { outline: 2px solid var(--kos-saffron); outline-offset: 2px; }
+.welcome #sampleErr:empty { display: none; }
+/* the made-up flight, the page's own card, tilted, with a day of the plan over its corner */
+.w-visual { position: relative; margin: 40px 0 8px; padding: 0 0 26px; }
+.w-card { transform: rotate(-1.6deg); max-width: 560px; filter: drop-shadow(0 24px 40px rgba(0, 0, 0, .35)); }
+.w-card .flight { pointer-events: none; } .w-card .flight-foot { display: none; }
+.w-day { position: absolute; right: 6%; bottom: 0; transform: rotate(2.2deg); display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 14px;
+         background: var(--surface); border: 1px solid var(--hairline-2); box-shadow: 0 14px 30px -12px rgba(0, 0, 0, .5); font-size: 13.5px; }
+.w-day span:last-child { color: var(--muted); }
+.w-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--kos-saffron); box-shadow: 0 0 0 4px color-mix(in srgb, var(--kos-saffron) 25%, transparent); }
+/* three things it does */
+.w-features { list-style: none; margin: 40px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.w-features li { display: flex; flex-direction: column; gap: 4px; }
+.w-features b { font-size: 15px; margin-top: 8px; } .w-features li > span:last-child { color: var(--muted); font-size: 14px; line-height: 1.45; }
+.w-ico { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; color: var(--kos-saffron);
+         background: color-mix(in srgb, var(--kos-saffron) 14%, transparent); }
+.w-ico svg { width: 21px; height: 21px; fill: currentColor; }
+/* the set-up: EasyUI's pill navigation (a track, a thumb that slides to the step) and its panel */
+.w-setup { margin-top: 48px; }
+.w-setup h2 { margin: 0 0 14px; font-size: 20px; letter-spacing: -.01em; }
+.w-tabs { position: relative; display: inline-flex; gap: 2px; padding: 4px; border-radius: 999px; border: 1px solid var(--hairline-2);
+          background: color-mix(in srgb, var(--bg) 60%, black 10%); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .35); max-width: 100%; }
+:root[data-theme="light"] .w-tabs { background: var(--raise); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .06); }
+.w-thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: 0; border-radius: 999px; background: var(--ink); pointer-events: none;
+           box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+.w-thumb[data-ready] { transition: transform .38s cubic-bezier(.23, 1, .32, 1), width .38s cubic-bezier(.23, 1, .32, 1); }
+.w-tab { position: relative; z-index: 1; appearance: none; border: 0; background: transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+         padding: 8px 15px; border-radius: 999px; font-weight: 650; font-size: 14px; color: var(--muted); transition: color .2s; white-space: nowrap; }
+.w-tab i { font-style: normal; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; font-weight: 800;
+           background: var(--hairline-2); color: inherit; }
+.w-tab[aria-selected="true"] { color: var(--bg); } .w-tab[aria-selected="true"] i { background: var(--kos-saffron); color: var(--kos-teal); }
+.w-panel { margin-top: 14px; padding: 16px 18px; border-radius: 18px; background: var(--surface); border: 1px solid var(--hairline); line-height: 1.55; }
+.w-panel .actions { margin-top: 10px; }
+.w-foot { margin-top: 52px; padding-top: 18px; border-top: 1px solid var(--hairline); color: var(--muted); font-size: 13px; line-height: 1.6; }
+.w-foot a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--hairline-2); text-underline-offset: 3px; }
+@media (max-width: 640px) {
+  .welcome h1 { margin-top: 12px; }
+  .w-cta .w-pill { padding: 11px 12px; font-size: 14px; gap: 6px; }
+  .w-card .flight { padding: 14px; } .w-card .flight .time { white-space: nowrap; }
+  .w-visual { padding-bottom: 0; }
+  .w-day { position: relative; right: auto; bottom: auto; display: flex; width: fit-content; max-width: 100%; margin: -12px 0 0 auto; }
+  .w-lede { font-size: 16px; }
+  .w-cta .w-primary { flex: 1 0 100%; }
+  .w-cta .w-pill { flex: 1 1 0; justify-content: center; }
+  .w-features { grid-template-columns: 1fr; gap: 16px; }
+  .w-features li { display: grid; grid-template-columns: 38px 1fr; column-gap: 12px; }
+  .w-features li .w-ico { grid-row: span 2; } .w-features b { margin-top: 0; }
+  .w-tabs { display: flex; width: 100%; }
+  .w-tab { flex: 1 1 0; justify-content: center; min-width: 0; padding: 8px 4px; gap: 5px; font-size: 13px; }
+  .w-day { right: 2%; }
+}
+@media (prefers-reduced-motion: reduce) { .w-thumb[data-ready], .w-primary, .w-pill { transition: none; } }
 .lock-later { margin-top: 18px; }
 
 
