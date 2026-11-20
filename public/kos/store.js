@@ -1,14 +1,14 @@
-// Where JET keeps its trips (docs/trips.md §17). One app, two places:
-//   "minty":  served by a household's Minty at /jet/: Minty's API, on its D1, behind its sign-in.
-//   "device": JET on its own (built by scripts/build-jet.mjs, e.g. minty.milesmaximizer.com/jet/):
+// Where Kos keeps its trips (docs/trips.md §17). One app, two places:
+//   "minty":  served by a household's Minty at /kos/: Minty's API, on its D1, behind its sign-in.
+//   "device": Kos on its own (built by scripts/build-kos.mjs, e.g. minty.milesmaximizer.com/kos/):
 //             IndexedDB in this browser, nothing sent anywhere. Email files are read here too
-//             (./mail/mime.js and ./mail/reservations.js, src/jet/ with its types stripped).
-// public/jet/mode.js sets window.JET_MODE before this loads. Both stores answer the same calls,
-// with the same shapes as Minty's API (GET /trips and the rest), so jet.js doesn't care which.
+//             (./mail/mime.js and ./mail/reservations.js, src/kos/ with its types stripped).
+// public/kos/mode.js sets window.KOS_MODE before this loads. Both stores answer the same calls,
+// with the same shapes as Minty's API (GET /trips and the rest), so kos.js doesn't care which.
 
-export const MODE = globalThis.JET_MODE === "device" ? "device" : "minty";
+export const MODE = globalThis.KOS_MODE === "device" ? "device" : "minty";
 
-// --- checks shared by the device store and import (the server has its own, src/routes/jet.ts) --
+// --- checks shared by the device store and import (the server has its own, src/routes/kos.ts) --
 const KINDS = ["flight", "lodging", "car", "train", "bus", "restaurant", "event", "other"];
 const SOURCES = ["typed", "paste", "pdf", "screenshot", "email"];
 const isDate = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
@@ -28,7 +28,7 @@ export function checkTrip(b) {
   if (t.end_date < t.start_date) throw new Error("the last day can't be before the first");
   return t;
 }
-/** A booking's fields, checked the way the server does (src/routes/jet.ts). */
+/** A booking's fields, checked the way the server does (src/routes/kos.ts). */
 export function checkItem(b) {
   if (!KINDS.includes(b.kind)) throw new Error(`kind must be one of ${KINDS.join(", ")}`);
   for (const k of ["start_at", "end_at"]) if (b[k] && !isWhen(b[k])) throw new Error(`${k} must be a date and time, e.g. 2027-03-10T11:05`);
@@ -54,19 +54,19 @@ export function checkItem(b) {
 export function exportFile(list) {
   const trips = list.trips.map(({ items, transactions, spent_cents, ...t }) => t);
   const items = [...list.trips.flatMap((t) => t.items), ...list.unassigned];
-  return { app: "JET", version: 1, exported_at: new Date().toISOString(), trips, items };
+  return { app: "Kos", version: 1, exported_at: new Date().toISOString(), trips, items };
 }
 /** The trips and bookings in an export file, checked, ready to save (a trip's `items` are its
- * bookings). Throws on a file that isn't JET's. */
+ * bookings). Throws on a file that isn't Kos's. */
 export function importFile(data) {
-  if (!data || data.app !== "JET" || data.version !== 1 || !Array.isArray(data.trips) || !Array.isArray(data.items)) throw new Error("That isn't a JET export file.");
-  if (data.trips.length > 500 || data.items.length > 5000) throw new Error("That file holds more than JET takes at once.");
+  if (!data || !["Kos", "JET"].includes(data.app) || data.version !== 1 || !Array.isArray(data.trips) || !Array.isArray(data.items)) throw new Error("That isn't a Kos export file.");
+  if (data.trips.length > 500 || data.items.length > 5000) throw new Error("That file holds more than Kos takes at once.");
   const trips = data.trips.map((t) => ({ old: t.id, trip: checkTrip(t) }));
   const items = data.items.map((i) => ({ oldTrip: i.trip_id ?? null, item: checkItem({ ...i, trip_id: null }) }));
   return { trips, items };
 }
 
-/** JET on its own's sample trips (jet/sample.json, written by scripts/build-jet.mjs from the live
+/** Kos on its own's sample trips (kos/sample.json, written by scripts/build-kos.mjs from the live
  * demo's made-up trips): dated from `sample_from`, moved to fall as far from `today` as they did
  * from that day, so the trip coming up is always coming up. */
 export function shiftSample(file, today) {
@@ -76,6 +76,20 @@ export function shiftSample(file, today) {
     ? new Date(day(s.slice(0, 10)) + days * 864e5).toISOString().slice(0, 10) + s.slice(10) : s);
   return { ...file, trips: file.trips.map((t) => ({ ...t, start_date: move(t.start_date), end_date: move(t.end_date) })),
            items: file.items.map((i) => ({ ...i, start_at: move(i.start_at), end_at: move(i.end_at) })) };
+}
+
+// --- the trip's summary strip (kos.js summaryHtml): its kinds, and their labels --------------------
+export const SUM_KINDS = [["flight", "Flight"], ["lodging", "Lodging"], ["car", "Rental car"], ["train", "Train"], ["restaurant", "Restaurant"], ["event", "Activity"], ["other", "Other"]];
+/** Each kind's count (train counts buses too) and the trip's money: its linked spending on a Minty,
+ * else what its bookings cost, by currency. */
+export function tripSummary(t, spending) {
+  const count = Object.fromEntries(SUM_KINDS.map(([k]) => [k, 0]));
+  const booked = {};
+  for (const i of t.items) {
+    count[i.kind === "bus" ? "train" : count[i.kind] === undefined ? "other" : i.kind]++;
+    if (i.price_cents) booked[i.currency || "USD"] = (booked[i.currency || "USD"] ?? 0) + i.price_cents;
+  }
+  return { count, money: spending ? { spent: t.spent_cents ?? 0, transactions: t.transactions ?? 0 } : { booked } };
 }
 
 // --- Minty: its API ---------------------------------------------------------------------------
@@ -103,21 +117,61 @@ const mintyStore = {
 };
 
 // --- the device: IndexedDB ----------------------------------------------------------------------
+// --- Kos was JET until 2026-11-20: what a browser kept under the old names comes across, once ------
+/** The old localStorage keys (both modes: Gmail pull's address, key and read emails; the sample's ids). */
+export function carryOverOldNames(ls = globalThis.localStorage) {
+  try {
+    for (const k of ["gmail", "gmail-key", "gmail-seen", "sample"]) {
+      const old = ls.getItem(`jet-${k}`);
+      if (old !== null && ls.getItem(`kos-${k}`) === null) ls.setItem(`kos-${k}`, old);
+      ls.removeItem(`jet-${k}`);
+    }
+  } catch { /* storage turned off, or none (tests) */ }
+}
+carryOverOldNames();
+/** JET on its own's trips (IndexedDB "jet"), copied with their ids into Kos's new database. The old
+ * one is left as it was; it's read only when Kos's database is first made. */
+function fromJet(d) {
+  return new Promise((done) => {
+    let req;
+    try { req = indexedDB.open("jet"); } catch { done(0); return; }
+    req.onupgradeneeded = (e) => e.target.transaction.abort();         // there was none: don't make one
+    req.onerror = () => done(0);
+    req.onsuccess = () => {
+      const old = req.result;
+      if (!old.objectStoreNames.contains("trips") || !old.objectStoreNames.contains("items")) { old.close(); done(0); return; }
+      const r = old.transaction(["trips", "items"]), trips = r.objectStore("trips").getAll(), items = r.objectStore("items").getAll();
+      r.oncomplete = () => {
+        old.close();
+        if (!trips.result.length && !items.result.length) { done(0); return; }
+        const w = d.transaction(["trips", "items"], "readwrite");
+        for (const t of trips.result) w.objectStore("trips").put(t);
+        for (const i of items.result) w.objectStore("items").put(i);
+        w.oncomplete = () => done(trips.result.length);
+        w.onerror = () => done(0);
+      };
+      r.onerror = () => { old.close(); done(0); };
+    };
+  });
+}
 let dbp = null;
 function db() {
   dbp ??= new Promise((ok, fail) => {
-    const req = indexedDB.open("jet", 1);
+    const req = indexedDB.open("kos", 1);
+    let fresh = false;
     req.onupgradeneeded = () => {
+      fresh = true;
       const d = req.result;
       d.createObjectStore("trips", { keyPath: "id", autoIncrement: true });
       d.createObjectStore("items", { keyPath: "id", autoIncrement: true }).createIndex("trip_id", "trip_id");
     };
-    req.onsuccess = () => {
+    req.onsuccess = async () => {
       // another tab upgrading or deleting the database: let it, and open again next time
       req.result.onversionchange = () => { req.result.close(); dbp = null; };
+      if (fresh) await fromJet(req.result);
       ok(req.result);
     };
-    req.onerror = () => fail(new Error("This browser won't keep JET's trips here (private window, or storage turned off)."));
+    req.onerror = () => fail(new Error("This browser won't keep Kos's trips here (private window, or storage turned off)."));
   });
   return dbp;
 }
@@ -184,7 +238,7 @@ const deviceStore = {
     });
   },
   async deleteItem(id) { return tx(["items"], "readwrite", async (x) => { await req(x.objectStore("items").delete(id)); return { id, removed: true }; }); },
-  /** An email file, read in this browser with the same reader Minty runs (src/jet/). Nothing is kept. */
+  /** An email file, read in this browser with the same reader Minty runs (src/kos/). Nothing is kept. */
   async readEmail(buf) {
     const [{ readMessage, viewOf }, { reservations }] = await Promise.all([import("./mail/mime.js"), import("./mail/reservations.js")]);
     const bytes = new Uint8Array(buf);
@@ -200,7 +254,7 @@ const deviceStore = {
 
 export const store = MODE === "device" ? deviceStore : mintyStore;
 
-/** Asks the browser to keep JET's trips even when space runs low (device mode). */
+/** Asks the browser to keep Kos's trips even when space runs low (device mode). */
 export async function keepData() {
   try { return Boolean(await navigator.storage?.persist?.()); } catch { return false; }
 }

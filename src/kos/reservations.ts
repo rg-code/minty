@@ -1,4 +1,4 @@
-/** Bookings from a confirmation email's schema.org markup (JET, docs/trips.md §3, step 1). Airlines,
+/** Bookings from a confirmation email's schema.org markup (Kos, docs/trips.md §3, step 1). Airlines,
  * hotels and booking sites put JSON-LD in their emails for Gmail's own trip cards; this reads those
  * blocks into one shape per booking. Microdata and known-sender layouts come later (T2). Pure, with
  * no imports, so the T0 scripts run it in Node too. Nothing is guessed: a field that isn't there

@@ -1,4 +1,4 @@
-# JET, T0: the checks before building (docs/trips.md §11)
+# Kos, T0: the checks before building (docs/trips.md §11)
 
 Five checks, each a few minutes. **You run them** (they use your keys, your Immich and your own
 emails), and paste their output back to Claude. They print results only: never a key, never an
@@ -10,8 +10,8 @@ Claude (a `!` command would put the keys in the conversation).
 
 1. In Gmail, open ~20 travel confirmations of different kinds (flights, hotels, a car, a restaurant,
    an event), and for each: ⋮ → **Download message**. Put the `.eml` files in a folder **outside
-   this repo**, e.g. `~/jet-emails`.
-2. `node scripts/jet-t0/parse.ts ~/jet-emails`
+   this repo**, e.g. `~/kos-emails`.
+2. `node scripts/kos-t0/parse.ts ~/kos-emails`
 3. Paste the **summary** lines. They tell us how many senders use schema.org markup (the exact,
    easy path), which fields they leave out, and whether reading fits the Worker's 10 ms.
 4. Delete the folder afterwards if you like; nothing was copied.
@@ -23,7 +23,7 @@ Claude (a `!` command would put the keys in the conversation).
 2. **Access → Applications → Minty → Policies → Add a policy:** action **Service Auth**, include
    **Service Token: minty-inbox**. Save.
 3. In your terminal:
-   `MINTY_URL=https://<your minty> ACCESS_CLIENT_ID=... ACCESS_CLIENT_SECRET=... node scripts/jet-t0/access.ts`
+   `MINTY_URL=https://<your minty> ACCESS_CLIENT_ID=... ACCESS_CLIENT_SECRET=... node scripts/kos-t0/access.ts`
 4. Paste the three lines. "OK" means Access lets the token through, and Minty never sees a sign-in.
 
 ## 3. The Gmail script, from Google's side
@@ -48,7 +48,7 @@ Claude (a `!` command would put the keys in the conversation).
 3. In your terminal, with a past trip's first and last day:
    ```
    IMMICH_URL=https://<your immich> IMMICH_API_KEY=... IMMICH_ACCESS_CLIENT_ID=... IMMICH_ACCESS_CLIENT_SECRET=... \
-   node scripts/jet-t0/immich.ts 2026-06-10 2026-06-17 --album-test
+   node scripts/kos-t0/immich.ts 2026-06-10 2026-06-17 --album-test
    ```
 4. Paste the output. It shows the version, the key's permissions (and any missing), how many photos
    those days have with GPS and a city, whether a partner's are included, and whether making an
@@ -60,8 +60,8 @@ Claude (a `!` command would put the keys in the conversation).
 1. Sign up for **FlightAware AeroAPI, Personal** (no monthly minimum, about $5 of free use a month)
    and make an API key.
 2. In your terminal, a flight flying today or tomorrow:
-   `AEROAPI_KEY=... node scripts/jet-t0/flight.ts UA837`
+   `AEROAPI_KEY=... node scripts/kos-t0/flight.ts UA837`
 3. Paste the output, and AeroAPI's usage page figure for that one call.
-4. Optional: the backup, with an AirLabs free key: `AIRLABS_KEY=... node scripts/jet-t0/flight.ts UA837`.
+4. Optional: the backup, with an AirLabs free key: `AIRLABS_KEY=... node scripts/kos-t0/flight.ts UA837`.
 
 When all five are back, Claude records the results in docs/trips.md and T1 starts.

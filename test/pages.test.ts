@@ -559,7 +559,7 @@ describe("Bills (docs/bills.md)", () => {
     const reader = await (await SELF.fetch("https://minty.example.workers.dev/pdf-read.js")).text();
     const bam = await (await SELF.fetch("https://minty.example.workers.dev/bam.js")).text();
     for (const page of [js, bam]) expect(page).toContain('import(new URL("pdf-read.js", document.baseURI).href)');
-    expect(reader).toContain('import(new URL("vendor/pdfjs/pdf.min.mjs", import.meta.url).href)');   // its own file, not the page: JET at /jet/ loads it too
+    expect(reader).toContain('import(new URL("vendor/pdfjs/pdf.min.mjs", import.meta.url).href)');   // its own file, not the page: Kos at /kos/ loads it too
     expect(reader).toContain("isEvalSupported: false");
     for (const f of [js, bam, reader]) expect(f).not.toMatch(/https?:\/\/[^"'\s]*pdf/);
     for (const f of ["/vendor/pdfjs/pdf.min.mjs", "/vendor/pdfjs/pdf.worker.min.mjs", "/bill-parse.js", "/pdf-read.js", "/points-parse.js"]) {

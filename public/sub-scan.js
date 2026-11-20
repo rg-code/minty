@@ -3,11 +3,11 @@
 // sessionStorage ("minty.sub.scan", set by SUB with the form's draft before it came here), with the
 // screenshot's SHA-256 so the same file is recognised later. Nothing is uploaded.
 (function () {
-  // ?for=jet: JET's "add a booking" sent us here (docs/trips.md §2.4); otherwise SUB did
-  const FOR_JET = new URLSearchParams(location.search).get("for") === "jet";
-  const KEY = FOR_JET ? "minty.jet.scan" : "minty.sub.scan", BACK = FOR_JET ? "/jet/#/add" : "/?sub", V = "/vendor/tesseract/";
+  // ?for=kos: Kos's "add a booking" sent us here (docs/trips.md §2.4); otherwise SUB did
+  const FOR_KOS = new URLSearchParams(location.search).get("for") === "kos";
+  const KEY = FOR_KOS ? "minty.kos.scan" : "minty.sub.scan", BACK = FOR_KOS ? "/kos/#/add" : "/?sub", V = "/vendor/tesseract/";
   document.getElementById("back").href = BACK;
-  if (FOR_JET) document.querySelector("h1").textContent = "Read a booking's screenshot";
+  if (FOR_KOS) document.querySelector("h1").textContent = "Read a booking's screenshot";
   const $ = id => document.getElementById(id);
   const status = t => { $("status").textContent = t; };
   let sha = null, lib = null;
@@ -20,10 +20,10 @@
 
   $("shot").addEventListener("change", e => { if (e.target.files[0]) read(e.target.files[0]); });
 
-  // ?shared=1: a screenshot shared to JET (its share target, public/jet/sw.js), kept by JET in
-  // IndexedDB "jet-share" under "image"; read it at once, and drop it
-  if (FOR_JET && new URLSearchParams(location.search).get("shared") === "1") {
-    const req = indexedDB.open("jet-share", 1);
+  // ?shared=1: a screenshot shared to Kos (its share target, public/kos/sw.js), kept by Kos in
+  // IndexedDB "kos-share" under "image"; read it at once, and drop it
+  if (FOR_KOS && new URLSearchParams(location.search).get("shared") === "1") {
+    const req = indexedDB.open("kos-share", 1);
     req.onupgradeneeded = () => req.result.createObjectStore("shared");
     req.onsuccess = () => {
       const st = req.result.transaction("shared", "readwrite").objectStore("shared"), g = st.get("image");
@@ -55,7 +55,7 @@
       $("use").hidden = false;
       status(data.text.trim() ? "Read. Check the text, correct anything misread, then use it." : "No text found in this image.");
     } catch (x) {
-      status(`Couldn't read this image: ${x.message}. You can paste the text into ${FOR_JET ? "JET" : "SUB"} instead.`);
+      status(`Couldn't read this image: ${x.message}. You can paste the text into ${FOR_KOS ? "Kos" : "SUB"} instead.`);
     }
   }
 

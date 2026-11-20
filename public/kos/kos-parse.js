@@ -1,9 +1,9 @@
-// Reads bookings from pasted text, a PDF's text or a screenshot's (JET, docs/trips.md §3, step 3):
+// Reads bookings from pasted text, a PDF's text or a screenshot's (Kos, docs/trips.md §3, step 3):
 // flights (a flight number and an airport pair, their dates and times) and stays (check-in and
 // check-out), with a confirmation code and a total. Pure, so it's tested in vitest
-// (test/jet-parse.test.ts). It only suggests: every field it can't find stays empty, and the person
+// (test/kos-parse.test.ts). It only suggests: every field it can't find stays empty, and the person
 // checks it all before anything is saved. Emails with schema.org markup are read exactly on the
-// server instead (src/jet/reservations.ts).
+// server instead (src/kos/reservations.ts).
 
 const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
 const pad = (n) => String(n).padStart(2, "0");

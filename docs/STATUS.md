@@ -146,21 +146,22 @@ there, gitignored here). If that folder exists, read it too.
    bonuses** ([sub.md](sub.md)): built 2026-11-19: ⋯ menu → Accounts, and ⋯ menu → SUB. Accounts
    also gets holders and a beneficiary on any account, with people still in `MINTY_USERS`. Both
    use ideas from a fork, with its author's permission.
-9. **JET, trips (a Flighty and Wanderlog hybrid)**, [trips.md](trips.md): **J1 built 2026-11-19**, the app at
-   `/jet/` (§16): trips, bookings, itinerary, flight cards, the map, the trip's spending.
-   - **JET on its own** (§17): the same app with trips in the browser, for people without Minty,
-     at minty.milesmaximizer.com/jet/ (built by `scripts/build-jet.mjs`, deployed by minty-site).
-   - **Gmail pull and Share to JET** (§17.1, §17.2, live 2026-11-19): JET reads a Gmail label with the
+9. **Kos, trips (a Flighty and Wanderlog hybrid; was JET, renamed 2026-11-20, §19)**, [trips.md](trips.md): **J1 built 2026-11-19**, the app at
+   `/kos/` (§16): trips, bookings, itinerary, flight cards, the map, the trip's spending.
+   - **Kos on its own** (§17): the same app with trips in the browser, for people without Minty,
+     at minty.milesmaximizer.com/kos/ (built by `scripts/build-kos.mjs`, deployed by minty-site).
+   - **Gmail pull and Share to Kos** (§17.1, §17.2, live 2026-11-19): Kos reads a Gmail label with the
      person's own Apps Script, on a phone too (phone link and QR); Android's share menu. Security
      plan §7 approved.
    - **Trip tags** (§18): a trip's tags go onto its transactions, so "reimbursed" leaves a trip's
      spending out of CFA and the dashboard's totals.
+   - **Summary strip** (§19): reservations by kind (a tap adds one) and the trip's budgeting.
    - Bookings (and bills) come from a Gmail account made for Minty, by forwarding to
      `+mintytrips` / `+mintybills` or labeling by hand, or by forwarding to the domain's address.
      No mailbox is connected to Minty.
    - An itinerary and flight cards, the trip's transactions, BAM's pending changes, an Immich album,
      Minty's own map; live flight status optional.
-   - **T0 started (2026-11-19):** the owner runs the five checks in `scripts/jet-t0/README.md` and
+   - **T0 started (2026-11-19):** the owner runs the five checks in `scripts/kos-t0/README.md` and
      sends back their output. Decided: text kept 30 days, the owner's Immich key, the map and live
      status (AeroAPI Personal), and a timeline from bookings, photos' metadata and transactions (§15).
      Street map: OpenFreeMap's tiles; push notifications later. The Gmail script's security change is

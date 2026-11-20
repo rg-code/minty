@@ -77,7 +77,7 @@ Design history and decisions: `docs/serverless-plan.md`.
 - Plaid amount sign: POSITIVE = money out. Stored as integer cents (`amount_cents`); the
   dashboard flips the sign for display.
 - Tags live in `transaction_tags` rows. Sync never writes them, so user labels survive
-  re-syncs. Keep it that way. A JET trip's tags are written onto its confirmed transactions, marked with
+  re-syncs. Keep it that way. A Kos trip's tags are written onto its confirmed transactions, marked with
   `transaction_tags.trip_id` (`docs/trips.md` §18): taking a tag off the trip, or a transaction out of it, removes only
   those rows, and a tag change that involves a left-out tag marks CFA for a rebuild (`markIfLeftOutTags`). The same goes for an account's own name (`accounts.display_name`,
   `PUT /accounts/{id}/name`): pages show `ACCOUNT_NAME()` (`src/accounts.ts`: the household's
@@ -173,20 +173,21 @@ Design history and decisions: `docs/serverless-plan.md`.
   never "safe to close". Terms come from pasted text, a PDF (pdf.js) or a screenshot read on
   `/sub-scan` (vendored Tesseract.js, `public/vendor/tesseract/`), all on the device; only that page
   and those files get `'wasm-unsafe-eval'` (`public/_headers`). The demo has no screenshot reader.
-- JET, trips (`docs/trips.md` §16): an app of its own at `/jet/` (manifest scope `/jet/`, its own
-  service worker; each SW deletes only its own `minty-…` / `jet-…` caches), on Minty's Worker, Access
+- Kos, trips (`docs/trips.md` §16; was JET until 2026-11-20, §19: `/jet/` redirects via `public/_redirects`,
+  and `store.js` carries the old `jet` storage over): an app of its own at `/kos/` (manifest scope `/kos/`, its own
+  service worker; each SW deletes only its own `minty-…` / `kos-…` caches), on Minty's Worker, Access
   and D1. Sync never writes `trips`, `trip_items` or `trip_transactions`. `POST /trips/read-email`
-  is the one route past the 16 KiB body cap (2 MB), reads an `.eml` with `src/jet/` and stores
-  nothing. The map is vendored MapLibre (CSP build) on OpenFreeMap's tiles: only `/jet/*` and
+  is the one route past the 16 KiB body cap (2 MB), reads an `.eml` with `src/kos/` and stores
+  nothing. The map is vendored MapLibre (CSP build) on OpenFreeMap's tiles: only `/kos/*` and
   `/vendor/maplibre/*` may reach `tiles.openfreemap.org`. Its look follows Flighty (flights, theme,
-  map) and Wanderlog (trips). Gmail pull (§17.1, `public/jet/gmail.js`) asks the person's own
+  map) and Wanderlog (trips). Gmail pull (§17.1, `public/kos/gmail.js`) asks the person's own
   Apps Script (`gmail.readonly`, a key made on the device, shared with a phone by a `#` link and a
-  QR code from vendored `public/vendor/qrcode/`) from the browser; only `/jet/*` may reach
-  `script.google.com` / `script.googleusercontent.com`. Share to JET is the manifest's `share_target`,
-  kept on the device by `jet/sw.js` until the add page reads it. It also runs on its own (§17): `public/jet/store.js` is the only
+  QR code from vendored `public/vendor/qrcode/`) from the browser; only `/kos/*` may reach
+  `script.google.com` / `script.googleusercontent.com`. Share to Kos is the manifest's `share_target`,
+  kept on the device by `kos/sw.js` until the add page reads it. It also runs on its own (§17): `public/kos/store.js` is the only
   thing that knows where trips live (Minty's API, or IndexedDB when `mode.js` says `device`);
-  `scripts/build-jet.mjs` builds that for the landing site. Keep both stores answering the same
-  calls, and `src/jet/` free of runtime imports (the build strips its types for the browser).
+  `scripts/build-kos.mjs` builds that for the landing site. Keep both stores answering the same
+  calls, and `src/kos/` free of runtime imports (the build strips its types for the browser).
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).
@@ -227,8 +228,8 @@ Design history and decisions: `docs/serverless-plan.md`.
   in `sw.js`'s shell too.
 - Live demo (`demo/`, `npm run build:demo`, `docs/demo.md`): the real dashboard and Worker in the
   browser over sql.js, with a made-up household. It's built from `public/` and `src/`, so it follows
-  their changes; the build checks every edit it makes to `public/index.html`, `app.js`, `theme.js` and JET's pages and stops when one no
-  longer applies (fix the edit, never the check). Its data stays made up (`test/demo.test.ts`), JET's sample trips (`jet/sample.json`, standalone) are built from it, and
+  their changes; the build checks every edit it makes to `public/index.html`, `app.js`, `theme.js` and Kos's pages and stops when one no
+  longer applies (fix the edit, never the check). Its data stays made up (`test/demo.test.ts`), Kos's sample trips (`kos/sample.json`, standalone) are built from it, and
   it never talks to a real Minty or to Plaid.
 - Fernet reference vectors (`test/fixtures/fernet-vectors.json`, test key only) pin the
   encryption to the reference implementation. Don't regenerate them casually.

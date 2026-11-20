@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { decodeWords, quotedPrintable, readMessage, viewOf } from "../src/jet/mime";
-import { jsonLd, reservations } from "../src/jet/reservations";
+import { decodeWords, quotedPrintable, readMessage, viewOf } from "../src/kos/mime";
+import { jsonLd, reservations } from "../src/kos/reservations";
 
-// JET's email reading (docs/trips.md §2, §3): made-up messages, shaped like real confirmations.
+// Kos's email reading (docs/trips.md §2, §3): made-up messages, shaped like real confirmations.
 const b64 = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
 const qp = (s: string) => [...new TextEncoder().encode(s)].map((b) => (b === 61 || b > 126 ? `=${b.toString(16).toUpperCase().padStart(2, "0")}` : String.fromCharCode(b))).join("")
   .replace(/(.{70})/g, "$1=\n");

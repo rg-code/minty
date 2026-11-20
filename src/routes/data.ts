@@ -206,7 +206,7 @@ export async function transactions(env: Env, url: URL): Promise<Response> {
     throw unprocessable(`category must be Plaid categories like FOOD_AND_DRINK (or OTHER, for none), at most ${MAX_FILTER_CATEGORIES}`);
   }
   const limit = intParam(url, "limit", { def: 500, min: 1, max: 1000 })!;
-  // trip_id: a JET trip's confirmed transactions (docs/trips.md §6). The query then starts from the
+  // trip_id: a Kos trip's confirmed transactions (docs/trips.md §6). The query then starts from the
   // trip's links (CROSS JOIN keeps that order), so it reads only that trip's rows.
   const tripId = intParam(url, "trip_id", { min: 1 });
 

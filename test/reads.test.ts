@@ -99,7 +99,7 @@ beforeAll(async () => {
   await db.prepare(`INSERT INTO investment_txns (account_id, plaid_inv_txn_id, date, name, type, subtype, amount_cents)
     SELECT a.value, 'inv-' || a.value || '-' || m.value, date('now', '-' || m.value || ' months'), 'Contribution', 'cash', 'contribution', -50000
     FROM json_each('[901,902,903]') a, json_each('${JSON.stringify([...Array(24).keys()])}') m`).run();
-  // JET: a ten-day trip a month ago, with three priced bookings and 30 of its transactions linked.
+  // Kos: a ten-day trip a month ago, with three priced bookings and 30 of its transactions linked.
   await db.prepare(`INSERT INTO trips (id, name, start_date, end_date) VALUES (1, 'Trip', date('now', '-40 days'), date('now', '-30 days'))`).run();
   await db.prepare(`INSERT INTO trip_items (trip_id, kind, name, price_cents, currency) SELECT 1, 'lodging', 'Stay ' || value, 10000 * value, 'USD' FROM json_each('[1,2,3]')`).run();
   await db.prepare(`INSERT INTO trip_transactions (trip_id, transaction_id, state)
@@ -120,7 +120,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/benefits", 3000],                 // only the tracked cards' rows, once each (the first version read every row once per pattern)
     ["/statements", 100],                // one row per bank
     ["/sub", 350],
-    ["/trips", 150],                     // 66 when written. JET: the trips, their bookings once each, and each trip's links by index
+    ["/trips", 150],                     // 66 when written. Kos: the trips, their bookings once each, and each trip's links by index
     ["/trips/1/suggestions", 300],       // about 110 when written: the trip's window by the date index (bounded), and each priced booking by idx_txn_pair (INDEXED BY: the date index read a year)
     ["/transactions?trip_id=1", 350],    // 175 when written: starts from the trip's links (CROSS JOIN), not the date index                       // 218 when written. SUB: 4 offers, each requirement's window by account and date (bounded at both ends), and one payout look-up
     ["/bills", 9000],                    // 28 cards x 12 statements (each window an index range: an OR there read 85,000), plus 40 own bills

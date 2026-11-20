@@ -30,7 +30,7 @@ describe("demo data", () => {
 
   it("stays small (at most 550 transactions on any day of the year), so the demo starts fast", () => {
     // The count moves with the date: card credits go back to last January 1, so it's lowest in
-    // January and highest in December (376 to 524 when written, JET's trips included).
+    // January and highest in December (376 to 524 when written, Kos's trips included).
     const start = Date.UTC(new Date().getUTCFullYear(), 0, 1);
     for (let i = 0; i < 366; i++) {
       const n = generate(new Date(start + i * 864e5)).transactions.length;
@@ -165,7 +165,7 @@ describe("demo own bills", () => {
   });
 });
 
-describe("demo JET (docs/trips.md)", () => {
+describe("demo Kos (docs/trips.md)", () => {
   it("two past trips and Tokyo coming up, a booking waiting, and the work trip's spending left out by its tag", async () => {
     const { status, body } = await getJson<any>("/trips", { envOverrides });
     expect(status).toBe(200);

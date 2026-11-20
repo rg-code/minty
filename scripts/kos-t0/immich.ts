@@ -1,9 +1,9 @@
-// JET T0 (docs/trips.md §8, §15): what your Immich gives Minty, with the API key you'd use. Run it in
+// Kos T0 (docs/trips.md §8, §15): what your Immich gives Minty, with the API key you'd use. Run it in
 // YOUR terminal, with the values in the environment (never in a file in this repo):
 //
 //   IMMICH_URL=https://photos.example.com IMMICH_API_KEY=... \
 //   IMMICH_ACCESS_CLIENT_ID=... IMMICH_ACCESS_CLIENT_SECRET=... \
-//   node scripts/jet-t0/immich.ts 2026-10-01 2026-10-05 [--album-test]
+//   node scripts/kos-t0/immich.ts 2026-10-01 2026-10-05 [--album-test]
 //
 // The dates are a past trip's first and last day. It prints Immich's version, the key's permissions,
 // how many photos those days have (with GPS, with a city, and how many are a partner's), and with
@@ -13,7 +13,7 @@ const env = process.env;
 const [from, to] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
 const albumTest = process.argv.includes("--album-test");
 for (const k of ["IMMICH_URL", "IMMICH_API_KEY"]) if (!env[k]) { console.error(`set ${k}`); process.exit(1); }
-if (!from || !to) { console.error("usage: node scripts/jet-t0/immich.ts <first day YYYY-MM-DD> <last day> [--album-test]"); process.exit(1); }
+if (!from || !to) { console.error("usage: node scripts/kos-t0/immich.ts <first day YYYY-MM-DD> <last day> [--album-test]"); process.exit(1); }
 const base = env.IMMICH_URL!.replace(/\/+$/, "");
 const headers: Record<string, string> = { "x-api-key": env.IMMICH_API_KEY!, accept: "application/json", "content-type": "application/json" };
 if (env.IMMICH_ACCESS_CLIENT_ID) { headers["CF-Access-Client-Id"] = env.IMMICH_ACCESS_CLIENT_ID; headers["CF-Access-Client-Secret"] = env.IMMICH_ACCESS_CLIENT_SECRET ?? ""; }

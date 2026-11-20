@@ -3,13 +3,13 @@ import type { Config } from "../config";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { ACCOUNT_NAME } from "../accounts";
 import { PROGRAM_BY_ID } from "../points/programs";
-import { readMessage, viewOf } from "../jet/mime";
+import { readMessage, viewOf } from "../kos/mime";
 import { MAX_TAGS_PER_TXN, MAX_TAG_LENGTH, normaliseTags } from "./data";
 import { markIfLeftOutTags } from "../audit/totals";
-import { reservations } from "../jet/reservations";
+import { reservations } from "../kos/reservations";
 
-/** JET, trips (docs/trips.md): trips, their bookings, and the transactions in them. The household
- * writes these; sync never does. The JET app (public/jet/) is the page; the dashboard filters by a
+/** Kos, trips (docs/trips.md): trips, their bookings, and the transactions in them. The household
+ * writes these; sync never does. The Kos app (public/kos/) is the page; the dashboard filters by a
  * trip with GET /transactions?trip_id=. */
 
 const NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
@@ -226,7 +226,7 @@ export async function deleteItem(env: Env, id: number): Promise<Response> {
 }
 
 /** POST /trips/read-email: an email file's bytes (a .eml, as Gmail's "Download message" gives it),
- * read with JET's reader into suggested bookings. Nothing is stored: the app shows them to confirm,
+ * read with Kos's reader into suggested bookings. Nothing is stored: the app shows them to confirm,
  * then saves the ones kept with POST /trips/items. Up to MAX_EMAIL_BYTES. */
 export async function readEmail(env: Env, request: Request): Promise<Response> {
   // read up to the cap, also when no Content-Length was sent (index.ts checks it when it was)

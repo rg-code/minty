@@ -1,11 +1,11 @@
-// Gmail pull (docs/trips.md §17.1): JET reads the bookings a person forwards to their own Gmail, with
+// Gmail pull (docs/trips.md §17.1): Kos reads the bookings a person forwards to their own Gmail, with
 // no server of anyone's. A short Google Apps Script in their Gmail, deployed as a web app (hosted by
-// Google, run as them), returns the emails with one label when asked with their key; JET reads each
+// Google, run as them), returns the emails with one label when asked with their key; Kos reads each
 // with the same reader Minty uses (store.readEmail) and offers the bookings to confirm. The script
-// asks only to read Gmail; JET remembers which emails it has read (on this device), so the script
+// asks only to read Gmail; Kos remembers which emails it has read (on this device), so the script
 // never changes the mail. The key and the web app's address stay in this browser.
 
-const CONFIG = "jet-gmail", SEEN = "jet-gmail-seen", MAX_SEEN = 1000;
+const CONFIG = "kos-gmail", SEEN = "kos-gmail-seen", MAX_SEEN = 1000;
 const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* not kept */ } } };
 
 /** The web app's address must be an Apps Script deployment's (…/macros/s/<id>/exec). */
@@ -16,12 +16,12 @@ export function config() { try { const c = JSON.parse(ls.get(CONFIG) ?? "null");
 export function pendingKey() { let k = ls.get(`${CONFIG}-key`); if (!/^[0-9a-f]{48}$/.test(k ?? "")) { k = newKey(); ls.set(`${CONFIG}-key`, k); } return k; }
 export function save(url) {
   if (!isWebApp(url)) throw new Error("That isn't a web app address: it should look like https://script.google.com/macros/s/…/exec");
-  ls.set(CONFIG, JSON.stringify({ url: url.trim(), key: pendingKey(), label: "JET" }));
+  ls.set(CONFIG, JSON.stringify({ url: url.trim(), key: pendingKey(), label: "Kos" }));
 }
 /** The link that connects another device (a phone) to the same script: its address and key after a
  * #, so neither is sent to any server; the page saves them and drops them from the address bar. */
 export const linkFor = (origin, url, key) =>
-  `${origin}/jet/#/gmail?connect=${btoa(JSON.stringify({ u: url, k: key })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+  `${origin}/kos/#/gmail?connect=${btoa(JSON.stringify({ u: url, k: key })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
 export function phoneLink(origin = location.origin) { const c = config(); return c ? linkFor(origin, c.url, c.key) : null; }
 /** A phone link (or just its code) back to { url, key }, or null when it isn't one. */
 export function readLink(text) {
@@ -34,9 +34,9 @@ export function readLink(text) {
 /** Connect this device with a phone link, as made on the device that's set up. */
 export function connect(text) {
   const v = readLink(text);
-  if (!v) throw new Error("That isn't a JET phone link: copy it again from the set-up page on the device that's connected.");
+  if (!v) throw new Error("That isn't a Kos phone link: copy it again from the set-up page on the device that's connected.");
   ls.set(`${CONFIG}-key`, v.key);
-  ls.set(CONFIG, JSON.stringify({ url: v.url, key: v.key, label: "JET" }));
+  ls.set(CONFIG, JSON.stringify({ url: v.url, key: v.key, label: "Kos" }));
   return config();
 }
 export function forget() { ls.set(CONFIG, "null"); ls.set(`${CONFIG}-key`, ""); }
@@ -45,8 +45,8 @@ const seenSet = () => { try { return new Set(JSON.parse(ls.get(SEEN) ?? "[]")); 
 export function markSeen(ids) { const s = seenSet(); for (const id of ids) s.add(id); ls.set(SEEN, JSON.stringify([...s].slice(-MAX_SEEN))); }
 
 /** The Apps Script, with the key written in: read-only, the label's emails, newest first, at most 20. */
-export function script(key, label = "JET") {
-  return `// JET's Gmail pull (rg-code/minty docs/trips.md §17.1). Runs in YOUR Gmail, as you, hosted by
+export function script(key, label = "Kos") {
+  return `// Kos's Gmail pull (rg-code/minty docs/trips.md §17.1). Runs in YOUR Gmail, as you, hosted by
 // Google. It only reads: the emails labelled "${label}" from the last 60 days, and only for a
 // request with the key below. Nothing is changed or sent anywhere else.
 const KEY = "${key}";
@@ -62,7 +62,7 @@ function doGet(e) {
       const id = m.getId();
       if (messages.length >= 20 || skip.indexOf(id) >= 0) return;
       const raw = m.getRawContent();
-      if (raw.length > 1500000) return;              // too big to carry (JET reads up to 2 MB)
+      if (raw.length > 1500000) return;              // too big to carry (Kos reads up to 2 MB)
       messages.push({ id: id, date: m.getDate().toISOString(), subject: m.getSubject(), raw: raw });
     });
   });

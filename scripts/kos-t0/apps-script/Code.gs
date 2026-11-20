@@ -1,4 +1,4 @@
-// JET T0 (docs/trips.md §2.1): can a Google Apps Script reach Minty through Cloudflare Access, with
+// Kos T0 (docs/trips.md §2.1): can a Google Apps Script reach Minty through Cloudflare Access, with
 // only read-only Gmail access? Paste this file and appsscript.json into a new project at
 // script.google.com, signed in as the Gmail account made for Minty. Fill in the three values below
 // IN THE SCRIPT EDITOR ONLY (never commit them), then Run → spike, allow it, and read the log

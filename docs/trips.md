@@ -1,7 +1,7 @@
-# Plan: JET, trips (a Flighty and Wanderlog hybrid)
+# Plan: Kos, trips (a Flighty and Wanderlog hybrid)
 
-**Status: J1 built (2026-11-19): the JET app at `/jet/` (§16), with T1, T3, T6a and T6b, and JET on its own (§17). T0 started: the owner runs `scripts/jet-t0/`; T2, T5, T6c and T7 follow its results.** Its
-inbox (§2) also serves Bills. Named **JET** (owner, 2026-11-19).
+**Status: J1 built (2026-11-19): the Kos app at `/kos/` (§16), with T1, T3, T6a and T6b, and Kos on its own (§17). T0 started: the owner runs `scripts/kos-t0/`; T2, T5, T6c and T7 follow its results.** Its
+inbox (§2) also serves Bills. Named **JET** (owner, 2026-11-19), renamed **Kos** (owner, 2026-11-20; §19).
 
 A trip view built from the household's bookings:
 - a day-by-day itinerary (like Wanderlog);
@@ -337,7 +337,7 @@ well inside the 50 subrequests, and a big trip spreads over several runs.
 
 | Phase | What | ✋ |
 |---|---|---|
-| **T0 Spikes** (started 2026-11-19) | The owner runs `scripts/jet-t0/` (its README): their own ~20 confirmations through `src/jet/mime.ts` and `reservations.ts` (tested, the T2 reader); Access with a service token, from a terminal and from an Apps Script with read-only Gmail; Immich's version, key permissions, metadata search (GPS, city, a partner's photos) and an album; AeroAPI (and AirLabs) for one flight. Email Routing on the owner's domain waits for T2b | Service tokens, Immich key, AeroAPI key, test emails |
+| **T0 Spikes** (started 2026-11-19) | The owner runs `scripts/kos-t0/` (its README): their own ~20 confirmations through `src/kos/mime.ts` and `reservations.ts` (tested, the T2 reader); Access with a service token, from a terminal and from an Apps Script with read-only Gmail; Immich's version, key permissions, metadata search (GPS, city, a partner's photos) and an album; AeroAPI (and AirLabs) for one flight. Email Routing on the owner's domain waits for T2b | Service tokens, Immich key, AeroAPI key, test emails |
 | **T1 Trips and bookings** | `trips`, `trip_items`; typed, pasted, PDF and screenshot input; the itinerary and flight cards | Name |
 | **T2 Gmail (default)** | The inbox (`inbox_messages`, shared by views), `POST /inbox` for the household's Access service token, the Apps Script and its Setup page (Copy script, the filter text for `+mintytrips` and `+mintybills`), JSON-LD and known-sender parsers, SETUP.md's steps (a Gmail account for Minty), the security-plan entry | Approve the security change |
 | **T2c Bills by email** | `+mintybills` messages read with `bill-parse.js` into suggested bills; PDF attachments kept until Bills reads them, then deleted (§2.3, option a); CLAUDE.md's Bills rule gets the exception | |
@@ -352,7 +352,7 @@ well inside the 50 subrequests, and a big trip spreads over several runs.
 
 ## 12. Decisions for the owner
 
-1. **The name: JET** (decided 2026-11-19).
+1. **The name: Kos** (decided 2026-11-19).
 2. **How bookings come in: decided (2026-11-19).** The Gmail script by default, with mail labeled
    only by `+minty` forwarding or by hand; forwarding to the domain's address where there's a domain
    on Cloudflare (the owner has both); paste, PDF, screenshot and share for everyone (§2).
@@ -467,7 +467,7 @@ gets:
 
 | Source | Gives | From |
 |---|---|---|
-| **JET's bookings** | flights (airports, times), hotel stays, reservations, activities, with times and often coordinates | §3 |
+| **Kos's bookings** | flights (airports, times), hotel stays, reservations, activities, with times and often coordinates | §3 |
 | **Immich's photo metadata** | where and when each photo was taken: GPS coordinates, time and time zone, and the city, state and country Immich already worked out | the same API key as §8 (`asset.read`), metadata only, **never the images** |
 | **The trip's transactions** | what was bought, where and when: merchant, amount, date (and time when the bank gives it), and the place when Plaid gives it | §6 |
 
@@ -513,23 +513,23 @@ gets:
 partner's photos are included). T7 depends on T1 (trips), T3 (transactions) and T5 (the Immich key);
 the map is T6a.
 
-## 16. The JET app (J1, built 2026-11-19)
+## 16. The Kos app (J1, built 2026-11-19)
 
 **Owner's request:** a Wanderlog, Flighty and Immich inspired trip app as a standalone PWA, with
 GRAZE's OpenStreetMap map as the model. The look borrows from the two apps; the features are
-JET's own:
+Kos's own:
 - **Flights, the theme and the map look like Flighty:** dark first, big airport codes, a progress
   line, status pills, a boarding-pass card, glowing arcs on a night map.
 - **Trips look like Wanderlog:** a cover, a day-by-day plan with a colour per day, and numbered
   markers that match the map's numbered pins.
 
-**Where it lives: Minty's Worker, at `/jet/`, as an app of its own.**
-- It has its own manifest (`id`, `scope` and `start_url` `/jet/`), icon, service worker
-  (`/jet/sw.js`, cache `jet-…`) and home-screen entry.
+**Where it lives: Minty's Worker, at `/kos/`, as an app of its own.**
+- It has its own manifest (`id`, `scope` and `start_url` `/kos/`), icon, service worker
+  (`/kos/sw.js`, cache `kos-…`) and home-screen entry.
 - It's behind Minty's Access sign-in and `ALLOWED_LOGINS`, on Minty's D1.
 - A separate Worker would have needed its own copy of the data, or a key to read Minty's
   transactions. The owner was fine either way (2026-11-19).
-- Each service worker deletes only its own old caches (`minty-…`, `jet-…`).
+- Each service worker deletes only its own old caches (`minty-…`, `kos-…`).
 - Minty's ⋯ menu links to it; the demo leaves it out.
 
 **Built (J1):**
@@ -544,13 +544,13 @@ JET's own:
 - **API:**
   - `GET/POST/PUT/DELETE /trips`, and `/trips/items`.
   - `POST /trips/read-email`: an `.eml`'s bytes, up to 2 MB, the one route past 16 KiB. It's read
-    by `src/jet/` into suggested bookings, and nothing is stored.
+    by `src/kos/` into suggested bookings, and nothing is stored.
   - `GET /trips/{id}/suggestions` (§6).
   - `POST /trips/{id}/transactions` (confirm, dismiss, remove).
   - `GET /transactions?trip_id=`, which starts from the trip's links (`CROSS JOIN`).
   - Read budgets in `test/reads.test.ts`. The booking-price look-ups use `INDEXED BY
     idx_txn_pair`, because the planner chose the date index and read a year.
-- **The app (`public/jet/`):**
+- **The app (`public/kos/`):**
   - **Trips:** the next flight at the top, with its countdown. Trips as covers. Bookings waiting
     for a trip, and making a trip from them.
   - **A trip:** the itinerary by day, before and after the trip, and bookings with no date. The
@@ -558,19 +558,19 @@ JET's own:
     by category and a day, with suggestions to confirm and "Open in Minty" (`/?trip=`).
   - **The map beside the plan (above it on a phone):** the itinerary frames the trip's places, the
     Flights tab its flights. Places either side of the date line are shifted to sit together.
-  - **Adding a booking:** typed; pasted text, a PDF (pdf.js) or a screenshot (`/sub-scan?for=jet`),
-    all read on the device by `public/jet/jet-parse.js`; or an email file read by the server.
+  - **Adding a booking:** typed; pasted text, a PDF (pdf.js) or a screenshot (`/sub-scan?for=kos`),
+    all read on the device by `public/kos/kos-parse.js`; or an email file read by the server.
     Every suggestion is checked before it's saved.
 - **The map (§13, T6a and T6b together):**
   - MapLibre GL 5.24.0, its CSP build, vendored in `public/vendor/maplibre/` (BSD-3-Clause).
     GRAZE loads it from unpkg; Minty doesn't use CDNs.
-  - OpenFreeMap's "liberty" style, and at night GRAZE's palette (`public/jet/map-style.js`).
+  - OpenFreeMap's "liberty" style, and at night GRAZE's palette (`public/kos/map-style.js`).
   - Labels in Latin script only: OpenFreeMap's fonts have no CJK glyphs, so Japanese names drew as
     empty boxes.
-  - Airports from OurAirports (public domain): 3,245 with scheduled service, `public/jet/airports.json`.
-  - **Policy:** only `/jet/*` and `/vendor/maplibre/*` (the worker fetches tiles under its own file's
+  - Airports from OurAirports (public domain): 3,245 with scheduled service, `public/kos/airports.json`.
+  - **Policy:** only `/kos/*` and `/vendor/maplibre/*` (the worker fetches tiles under its own file's
     policy) may reach `tiles.openfreemap.org`. The dashboard's policy is unchanged.
-- **The dashboard:** `/?trip=ID` shows one trip's transactions, with a link back to JET.
+- **The dashboard:** `/?trip=ID` shows one trip's transactions, with a link back to Kos.
 
 **Next, after T0:**
 - T2: the inbox, the Gmail script and forwarding to the domain;
@@ -579,128 +579,128 @@ JET's own:
 - T7: the timeline;
 - T4: BAM's pending changes.
 
-## 17. JET on its own (option B, built 2026-11-19)
+## 17. Kos on its own (option B, built 2026-11-19)
 
-**Owner's question:** what about someone who wants JET but doesn't have Minty? Of the three options
-(Minty without banks; JET in the browser alone; JET as its own Cloudflare app), the owner chose
-**B: JET in the browser**, with no setup at all.
+**Owner's question:** what about someone who wants Kos but doesn't have Minty? Of the three options
+(Minty without banks; Kos in the browser alone; Kos as its own Cloudflare app), the owner chose
+**B: Kos in the browser**, with no setup at all.
 
-**One app, two places** (`public/jet/store.js`, chosen by `public/jet/mode.js`):
+**One app, two places** (`public/kos/store.js`, chosen by `public/kos/mode.js`):
 
-| | **On a Minty** (`/jet/`, mode `minty`) | **On its own** (mode `device`) |
+| | **On a Minty** (`/kos/`, mode `minty`) | **On its own** (mode `device`) |
 |---|---|---|
-| Trips and bookings | Minty's API, on its D1 | IndexedDB in this browser (database `jet`) |
-| Email files | read by the Worker (`POST /trips/read-email`) | read in the browser by the same code (`src/jet/` with its types stripped, `jet/mail/`) |
+| Trips and bookings | Minty's API, on its D1 | IndexedDB in this browser (database `kos`) |
+| Email files | read by the Worker (`POST /trips/read-email`) | read in the browser by the same code (`src/kos/` with its types stripped, `kos/mail/`) |
 | The trip's spending | yes | no (no transactions); the tab isn't shown |
 | Travellers, BAM's programs | from `MINTY_USERS`, `/points` | none |
-| Gmail pull (§17.1), Share to JET (§17.2) | yes | yes |
+| Gmail pull (§17.1), Share to Kos (§17.2) | yes | yes |
 | The Gmail inbox on Minty (§6), Immich, live status (later) | yes | no: each needs a server |
 
-- **Both stores answer the same calls,** with the same shapes as Minty's API, so `jet.js` doesn't
+- **Both stores answer the same calls,** with the same shapes as Minty's API, so `kos.js` doesn't
   care which it has.
 - **The device store checks fields** as the server does (`checkTrip`, `checkItem`).
 - **The map, the flight cards, the itinerary, paste, PDF and screenshot** work the same in both.
 
 **Your data** (`#/data`, in both modes):
-- **Export** writes every trip and booking to a JSON file (`app: "JET"`, `version: 1`).
+- **Export** writes every trip and booking to a JSON file (`app: "Kos"`, `version: 1`).
 - **Import** reads one back, re-tying bookings to their trips. It's how trips move between
-  devices, and from JET on its own into a Minty.
-- On its own, JET asks the browser to keep its data (`navigator.storage.persist()`). The page says
+  devices, and from Kos on its own into a Minty.
+- On its own, Kos asks the browser to keep its data (`navigator.storage.persist()`). The page says
   that clearing the site's data loses the trips, and to export now and then.
 
 **Building and hosting:**
-- `node scripts/build-jet.mjs --out <dir>` writes:
-  - `jet/`, with `mode.js` set to `device`, the email reader in `jet/mail/` (types stripped by
+- `node scripts/build-kos.mjs --out <dir>` writes:
+  - `kos/`, with `mode.js` set to `device`, the email reader in `kos/mail/` (types stripped by
     Node's `stripTypeScriptTypes`), and those files in the service worker's shell;
   - `vendor/` (MapLibre, pdf.js, Tesseract);
-  - the files JET loads from the root (the screenshot reader, `pdf-read.js`, `lock.js`, `theme.js`);
-  - `_headers.jet`: the same security policy as `public/_headers` gives those paths on a Minty.
-- **Hosted on the landing site,** `minty.milesmaximizer.com/jet/`. Its `deploy.mjs` runs the build
+  - the files Kos loads from the root (the screenshot reader, `pdf-read.js`, `lock.js`, `theme.js`);
+  - `_headers.kos`: the same security policy as `public/_headers` gives those paths on a Minty.
+- **Hosted on the landing site,** `minty.milesmaximizer.com/kos/`. Its `deploy.mjs` runs the build
   after the demo's and installs `_headers`, the same as the demo is built from this repo.
   Nothing is committed there.
 
 **Fixed along the way:**
-- `pdf-read.js` found pdf.js relative to the page. From `/jet/` that pointed at `/jet/vendor/…`, so
-  reading a PDF in JET was broken on a Minty too. It now resolves relative to its own file.
-- **A JET bug:** saving a booking from a pasted suggestion did nothing. The form has a
+- `pdf-read.js` found pdf.js relative to the page. From `/kos/` that pointed at `/kos/vendor/…`, so
+  reading a PDF in Kos was broken on a Minty too. It now resolves relative to its own file.
+- **A Kos bug:** saving a booking from a pasted suggestion did nothing. The form has a
   `data-source` attribute, so a click on it also hit the source tabs, which re-rendered the page.
 
-### 17.0 Trying JET without trips of your own
+### 17.0 Trying Kos without trips of your own
 
-- **In the live demo** (`/demo/jet/`, linked from the demo dashboard's ⋯ menu): JET on a Minty, on
+- **In the live demo** (`/demo/kos/`, linked from the demo dashboard's ⋯ menu): Kos on a Minty, on
   the demo's made-up household (`demo/data.ts`): a holiday in Lisbon last month, a work trip to
   Chicago tagged "reimbursed" (left out of CFA, §18), Tokyo coming up with its flights paid for, and
   a booking waiting for a trip. The trips' charges are the demo's own transactions, so the Spending
-  tab, "Open in Minty" and trip tags all work. `scripts/build-demo.mjs` copies `public/jet/` into the
+  tab, "Open in Minty" and trip tags all work. `scripts/build-demo.mjs` copies `public/kos/` into the
   demo with checked edits (relative paths, no service worker, no Gmail or screenshot tab).
-- **On its own:** an empty JET offers **Try a sample trip**. It loads the same trips (no people,
-  transactions or tags) from `jet/sample.json`, which `scripts/build-jet.mjs` writes from the demo's
+- **On its own:** an empty Kos offers **Try a sample trip**. It loads the same trips (no people,
+  transactions or tags) from `kos/sample.json`, which `scripts/build-kos.mjs` writes from the demo's
   data, dated from a fixed day; `shiftSample` moves them to the visitor's today. They're ordinary
-  trips in the browser, marked by localStorage `jet-sample`, and **Remove them** deletes them and
+  trips in the browser, marked by localStorage `kos-sample`, and **Remove them** deletes them and
   their bookings.
 
 ### 17.1 Gmail pull (both modes)
 
-**Why:** on a phone, the Gmail app can't save a message as an `.eml`, so "Email file" alone left JET
+**Why:** on a phone, the Gmail app can't save a message as an `.eml`, so "Email file" alone left Kos
 on its own with no way to read a forwarded booking.
 
 **How it works:**
-- The person forwards a booking to their Gmail with `+jet` before the @. A Gmail filter labels it
-  **JET** (labelling one by hand counts too).
-- A short Google Apps Script in their Gmail, deployed as a web app, hands JET the emails with that
-  label. `public/jet/gmail.js` writes the script on the set-up page (`#/gmail`).
+- The person forwards a booking to their Gmail with `+kos` before the @. A Gmail filter labels it
+  **Kos** (labelling one by hand counts too).
+- A short Google Apps Script in their Gmail, deployed as a web app, hands Kos the emails with that
+  label. `public/kos/gmail.js` writes the script on the set-up page (`#/gmail`).
   - It runs as the person ("Execute as: Me") and is hosted by Google.
-  - It asks only for `gmail.readonly`, in the manifest JET gives (`appsscript.json`). It never
+  - It asks only for `gmail.readonly`, in the manifest Kos gives (`appsscript.json`). It never
     changes, moves or sends mail (a test checks the script's text).
   - It answers only a request with the key written into it: 48 random hex characters, made on
-    this device. Access is "Anyone", so JET can call it without a Google sign-in; the key is what
+    this device. Access is "Anyone", so Kos can call it without a Google sign-in; the key is what
     keeps others out.
   - It returns the label's emails from the last 60 days: at most 20 messages from 30 threads,
-    skipping any over 1.5 MB, and skipping the ids JET says it has already read.
-- **JET reads each email** with `store.readEmail`, the same reader as "Email file". It shows the
+    skipping any over 1.5 MB, and skipping the ids Kos says it has already read.
+- **Kos reads each email** with `store.readEmail`, the same reader as "Email file". It shows the
   bookings found, with Add and Add all.
-- **Read emails are remembered** on this device (localStorage `jet-gmail-seen`, the last 1,000 ids).
+- **Read emails are remembered** on this device (localStorage `kos-gmail-seen`, the last 1,000 ids).
   An email counts as read once one of its bookings is added, or after "Don't show these again".
-- **The web app's address and the key stay in this browser** (localStorage `jet-gmail`).
+- **The web app's address and the key stay in this browser** (localStorage `kos-gmail`).
 - **It checks by itself:** opening "Add a booking" asks the script, and shows only what's new
   ("New in your Gmail"). It says nothing when there's nothing new or the script can't be reached;
   "Check Gmail" on the Gmail tab says why. Switching tabs doesn't ask again. A web app can't check
-  in the background on a phone, so nothing happens while JET is closed.
+  in the background on a phone, so nothing happens while Kos is closed.
 - **The phone link:** setting up needs a computer (Google's script editor), but the key is made on
   that device. Once connected, the set-up page shows **Connect your phone**:
-  - a link, `…/jet/#/gmail?connect=<code>`, where the code is the script's address and the key
+  - a link, `…/kos/#/gmail?connect=<code>`, where the code is the script's address and the key
     (`linkFor` / `readLink`), and a QR code of it (vendored `qrcode-generator`,
     `public/vendor/qrcode/`, loaded only there);
   - the code is after the `#`, so it's never sent to any server; the page saves it and takes it out
     of the address bar (`history.replaceState`);
   - on a phone not yet connected, the set-up page has a box to paste the link. On an iPhone that's
     the way: the installed app's storage is separate from Safari's, where a scanned link opens;
-  - the page says that anyone with the link can read the JET label.
-- **The policy:** `/jet/*`'s `connect-src` allows `https://script.google.com` and
+  - the page says that anyone with the link can read the Kos label.
+- **The policy:** `/kos/*`'s `connect-src` allows `https://script.google.com` and
   `https://script.googleusercontent.com`. Apps Script answers from the first by redirecting to the
   second. Nothing else gets those hosts.
 - **Recommended:** a Gmail account made just for this, as for Minty's inbox (§6). Google's read-only
   permission covers the whole mailbox, so in an account that only gets what's forwarded, that's all
   the script can see.
 - **To stop it:** archive the deployment in Apps Script. "Forget on this device" drops the address
-  and the key from JET.
+  and the key from Kos.
 
 **How it differs from Minty's inbox (§6):**
 - Minty's inbox is a script that sends mail to the Worker, through an Access service token.
-- Gmail pull is JET asking the person's own script from the browser.
-- It needs no server, so it works for JET on its own too.
+- Gmail pull is Kos asking the person's own script from the browser.
+- It needs no server, so it works for Kos on its own too.
 
-### 17.2 Share to JET (both modes)
+### 17.2 Share to Kos (both modes)
 
-- **The installed app is a share target** (`share_target` in `jet/manifest.webmanifest`): on Android,
-  "Share" from Gmail, Files or the gallery lists JET. It takes a PDF, an image, an email file or text.
-- **The service worker takes the POST** to `/jet/share`. It keeps what was shared in IndexedDB
-  `jet-share` (at most 5 files, 20 MB each) and opens `#/add?shared=1`. Nothing leaves the device.
+- **The installed app is a share target** (`share_target` in `kos/manifest.webmanifest`): on Android,
+  "Share" from Gmail, Files or the gallery lists Kos. It takes a PDF, an image, an email file or text.
+- **The service worker takes the POST** to `/kos/share`. It keeps what was shared in IndexedDB
+  `kos-share` (at most 5 files, 20 MB each) and opens `#/add?shared=1`. Nothing leaves the device.
 - **The add page reads it once, then deletes it:**
   - a PDF is read with pdf.js;
   - an email file goes to the email reader;
   - text, or a link, goes to the paste parser;
-  - a screenshot goes to `/sub-scan?for=jet&shared=1`, which reads it with Tesseract straight away.
+  - a screenshot goes to `/sub-scan?for=kos&shared=1`, which reads it with Tesseract straight away.
 - **iPhones have no share targets for web apps.** There, Gmail pull (§17.1) is the way in, or paste.
 
 ## 18. Trip tags (Minty only, built 2026-11-19)
@@ -736,7 +736,35 @@ trip's spending left out too.
   `GET /trips` also reads `analytics_exclusions` (a few rows) to say which tags are left out.
 - **The page:** the trip form has Tags, with the household's tags to tap (left-out ones marked). The
   trip's cover shows its tags, and the Spending tab says when they're left out.
-- **Not on its own:** JET on its own has no transactions, so it has no trip tags.
+- **Not on its own:** Kos on its own has no transactions, so it has no trip tags.
 - **One edge:** a transaction in two trips with the same tag carries one row, the first trip's.
   Taking the tag off that trip takes it off the transaction, even though the other trip has it.
+
+## 19. Renamed Kos, and the trip's summary strip (owner, 2026-11-20)
+
+**The rename:** JET is **Kos** everywhere: its name, its address (`/kos/`), its files (`public/kos/`,
+`src/kos/`, `src/routes/kos.ts`, `scripts/build-kos.mjs`), the landing site and the demo.
+- **Old addresses redirect:** `public/_redirects` sends `/jet` and `/jet/*` to `/kos/…` (301), and the
+  landing site does the same, so bookmarks and the dashboard's old trip links still open.
+- **Nothing is lost in a browser:** `store.js` moves the old localStorage keys (`jet-gmail`,
+  `jet-gmail-key`, `jet-gmail-seen`, `jet-sample`) to their `kos-` names, a newer `kos-` one
+  winning. When Kos's IndexedDB database (`kos`) is first made, the trips in JET's (`jet`) are copied
+  into it with their ids; JET's database is left as it was.
+- **The old app goes:** Kos unregisters JET's service worker (scope `/jet/`) and deletes its `jet-`
+  caches. An installed JET opens the redirect in the browser; Kos is installed again once.
+- **Old exports import** (`app: "JET"`); new ones say `Kos`.
+- **Gmail pull:** new set-ups use the label **Kos** and `+kos`. A script made with the label JET keeps
+  working, since Kos never tells the script which label to read.
+- **Kept:** `0025_jet.sql` (an applied migration's name is how D1 tracks it), and history.
+
+**The summary strip** (under a trip's cover, like Wanderlog's):
+- **Reservations:** Flight, Lodging, Rental car, Train (trains and buses), Restaurant, Activity, Other,
+  each with its count. A tap opens "Add a booking" for that trip with that kind chosen
+  (`#/add?trip=…&kind=…`).
+- **No Attachment tile:** Kos keeps no files (PDFs and emails are read on the device; only their
+  fields are saved).
+- **Budgeting:** on a Minty, the spending linked to the trip (`spent_cents`), with "View details" to
+  the Spending tab, and "left out of CFA" when a trip tag says so. On its own, what the bookings cost,
+  from their prices, by currency.
+- `tripSummary` (`store.js`) counts; `kos.js` draws it with Material Icons glyphs (Apache 2.0).
 
