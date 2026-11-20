@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, shareLink, shareString, shiftSample, store, tripAddress, tripFor, tripSummary } from "./store.js";
+import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, shiftSample, store, tripAddress, tripFor, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 import { parseWhere } from "./where.js";
@@ -656,7 +656,7 @@ const splitTags = (v) => [...new Map(String(v ?? "").split(",").map((x) => x.tri
 function tripForm(t, picked = []) {
   return `<div class="section-title"><h2>${t ? "Edit trip" : "New trip"}</h2></div>
     ${t ? "" : `<div class="card shared-paste"><b>Someone shared a trip?</b> <span class="muted">Paste its Kos link and the whole trip comes in, bookings and all.</span>
-      <div class="shared-row"><input id="sharedPaste" autocomplete="off" placeholder="https://minty.milesmaximizer.com/kos/#/import?t=1.…" />
+      <div class="shared-row"><input id="sharedPaste" autocomplete="off" placeholder="https://minty.milesmaximizer.com/kos/#2.…" />
         <button type="button" class="btn" data-paste-shared data-goatcounter-click="kos-new-trip-paste-link">Look at it</button></div><span class="err"></span></div>`}
     <form class="card" id="tripForm" data-id="${t?.id ?? ""}" data-items="${picked.join(",")}"><div class="form">
       <label class="wide">Name<input name="name" required maxlength="100" value="${esc(t?.name ?? "")}" placeholder="Tokyo, spring 2027" /></label>
@@ -809,7 +809,7 @@ function dataView() {
       <div class="actions">${MODE === "device" ? `<button type="button" class="btn primary" data-backup data-goatcounter-click="kos-backup-data">Back up</button>` : ""}<button type="button" class="btn${MODE === "device" ? "" : " primary"}" data-export>Export (a JSON file)</button>
         <label class="btn">Import…<input type="file" accept="application/json,.json" id="importFile" hidden /></label><span class="err" id="formErr"></span></div></div>
     <div class="card" style="margin-top:12px"><h3 style="margin:0 0 6px">Add a shared trip</h3><p class="muted" style="margin-top:0">Paste a Kos trip link someone sent you (or the trip file's contents).</p>
-      <textarea class="paste" id="sharedPaste" rows="2" placeholder="https://minty.milesmaximizer.com/kos/#/import?t=1.…"></textarea>
+      <textarea class="paste" id="sharedPaste" rows="2" placeholder="https://minty.milesmaximizer.com/kos/#2.…"></textarea>
       <div class="actions"><button type="button" class="btn" data-paste-shared>Look at it</button></div></div>`;
 }
 // --- backups (docs/trips.md §17.5): the phone's share sheet (Google Drive, email, Files…), else a download
@@ -995,7 +995,7 @@ async function readShared() {
     box.innerHTML = suggestionsHtml(found, "email"); return;
   }
   const text = [s.title, s.text, s.url, file && /^text\//.test(file.type) ? await file.blob.text() : ""].filter(Boolean).join("\n");
-  if (/[?&#]t=1\.[A-Za-z0-9_-]{8,}/.test(text)) { try { pendingShare = await readShare(text); } catch (e) { pendingShare = { error: e.message }; } location.hash = "#/import"; return; }
+  if (SHARE_RE.test(text)) { try { pendingShare = await readShare(text); } catch (e) { pendingShare = { error: e.message }; } location.hash = "#/import"; return; }
   if (text.trim()) { await readText(text, "paste"); return; }
   box.innerHTML = `<div class="suggest muted">Kos can't read that kind of file. Share a PDF, a screenshot, an email file or text.</div>`;
 }
@@ -1007,6 +1007,8 @@ function route() {
 }
 let source = "type";
 async function render() {
+  // a shared trip's link (…/kos/#2.…): the import page, with the string where it looks for it
+  if (/^#[12]\.[A-Za-z0-9_-]{8,}$/.test(location.hash)) history.replaceState(null, "", `#/import?t=${location.hash.slice(1)}`);
   if (!data) { try { await load(); } catch (e) { app.innerHTML = `<p class="err pad">Couldn't load Kos: ${esc(e.message)}</p>`; return; } }
   const { parts, q } = route();
   if (map && parts[0] !== "trip") { map.remove(); map = null; mapKey = ""; }

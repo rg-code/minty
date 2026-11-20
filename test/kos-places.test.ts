@@ -74,7 +74,8 @@ describe("sharing one trip (a link with it inside)", () => {
             { id: 4, trip_id: 7, kind: "event", name: "Skytree", start_at: "2027-03-12T10:00", lat: 35.7101, lon: 139.8107 }] };
   it("round-trips the trip, without its code, travellers, notes or (unless asked) its private details", async () => {
     const s = await shareString(trip);
-    expect(s).toMatch(/^1\.[A-Za-z0-9_-]+$/);
+    expect(s).toMatch(/^2\.[A-Za-z0-9_-]+$/);
+    expect(shareLink(s)).toBe(`https://minty.milesmaximizer.com/kos/#${s}`);
     const back = await readShare(shareLink(s));
     expect(back.trips[0]).toEqual({ name: "Tokyo", start_date: "2027-03-10", end_date: "2027-03-18", place: "Tokyo, Japan", id: 1, travellers: [] });
     expect(back.items).toEqual([{ kind: "lodging", name: "Hotel", start_at: "2027-03-10", end_at: "2027-03-14", trip_id: 1 },
@@ -85,6 +86,31 @@ describe("sharing one trip (a link with it inside)", () => {
   it("refuses anything else", async () => {
     await expect(readShare("hello")).rejects.toThrow(/isn't a shared Kos trip/);
     await expect(readShare("t=1.AAAAAAAAAAAAAAAA")).rejects.toThrow(/damaged/);
+    await expect(readShare("https://minty.milesmaximizer.com/kos/#2.AAAAAAAAAAAAAAAA")).rejects.toThrow(/damaged/);
+  });
+  // the sample's Tokyo trip, as shared from the live site: flights in two time zones, stays, coordinates
+  const tokyo = { name: "Tokyo", start_date: "2026-12-14", end_date: "2026-12-22", place: "Tokyo, Japan", lat: 35.6762, lon: 139.6503, items: [
+    { kind: "flight", name: "United", start_at: "2026-12-13T11:05-08:00", end_at: "2026-12-14T15:00+09:00", airline: "UA", flight_number: "837", dep_airport: "SFO", arr_airport: "NRT", dep_terminal: "I", seat: "34K" },
+    { kind: "lodging", name: "Hotel Kinokuni Shinjuku", start_at: "2026-12-14", end_at: "2026-12-18", place: "Nishi-Shinjuku, Tokyo", lat: 35.6909, lon: 139.6929 },
+    { kind: "restaurant", name: "Sushi Mitsuba", start_at: "2026-12-15T19:30+09:00", place: "Ginza, Tokyo", lat: 35.6717, lon: 139.765 },
+    { kind: "train", name: "Odakyu Romancecar", start_at: "2026-12-18T10:20+09:00", place: "Shinjuku to Hakone-Yumoto", lat: 35.6896, lon: 139.7006 },
+    { kind: "event", name: "Taj | the day trip", start_at: "2026-12-19T09:00+05:30" },              // another zone, and a "|"
+    { kind: "other", name: "Typed, no zone", start_at: "2026-12-20T08:15" },
+    { kind: "flight", name: "United", start_at: "2026-12-22T16:55+09:00", end_at: "2026-12-22T09:40-08:00", airline: "UA", flight_number: "838", dep_airport: "NRT", arr_airport: "SFO", seat: "34K" }] };
+  it("keeps every time, zone and place (to about a metre), and halves the link (§23.1)", async () => {
+    const back = await readShare(shareLink(await shareString(tokyo)));
+    const { items, ...head } = tokyo;
+    expect(back.trips[0]).toEqual({ ...head, id: 1, travellers: [] });
+    expect(back.items).toEqual(items.map((i) => ({ ...i, name: i.name.replace("|", "/"), trip_id: 1 })));
+    // the "1." string the same trip made before
+    const old = new TextEncoder().encode(JSON.stringify({ app: "Kos", share: 1, trip: head, items }));
+    const bytes = new Uint8Array(await new Response(new Blob([old]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer());
+    const v1 = "1." + btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const v2 = await shareString(tokyo);
+    expect(v2.length).toBeLessThan(v1.length * 0.62);
+    expect(shareLink(v2).length).toBeLessThan(`https://minty.milesmaximizer.com/kos/#/import?t=${v1}`.length * 0.6);
+    // and "1." links still open
+    expect((await readShare(`https://minty.milesmaximizer.com/kos/#/import?t=${v1}`)).items).toHaveLength(items.length);
   });
 });
 
