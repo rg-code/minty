@@ -120,6 +120,15 @@ export function cityNames(t, airports = {}) {
 /** Only Wikimedia's own image hosts, over https (the page's policy allows just these for photos). */
 export const isWikimediaImage = (u) => /^https:\/\/(upload|thumb)\.wikimedia\.org\/[^\s"'()\\]+$/.test(String(u ?? ""));
 
+// --- backups (Kos on its own, docs/trips.md §17.5): when to remind ------------------------------------
+/** Whether to show the backup reminder: trips of one's own, last backed up (or, never, the oldest of
+ * them made) more than 30 days ago, and not snoozed. Times in ms. */
+export function backupDue({ now, backedUp, oldestOwn, snoozedUntil }) {
+  if (!oldestOwn) return false;
+  if (snoozedUntil && now < snoozedUntil) return false;
+  return now - (backedUp || oldestOwn) > 30 * 864e5;
+}
+
 // --- Minty: its API ---------------------------------------------------------------------------
 async function api(method, path, body, raw) {
   const r = await fetch(path, { method, headers: raw ? { "content-type": "message/rfc822" } : body ? { "content-type": "application/json" } : {},
