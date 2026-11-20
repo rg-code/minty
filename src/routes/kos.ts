@@ -85,6 +85,18 @@ function tripFields(config: Config, b: Body, old: TripRow | null) {
   return f;
 }
 const TRIP_COLS = ["name", "start_date", "end_date", "place", "lat", "lon", "travellers", "notes", "tags"] as const;
+
+// --- trip codes (docs/trips.md §21): a trip's own email address is you+<code>@gmail.com -------------
+/** 10 characters from 31 (lowercase letters and digits without 0, 1, i, l, o): about 50 bits. */
+export const TRIP_CODE = /^[2-9a-hjkmnp-z]{10}$/;
+const CODE_CHARS = "23456789abcdefghjkmnpqrstuvwxyz";
+export function newTripCode(): string {
+  const out: string[] = [];
+  while (out.length < 10) {
+    for (const b of crypto.getRandomValues(new Uint8Array(16))) if (b < 248 && out.length < 10) out.push(CODE_CHARS[b % 31]);   // 248 = 8 × 31: no bias
+  }
+  return out.join("");
+}
 const MAX_TRIP_TAGS = 10;
 
 // --- trip tags (docs/trips.md §18) --------------------------------------------------------------
@@ -109,8 +121,14 @@ export async function saveTrip(env: Env, config: Config, request: Request, id?: 
   const f = tripFields(config, b, old);
   const v = TRIP_COLS.map((c) => f[c]);
   if (!old) {
-    const r = await env.DB.prepare(`INSERT INTO trips (${TRIP_COLS.join(", ")}) VALUES (${TRIP_COLS.map(() => "?").join(", ")}) RETURNING id`).bind(...v).first<{ id: number }>();
-    const tripId = r!.id;
+    // its code: one an import brings (when it's free), else a new one; a clash (vanishingly rare) tries again
+    const insert = (code: string) => env.DB.prepare(`INSERT INTO trips (${TRIP_COLS.join(", ")}, code) VALUES (${TRIP_COLS.map(() => "?").join(", ")}, ?) RETURNING id`).bind(...v, code).first<{ id: number }>();
+    let r: { id: number } | null = null;
+    for (const code of [typeof b.code === "string" && TRIP_CODE.test(b.code) ? b.code : newTripCode(), newTripCode(), newTripCode()]) {
+      try { r = await insert(code); break; } catch (e) { if (!/UNIQUE/i.test(String(e))) throw e; }
+    }
+    if (!r) throw new HttpError(500, "couldn't give the trip a code");
+    const tripId = r.id;
     // bookings chosen when the trip is made (e.g. "make a trip from these")
     if (Array.isArray(b.items) && b.items.length) await moveItems(env, b.items, tripId);
     return json({ id: tripId }, 201);

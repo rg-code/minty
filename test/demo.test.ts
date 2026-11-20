@@ -177,6 +177,7 @@ describe("demo Kos (docs/trips.md)", () => {
     expect(tokyo).toMatchObject({ transactions: 1, spent_cents: 248120 });                    // the flights, paid for already
     expect(lisbon.transactions).toBe(7);
     expect(chicago).toMatchObject({ tags: ["reimbursed"], transactions: 4 });
+    expect(body.trips.every((t: any) => /^[2-9a-hjkmnp-z]{10}$/.test(t.code))).toBe(true);           // each its address code
     expect(body.left_out_tags).toEqual(["reimbursed"]);
     const tx = (await getJson<any[]>(`/transactions?trip_id=${chicago.id}`, { envOverrides })).body;
     expect(tx.every((t: any) => t.tags.includes("reimbursed"))).toBe(true);
