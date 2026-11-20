@@ -3,7 +3,7 @@
 // arcs between airports (airports.json, from OurAirports, public domain); places with coordinates
 // are pins. Tiles, the style and its fonts come from tiles.openfreemap.org, which the /kos/ page's
 // policy allows (public/_headers); nothing else is loaded from another host.
-import { LIBERTY_STYLE, POSITRON_STYLE, minimalStyle, nightStyle } from "./map-style.js";
+import { LIBERTY_STYLE, POSITRON_STYLE, minimalStyle, nightStyle, quietStyle } from "./map-style.js";
 
 /** Latin names only. Liberty prints "name:latin" over "name:nonlatin"; OpenFreeMap's fonts have
  * no Japanese, Chinese or Korean glyphs, so the second line drew as empty boxes. A label with both
@@ -52,7 +52,7 @@ export async function createMap(el, { dark, minimal = false }) {
   try {
     gl.setWorkerUrl("/vendor/maplibre/maplibre-gl-csp-worker.js");
     const style = latinLabels(await (await fetch(minimal ? POSITRON_STYLE : LIBERTY_STYLE)).json());
-    const map = new gl.Map({ container: el, style: minimal ? minimalStyle(style, dark) : dark ? nightStyle(style) : style, center: [0, 20], zoom: 1, attributionControl: { compact: true },
+    const map = new gl.Map({ container: el, style: minimal ? minimalStyle(style, dark) : dark ? nightStyle(quietStyle(style)) : quietStyle(style, false), center: [0, 20], zoom: 1, attributionControl: { compact: true },
                              cooperativeGestures: matchMedia("(hover: none)").matches });
     map.addControl(new gl.NavigationControl({ showCompass: false }), "top-right");
     await new Promise((ok, fail) => { map.once("load", ok); map.once("error", fail); setTimeout(() => fail(new Error("timeout")), 15000); });

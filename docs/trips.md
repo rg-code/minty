@@ -843,6 +843,10 @@ too busy).
   places; the flights draw without widening it.
 - **The credit** (OpenFreeMap, OpenMapTiles, OpenStreetMap) is under the map, and in the map's ⓘ.
 - The itinerary's map numbers its places inside the dots too (per day, as Wanderlog does).
+- **The trip's own map** (Itinerary, Flights, Lodging) stays OpenFreeMap's Liberty, a little quieter
+  (`quietStyle`): no points of interest, buildings, road names or shields, minor streets, footpaths,
+  tunnels or state names, and soft grey roads in light. The main roads, rail, parks, water and place
+  names stay.
 
 **Reads:** `GET /trips/{id}/journal` reads the trip by its key and its notes by the key's prefix
 (budget in `test/reads.test.ts`). The hourly step reads the trips (few).

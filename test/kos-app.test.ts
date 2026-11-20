@@ -152,6 +152,15 @@ describe("the trip journal (public/kos/journal.js, map-style.js)", () => {
     expect(dark.layers[0].paint["background-color"]).not.toBe(light.layers[0].paint["background-color"]);
     expect(dark.layers[2].paint["line-width"]).toBe(2);                                       // shapes kept, colours changed
   });
+  it("the trip's map is Liberty, a little quieter: no points of interest, buildings, road names, minor streets or footpaths; main roads, rail and places stay", async () => {
+    const { quietStyle } = await import("../public/kos/map-style.js");
+    const ids = ["water", "park", "park_outline", "landuse_school", "building", "building-3d", "poi_r1", "poi_transit", "road_minor", "road_path_pedestrian",
+      "tunnel_service_track", "road_trunk_primary", "road_major_rail", "road_major_rail_hatching", "road_one_way_arrow", "highway-name-major", "highway-shield-non-us", "road_shield_us", "label_city", "airport"];
+    expect(quietStyle({ layers: [...ids, "label_state", "tunnel_motorway", "road_link"].map((id) => ({ id })) }).layers.map((l: any) => l.id))
+      .toEqual(["water", "park", "road_trunk_primary", "road_major_rail", "label_city", "airport"]);
+    const light = quietStyle({ layers: [{ id: "road_trunk_primary", type: "line", "source-layer": "transportation", paint: { "line-color": "#fc8" } }] }, false);
+    expect(light.layers[0].paint["line-color"]).toBe("#ece8df");                              // soft grey roads in light
+  });
   it("a trip's city photo: which city to ask for, and only Wikimedia's image hosts", async () => {
     const { cityNames, isWikimediaImage } = await import("../public/kos/store.js");
     expect(cityNames({ place: "Tokyo, Japan", items: [{ kind: "flight", arr_airport: "NRT", start_at: "2027-03-10" }] }, airports)).toEqual(["Tokyo, Japan", "Tokyo"]);

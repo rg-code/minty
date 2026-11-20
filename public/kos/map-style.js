@@ -107,6 +107,18 @@ export function nightStyle(style) {
   };
 }
 
+// --- the trip's map: Liberty, a little quieter (owner, 2026-11-20) ---------------------------------
+// The main roads, rail lines, parks, water and place names stay; points of interest, buildings, road
+// names and shields, one-way arrows, minor streets, links, footpaths and service tracks, tunnels, rail
+// hatching, state names and small land-use patches go. In light, the roads are soft grey, not orange.
+const QUIET_DROP = /^(poi|building|highway-name|highway-shield|road_shield|road_one_way|tunnel_|(road|bridge)_(path_pedestrian|service_track|minor|street|link|motorway_link)|.*_rail_hatching$|landuse_(pitch|track|cemetery|hospital|school)$|park_outline$|label_state$)/;
+export function quietStyle(style, dark = true) {
+  const layers = style.layers.filter((l) => !QUIET_DROP.test(l.id));
+  if (dark) return { ...style, layers };                     // nightStyle recolours it after
+  return { ...style, layers: layers.map((l) => (l.type === "line" && l["source-layer"] === "transportation" && !/rail/.test(l.id)
+    ? { ...l, paint: { ...l.paint, "line-color": /casing/.test(l.id) ? "#dcd7cd" : "#ece8df" } } : l)) };
+}
+
 // --- the journal's map (docs/trips.md §20): minimal --------------------------------------------
 // OpenFreeMap's Positron, cut down to land, water, the big roads as faint lines, country borders and
 // city names, in a quiet light or dark palette, so the trip's numbered places are what you see.
