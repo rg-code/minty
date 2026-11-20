@@ -393,3 +393,26 @@ export async function markJournalsReady(env: Env): Promise<number> {
   return r.meta.changes ?? 0;
 }
 
+// --- a Google Maps short link, followed (docs/trips.md §22) --------------------------------------------
+// maps.app.goo.gl links only tell where a place is after a redirect, which a page can't read across
+// sites. The Worker follows it: only from Google's short-link hosts, at most 3 hops, each only to a
+// Google host, and it returns the final address (never a page). Kos reads the place from it.
+const LINK_START = /^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps)\/[\w-]+\/?(\?[\w=&.-]*)?$/;
+const LINK_HOP = /^(maps\.app\.goo\.gl|goo\.gl|(www\.|maps\.)?google\.[a-z.]{2,6})$/;
+export async function resolvePlaceLink(request: Request, fetchFn: typeof fetch = fetch): Promise<Response> {
+  const b = await body(request);
+  const start = String(b.url ?? "").trim();
+  if (!LINK_START.test(start)) throw unprocessable("only a Google Maps short link (maps.app.goo.gl/…) can be followed");
+  let url = start;
+  for (let hop = 0; hop < 3; hop++) {
+    const r = await fetchFn(url, { method: "GET", redirect: "manual", headers: { "user-agent": "Mozilla/5.0 (Kos)" } });
+    const next = r.headers.get("location");
+    await r.body?.cancel();
+    if (!next || r.status < 300 || r.status >= 400) break;
+    const u = new URL(next, url);
+    if (u.protocol !== "https:" || !LINK_HOP.test(u.hostname)) throw unprocessable("that link went somewhere other than Google Maps");
+    url = u.href;
+    if (/^(www\.|maps\.)?google\./.test(u.hostname) && u.pathname.startsWith("/maps")) return json({ url });
+  }
+  throw unprocessable("Google didn't say where that link goes: open it, and paste the long address from the browser's bar");
+}

@@ -31,7 +31,8 @@ describe("the page", () => {
     const m = await (await raw("/kos/manifest.webmanifest")).json() as any;
     expect(m).toMatchObject({ id: "/kos/", start_url: "/kos/", scope: "/kos/", name: "Kos" });
     const sw = await (await raw("/kos/sw.js")).text();
-    expect(sw).toContain('const CACHE = "kos-v3"');
+    expect(sw).toContain('const CACHE = "kos-v4"');
+    expect(sw).toContain('"/kos/where.js"');
     expect(sw).toContain('"/kos/journal.js"');
     // its icon (the owner's, 2026-11-20): PNGs only, the old SVG gone
     expect(html).toContain('<link rel="icon" href="/kos/icon-64.png" type="image/png" />');

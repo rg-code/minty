@@ -348,3 +348,16 @@ from `#/gmail` after "Forget on this device".
 - No `UrlFetchApp`: the script never sends mail anywhere.
 - No write scopes.
 - Nothing reaches Minty's Worker from Google.
+
+## 8. Kos following a Google Maps short link (owner's request, 2026-11-20)
+
+The design is [trips.md](trips.md) §22. `POST /trips/place-link` (behind Access, like every route) is the
+Worker's first fetch to an address a person gives it. It's narrow:
+- it only starts from `https://maps.app.goo.gl/…` or `https://goo.gl/maps/…`;
+- it follows at most 3 redirects, each only to `maps.app.goo.gl`, `goo.gl` or a `google.<tld>` host, over https;
+- it returns the final Google Maps address, never a page's content, and reads no body;
+- its input goes through `jsonBody` (16 KiB) and the usual per-login rate limits.
+
+So it can't be pointed at another host (no server-side request forgery), and Google learns only that a
+Cloudflare address followed that link. Kos on its own can't follow such links; it asks for the long address.
+

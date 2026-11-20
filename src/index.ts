@@ -106,6 +106,7 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["GET", /^\/trips\/(\d+)\/suggestions$/, ({ env, params }) => kos.suggestions(env, Number(params[0]))],
   ["POST", /^\/trips\/(\d+)\/transactions$/, ({ env, request, params }) => kos.linkTransactions(env, request, Number(params[0]))],
   ["GET", /^\/trips\/(\d+)\/journal$/, ({ env, params }) => kos.journal(env, Number(params[0]))],
+  ["POST", /^\/trips\/place-link$/, ({ request }) => kos.resolvePlaceLink(request)],
   ["PUT", /^\/trips\/(\d+)\/journal$/, ({ env, request, params }) => kos.saveJournal(env, request, Number(params[0]))],
   // SUB, sign-up bonuses (docs/sub.md)
   ["GET", /^\/sub$/, ({ env, url }) => sub.list(env, url)],
