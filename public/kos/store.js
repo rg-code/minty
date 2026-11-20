@@ -295,6 +295,10 @@ const mintyStore = {
   saveJournal: (id, b) => api("PUT", `/trips/${id}/journal`, b),
   allNotes: async () => [],                              // on a Minty, the journal's notes stay in its database
   placeLink: async (url) => (await api("POST", "/trips/place-link", { url })).url,   // a maps.app.goo.gl link, followed by the Worker
+  // K2 (docs/trips.md §25): the trip's Immich album, made by the cron; a photo's thumbnail comes through the Worker
+  photos: (id) => api("GET", `/trips/${id}/photos`),
+  makeAlbum: (id) => api("POST", `/trips/${id}/photos`, { make: true }),
+  photoUrl: (id, asset) => `/trips/${id}/photos/${encodeURIComponent(asset)}`,
   tags: () => api("GET", "/tags").catch(() => []),       // the household's tags, to suggest for a trip
   spending: true,
 };
@@ -468,6 +472,7 @@ const deviceStore = {
   },
   async allNotes() { return tx(["notes"], "readonly", async (x) => req(x.objectStore("notes").getAll())); },
   placeLink: null,                                       // no server here to follow a short link
+  photos: null, makeAlbum: null, photoUrl: null,         // no Immich without a server
   async deleteItem(id) { return tx(["items"], "readwrite", async (x) => { await req(x.objectStore("items").delete(id)); return { id, removed: true }; }); },
   /** An email file, read in this browser with the same reader Minty runs (src/kos/). Nothing is kept. */
   async readEmail(buf) {

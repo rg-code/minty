@@ -261,6 +261,7 @@ so Minty needs two things, both set up once by the owner.
   | `album.read` | checking the album Minty made is still there |
   | `album.create` | making the album |
   | `albumAsset.create` | adding photos to it, including ones uploaded later |
+  | `asset.view` | the journal's thumbnails, through the Worker (K2, §25) |
 
   Nothing that deletes, edits, downloads or shares.
 - **Version caveat:** before Immich 1.138, a key needed the `all` permission. Since Immich 3.0, routes
@@ -286,8 +287,8 @@ token gets through.
 - If not, a second key per person (`IMMICH_API_KEY_<PERSON>`) gives each person their own album of
   the trip. ✋ Only if T0 shows it's needed.
 
-**When:** from the cron, never on a request.
-- The first hourly run after a trip ends makes the album.
+**When:** from the cron, never on a request (as built in K2, §25: quiet catch-up runs, one trip each).
+- The first run after a trip ends makes the album.
 - It's checked once a day for 7 days after, for photos uploaded late.
 - **Make the album now** on a trip only records a request, like tapping the logo; the next run does
   it.
@@ -306,8 +307,7 @@ and doesn't make it again; the trip offers **Make it again**.
 
 **The trip shows "Photos: 214 in Immich ↗"**, a link to the album, which opens in Immich behind its
 own Access sign-in.
-- There are no thumbnails in Minty: they'd come from Immich's host, which the page's policy doesn't
-  allow, and would need Immich's sign-in in Minty's page.
+- ~~There are no thumbnails in Minty~~ K2 (§25) shows a few of each day's photos, through the Worker.
 
 **Budget:** a search page holds up to 250 assets. A run makes the search pages plus one album call,
 well inside the 50 subrequests, and a big trip spreads over several runs.
@@ -870,9 +870,7 @@ too busy).
 **Reads:** `GET /trips/{id}/journal` reads the trip by its key and its notes by the key's prefix
 (budget in `test/reads.test.ts`). The hourly step reads the trips (few).
 
-**Next, K2: Immich in the journal** (§8, waiting on T0): the album, its photos on their days and as
-pins where they were taken, thumbnails through the Worker (only the trip album's), and **Make the
-album now**.
+**K2: Immich in the journal** is §25.
 
 ## 21. Each trip's own email address (owner, 2026-11-20)
 
@@ -992,4 +990,67 @@ wrong" (subject "Kos trip with a problem: …"). Below, what was first built as 
 down the page (behind the headline, beside the sample flight, behind the set-up), each breathing
 (brighter and a touch larger, then dimmer and smaller), out of step with the others; sized in px and
 placed so each fades out inside its own section; still for reduced motion.
+
+## 25. K2: the trip's Immich album, in the journal (owner, "build K2", 2026-11-20)
+
+On a Minty with Immich set up, each trip gets an album in Immich of everything taken during it, and the
+journal shows a few of each day's photos. Kos on its own has no server, so no Immich. Security plan §9.
+
+**Setting it up** (the household, once):
+- **An Immich API key** (Account Settings → API Keys) with `asset.read`, `asset.view`, `album.read`,
+  `album.create`, `albumAsset.create`. Secret `IMMICH_API_KEY`.
+- **An address Cloudflare can reach**, as the variable `IMMICH_URL`. A Worker can't reach a tailnet, so:
+  a Cloudflare Tunnel on the Immich machine, with a hostname used only for this, behind a Cloudflare
+  Access application whose only policy is Service Auth for a service token. The token goes in
+  `IMMICH_ACCESS_CLIENT_ID` / `IMMICH_ACCESS_CLIENT_SECRET`.
+- **`IMMICH_LINK_URL`** (optional): where people open Immich in a browser (the tailnet address, say), for
+  the album links. Default `IMMICH_URL`.
+- Setup (`/status`) shows the cron's daily check of the key: it works, and has what Kos needs.
+
+**The album** (`src/immich.ts`, from the cron only: one trip per quiet catch-up run):
+- **Which trips:** one someone asked for (**Make the album now**); one that ended in the last 7 days with
+  no album yet; and one with an album, once a day for 7 days after it ends, for photos uploaded late.
+  **Older trips get an album only when asked,** so the first run never fills Immich with albums for
+  every past trip.
+- **Which photos:** Immich's metadata search over the trip's days with a day either side (UTC), then
+  only those whose local time (`localDateTime`, the camera's) falls on the trip's own days. No time
+  zone is needed for the trip. 60 a page.
+- **The album:** "Tokyo, Mar 2027", made with the trip's first photo (**never empty**: a trip with none
+  says so, and can "Look again"; one photo keeps Immich's answer small), then the rest added 500 at a
+  time (Immich answers "duplicate" for one already there).
+- **CPU (10 ms on the free plan):** each run reads at most about 150 KB of Immich's answers, the budget
+  sync measured for Plaid's pages (`SYNC_MAX_BYTES_PER_RUN`); a bigger trip carries on next run. It's
+  carried over from sync's measurement, not measured on Immich: `--k2` prints a real page's size. A
+  search page is bound once, into a holding row (`app_state`) that SQLite unpacks with `json_each`.
+- **A run cut off part-way** leaves the trip saying so ("didn't finish") and waiting an hour. Immich's
+  step is the last of the quiet run, so it never costs the steps before it.
+- **Failures** are kept on the trip and shown in its journal ("Immich: …"); the trip waits an hour, and
+  the oldest-checked trip goes first. Only Immich's own not-found means an album was deleted: then Kos
+  doesn't make it again by itself, and the journal offers **Make it again**. A redirect (Access's
+  sign-in), a web page, a 5xx or no answer is a passing failure.
+- **What D1 keeps** (`trip_photos`, migration 0029): each photo's id, local time and day, coordinates and
+  city when Immich has them, whether it's in the album, and the cron's **picks**: up to 6 a day, spread
+  through the day, so the journal reads the same few rows however many photos there are. Never an image.
+
+**In the journal:**
+- A card: "214 photos and videos from these days, in an album in Immich", **Open the album in Immich ↗**
+  (`IMMICH_LINK_URL`), or the album's state (being made, none those days, deleted) and its button.
+- A photos count among the stats, and under each day its picks as thumbnails, with "+N more" (all of
+  them link to the album).
+- Grey dots on the map where photos were taken, when Immich knows (phones often don't record it).
+- **Thumbnails come through the Worker** (`GET /trips/{id}/photos/{asset}`): only a photo of that trip,
+  only as an image, privately cached. The page never talks to Immich and its policy needs no new host.
+  (This replaces §8's "no thumbnails in Minty".)
+
+**Calls Kos makes:**
+- **Confirmed by T0:** `POST /api/search/metadata` (`takenAfter`, `takenBefore`, `size`, `page`,
+  `withExif`, `nextPage`); `POST /api/albums` (`albumName`, `assetIds`); `PUT /api/albums/{id}/assets`
+  (`ids`, "duplicate"); `GET /api/api-keys/me`.
+- **From Immich's API, not yet checked on the household's Immich:** each asset's `localDateTime` (Kos
+  falls back to `fileCreatedAt`); `GET /api/assets/{id}/thumbnail?size=thumbnail`; `GET
+  /api/albums/{id}?withoutAssets=true` and what it answers for a deleted album (Kos takes a 400 or 404
+  saying "not found" or "no album.read access"). `scripts/kos-t0/immich.ts --k2` checks them.
+
+**Reads:** `GET /trips/{id}/photos` reads the trip by its key and the picks by `(trip, pick)` (budget in
+`test/reads.test.ts`); a thumbnail reads one row by the primary key.
 

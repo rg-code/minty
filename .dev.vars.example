@@ -15,3 +15,9 @@ PLAID_SECRET_ME_BACKUP=
 TOKEN_ENC_KEY=
 # Only while changing the key (SETUP.md, "Changing the encryption key"): TOKEN_ENC_KEY_PREVIOUS,
 # the old key. Not listed as a line here, so the Deploy button doesn't ask for it.
+
+# Optional, Kos's trip albums in Immich (docs/trips.md §25), with the variable IMMICH_URL:
+# IMMICH_API_KEY (an Immich API key with asset.read, asset.view, album.read, album.create and
+# albumAsset.create), and only when Immich's address is behind Cloudflare Access, a service token's
+# IMMICH_ACCESS_CLIENT_ID and IMMICH_ACCESS_CLIENT_SECRET. Not listed as lines, so the Deploy button
+# doesn't ask for them.

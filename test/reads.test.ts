@@ -45,7 +45,7 @@ async function readsOf(path: string, init: RequestInit = {}) {
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["trip_journal_notes", "trip_transactions", "trip_items", "trips", "sub_payouts", "sub_requirements", "sub_offers", "investment_txns", "holdings", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["trip_photos", "trip_journal_notes", "trip_transactions", "trip_items", "trips", "sub_payouts", "sub_requirements", "sub_offers", "investment_txns", "holdings", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   // The first three are banks ABC's catalog recognises (src/benefits/catalog.ts); the rest are made up.
   const banks = ["American Express", "Citibank Online", "U.S. Bank", "Example Bank A", "Example Bank B", "Example Bank C", "Example Bank D", "Example Bank E"];
   await db.batch(banks.map((b, i) => db.prepare(
@@ -104,6 +104,10 @@ beforeAll(async () => {
   await db.prepare(`INSERT INTO trip_items (trip_id, kind, name, price_cents, currency) SELECT 1, 'lodging', 'Stay ' || value, 10000 * value, 'USD' FROM json_each('[1,2,3]')`).run();
   await db.prepare(`INSERT INTO trip_transactions (trip_id, transaction_id, state)
     SELECT 1, id, 'confirmed' FROM transactions WHERE date >= date('now', '-40 days') AND date <= date('now', '-30 days') LIMIT 30`).run();
+  // K2: 300 photos over the ten days, the cron's picks 6 a day.
+  await db.prepare(`INSERT INTO trip_photos (trip_id, asset_id, taken, day, pick)
+    SELECT 1, printf('00000000-0000-4000-8000-%012d', d.value * 100 + p.value), date('now', '-' || (30 + d.value) || ' days') || printf('T%02d:00:00', p.value % 24), date('now', '-' || (30 + d.value) || ' days'), p.value < 6
+    FROM json_each('${JSON.stringify([...Array(10).keys()])}') d, json_each('${JSON.stringify([...Array(30).keys()])}') p`).run();
   // SUB: four offers on busy cards, each with a spend requirement over 4 months, one with a cash reward (payout candidates).
   await db.prepare(`INSERT INTO sub_offers (id, owner, account_id, status, opened_date, reward_cents, reward_points)
     SELECT value, 'me', value, 'open', date('now', '-120 days'), CASE WHEN value = 1 THEN 30000 END, CASE WHEN value = 1 THEN NULL ELSE 60000 END
@@ -122,6 +126,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/sub", 350],
     ["/trips", 150],                     // 66 when written. Kos: the trips, their bookings once each, and each trip's links by index
     ["/trips/1/suggestions", 300],
+    ["/trips/1/photos", 80],              // K2: the trip by key and the cron's picks by (trip, pick): 60 of its 300 photos
     ["/trips/1/journal", 20],             // the trip by key, and its notes by the primary key's prefix       // about 110 when written: the trip's window by the date index (bounded), and each priced booking by idx_txn_pair (INDEXED BY: the date index read a year)
     ["/transactions?trip_id=1", 350],    // 175 when written: starts from the trip's links (CROSS JOIN), not the date index                       // 218 when written. SUB: 4 offers, each requirement's window by account and date (bounded at both ends), and one payout look-up
     ["/bills", 9000],                    // 28 cards x 12 statements (each window an index range: an OR there read 85,000), plus 40 own bills

@@ -361,3 +361,31 @@ Worker's first fetch to an address a person gives it. It's narrow:
 So it can't be pointed at another host (no server-side request forgery), and Google learns only that a
 Cloudflare address followed that link. Kos on its own can't follow such links; it asks for the long address.
 
+## 9. Kos K2: the household's Immich, from the Worker (owner's "build K2", 2026-11-20)
+
+The design is [trips.md](trips.md) §25. The Worker calls the household's Immich with an API key: the
+first service it calls that the household runs itself, and the first photo it serves.
+- **What the key can do:** `asset.read`, `asset.view` (thumbnails), `album.read`, `album.create`,
+  `albumAsset.create`. Nothing that deletes, edits, downloads originals, shares or reads other users.
+  Setup (`/status`) shows any permission missing, from the cron's daily `GET /api-keys/me`.
+- **Secrets:** `IMMICH_API_KEY`, and when Immich's address is behind Cloudflare Access, a service token
+  (`IMMICH_ACCESS_CLIENT_ID` / `_SECRET`) for **Immich's** Access application only. None of them is ever
+  returned to a page or logged. `IMMICH_URL` and `IMMICH_LINK_URL` are variables.
+- **Reaching it:** the Worker runs on Cloudflare, so it can't reach a tailnet. The recommended way is a
+  Cloudflare Tunnel on the Immich machine with a hostname used only for the API, behind an Access
+  application whose only policy is Service Auth for that token. Immich's own web address can stay on
+  the tailnet; `IMMICH_LINK_URL` is what the album links use.
+- **When:** the cron makes and fills albums (one trip per quiet catch-up run). A request only records
+  "Make the album now".
+- **The thumbnail route** (`GET /trips/{id}/photos/{asset}`, behind Access like every route) is the only
+  request path that calls Immich:
+  - the asset id must be a UUID and a photo of that trip (`trip_photos`), so it can't be pointed at
+    another asset or path;
+  - it fetches only `/api/assets/{id}/thumbnail`, with `redirect: "manual"`;
+  - it passes on only an image (`image/jpeg|webp|png|avif`), with none of Immich's headers, and
+    `cache-control: private`. Kos's service worker never caches it.
+- **What D1 keeps:** each photo's id, local time and day, and coordinates and city when Immich has them.
+  Never an image. Trips' photos are covered by the same trust model: every allowed login sees every trip.
+- **Never:** deleting or editing a photo, taking one out of an album, a shared or public link, or an
+  album Kos wasn't asked for beyond trips that just ended.
+

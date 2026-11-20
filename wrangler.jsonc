@@ -22,6 +22,11 @@
 //                                                  the free plan allows 5,000,000. "0" = no limit
 //       IRS_LIMITS          "on"                   "off" = never ask irs.gov for the contribution
 //                                                  limits (EGG uses the ones in the code)
+//       IMMICH_URL          ""                     optional, Kos's trip albums (docs/trips.md §25): your Immich
+//                                                  as Cloudflare reaches it (e.g. a Cloudflare Tunnel's
+//                                                  hostname); with the secret IMMICH_API_KEY. Unset = off
+//       IMMICH_LINK_URL     IMMICH_URL             where you open Immich in a browser (e.g. its tailnet
+//                                                  address), for the album links
 //   * rate limits (the "ratelimits" bindings below) are the same for everyone: 120 API requests a
 //     minute per login, 30 searches / ABC loads, 10 bank-linking calls. Their namespace ids are
 //     fixed numbers, unusual so they don't share counters with another Worker on your account.

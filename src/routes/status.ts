@@ -7,12 +7,13 @@ import { json } from "../http";
 import { bankHealth, bankRows, syncHealth } from "../health";
 import { DEFAULT_READ_BUDGET, LIMITERS, readBudget, readsToday } from "../limits";
 import { tokenKeys } from "../token-key";
+import { IMMICH_PERMISSIONS, immichCheck } from "../immich";
 
 /** GET /status: setup checks for the household, shown on the /add-user page. Behind Access like
  * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql", "0010_card_statements.sql", "0011_bills.sql", "0012_point_balances.sql", "0013_audit.sql", "0014_audit_views.sql", "0015_investments.sql", "0016_statement_marks.sql", "0017_account_names.sql", "0018_statement_estimated.sql", "0019_analytics_exclusions.sql", "0020_txn_category_index.sql", "0021_authorized_date.sql", "0022_benefit_credit_periods.sql", "0023_manual_accounts.sql", "0024_sub.sql", "0025_jet.sql", "0026_trip_tags.sql", "0027_trip_journal.sql", "0028_trip_codes.sql"];
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql", "0010_card_statements.sql", "0011_bills.sql", "0012_point_balances.sql", "0013_audit.sql", "0014_audit_views.sql", "0015_investments.sql", "0016_statement_marks.sql", "0017_account_names.sql", "0018_statement_estimated.sql", "0019_analytics_exclusions.sql", "0020_txn_category_index.sql", "0021_authorized_date.sql", "0022_benefit_credit_periods.sql", "0023_manual_accounts.sql", "0024_sub.sql", "0025_jet.sql", "0026_trip_tags.sql", "0027_trip_journal.sql", "0028_trip_codes.sql", "0029_trip_photos.sql"];
 
 interface Check { id: string; ok: boolean; level: "error" | "warn"; message: string; fix?: string }
 
@@ -261,6 +262,19 @@ export async function status(env: Env, config: Config, email: string): Promise<R
       : { id: `statements_${r.item_id}`, ok: false, level: "warn", message: `${bank}: fetching statement details failed (${r.last_error ?? "error"}). Minty retries every hour.` });
   }
   if (sync) add({ id: "sync", level: "warn", ...sync });
+
+  // Kos K2 (docs/trips.md §25): only when Immich is set up. The cron checks the key once a day; this
+  // page never calls Immich.
+  const im = await immichCheck(env).catch(() => ({ set_up: false }) as Awaited<ReturnType<typeof immichCheck>>);
+  if (im.set_up) {
+    add(!im.checked_at
+      ? { id: "immich", ok: true, level: "warn", message: "Immich is set up; the next quiet sync run (within about 10 minutes) checks its key." }
+      : im.error
+      ? { id: "immich", ok: false, level: "warn", message: `Immich: ${im.error}`, fix: "Check IMMICH_URL (an address Cloudflare can reach, e.g. a Cloudflare Tunnel's) and IMMICH_API_KEY; behind Cloudflare Access, IMMICH_ACCESS_CLIENT_ID and IMMICH_ACCESS_CLIENT_SECRET too." }
+      : im.missing?.length
+      ? { id: "immich", ok: false, level: "warn", message: `Immich's API key is missing ${im.missing.join(", ")}.`, fix: `In Immich: Account Settings → API Keys, edit the key to have ${IMMICH_PERMISSIONS.join(", ")}.` }
+      : { id: "immich", ok: true, level: "warn", message: "Immich: the key works and has what Kos needs for trip albums." });
+  }
 
   return json({ backend: "workers", plaid_env: plaidEnv, checks, items: byStatus });
 }
