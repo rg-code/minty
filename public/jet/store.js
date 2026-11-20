@@ -66,6 +66,18 @@ export function importFile(data) {
   return { trips, items };
 }
 
+/** JET on its own's sample trips (jet/sample.json, written by scripts/build-jet.mjs from the live
+ * demo's made-up trips): dated from `sample_from`, moved to fall as far from `today` as they did
+ * from that day, so the trip coming up is always coming up. */
+export function shiftSample(file, today) {
+  const day = (s) => Date.parse(`${s}T00:00:00Z`);
+  const days = Math.round((day(today) - day(file.sample_from)) / 864e5);
+  const move = (s) => (typeof s === "string" && /^\d{4}-\d{2}-\d{2}/.test(s)
+    ? new Date(day(s.slice(0, 10)) + days * 864e5).toISOString().slice(0, 10) + s.slice(10) : s);
+  return { ...file, trips: file.trips.map((t) => ({ ...t, start_date: move(t.start_date), end_date: move(t.end_date) })),
+           items: file.items.map((i) => ({ ...i, start_at: move(i.start_at), end_at: move(i.end_at) })) };
+}
+
 // --- Minty: its API ---------------------------------------------------------------------------
 async function api(method, path, body, raw) {
   const r = await fetch(path, { method, headers: raw ? { "content-type": "message/rfc822" } : body ? { "content-type": "application/json" } : {},

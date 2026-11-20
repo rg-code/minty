@@ -12,7 +12,7 @@ const envOverrides = demoEnv(data) as any;
 
 beforeAll(async () => {
   const db = env.DB;
-  await db.batch(["investment_txns", "holdings", "securities", "investment_sync", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+  await db.batch(["trip_transactions", "trip_items", "trips", "analytics_exclusions", "sub_payouts", "sub_requirements", "sub_offers", "investment_txns", "holdings", "securities", "investment_sync", "balance_snapshots", "recurring_charges", "net_worth", "monthly_totals", "point_balances", "bills", "card_statements", "statement_sync", "benefit_marks", "card_products", "transaction_tags", "transactions", "accounts", "items"].map((t) => db.prepare(`DELETE FROM ${t}`)));
   await db.batch(statements(data).map(([sql, params]) => db.prepare(sql).bind(...params)));
 });
 
@@ -28,9 +28,15 @@ describe("demo data", () => {
     expect(data.users).toBe("alex:Alex,sam:Sam,kate:Kate,adam:Adam,andy:Andy,maurice:Maurice");
   });
 
-  it("stays small (at most 500 transactions), so the demo starts fast", () => {
-    expect(data.transactions.length).toBeGreaterThan(400);
-    expect(data.transactions.length).toBeLessThanOrEqual(500);
+  it("stays small (at most 550 transactions on any day of the year), so the demo starts fast", () => {
+    // The count moves with the date: card credits go back to last January 1, so it's lowest in
+    // January and highest in December (376 to 524 when written, JET's trips included).
+    const start = Date.UTC(new Date().getUTCFullYear(), 0, 1);
+    for (let i = 0; i < 366; i++) {
+      const n = generate(new Date(start + i * 864e5)).transactions.length;
+      expect(n, new Date(start + i * 864e5).toISOString().slice(0, 10)).toBeGreaterThan(350);
+      expect(n, new Date(start + i * 864e5).toISOString().slice(0, 10)).toBeLessThanOrEqual(550);
+    }
   });
 
   it("gives Kate, Adam, Andy and Maurice one transaction each", () => {
@@ -158,3 +164,23 @@ describe("demo own bills", () => {
     expect(by("Recology", "paid")).toMatchObject({ paid_how: "marked" });
   });
 });
+
+describe("demo JET (docs/trips.md)", () => {
+  it("two past trips and Tokyo coming up, a booking waiting, and the work trip's spending left out by its tag", async () => {
+    const { status, body } = await getJson<any>("/trips", { envOverrides });
+    expect(status).toBe(200);
+    expect(body.trips.map((t: any) => t.name)).toEqual(["Tokyo", "Chicago, work", "Lisbon"]);
+    expect(body.unassigned.map((i: any) => i.name)).toEqual(["Harvest Table"]);
+    const [tokyo, chicago, lisbon] = body.trips;
+    expect(tokyo.start_date > new Date().toISOString().slice(0, 10)).toBe(true);
+    expect(tokyo.items.filter((i: any) => i.kind === "flight").map((i: any) => `${i.airline}${i.flight_number} ${i.dep_airport}-${i.arr_airport}`)).toEqual(["UA837 SFO-NRT", "UA838 NRT-SFO"]);
+    expect(tokyo).toMatchObject({ transactions: 1, spent_cents: 248120 });                    // the flights, paid for already
+    expect(lisbon.transactions).toBe(7);
+    expect(chicago).toMatchObject({ tags: ["reimbursed"], transactions: 4 });
+    expect(body.left_out_tags).toEqual(["reimbursed"]);
+    const tx = (await getJson<any[]>(`/transactions?trip_id=${chicago.id}`, { envOverrides })).body;
+    expect(tx.every((t: any) => t.tags.includes("reimbursed"))).toBe(true);
+    expect((await getJson<any>(`/trips/${lisbon.id}/suggestions`, { envOverrides })).status).toBe(200);
+  });
+});
+

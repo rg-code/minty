@@ -12,7 +12,7 @@
 import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const arg = (name) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : null; };
@@ -44,6 +44,18 @@ await writeFile(join(out, "jet/sw.js"), sw.replace(`"/jet/store.js",`, `"/jet/st
 // the Minty link in the header goes; "Your data" says where the trips are
 const html = await readFile(join(out, "jet/index.html"), "utf8");
 if (!html.includes('id="mintyLink"')) throw new Error("build-jet: jet/index.html lost its Minty link; update the edit here");
+
+// the sample trips ("Try a sample trip" on an empty JET): the live demo's made-up trips (demo/data.ts),
+// as a JET export dated from a fixed day; the page moves them to the visitor's today (shiftSample).
+// Trips and bookings only: JET on its own has no people, transactions or tags.
+const SAMPLE_FROM = "2026-01-15";
+const { generate } = await import(pathToFileURL(join(root, "demo/data.ts")).href);
+const demo = generate(new Date(`${SAMPLE_FROM}T12:00:00Z`));
+const sample = { app: "JET", version: 1, sample_from: SAMPLE_FROM,
+  trips: demo.trips.map(({ tags, travellers, ...t }) => ({ ...t, travellers: [] })),
+  items: demo.tripItems };
+if (!sample.trips.length || !sample.items.length) throw new Error("build-jet: the demo has no trips for the sample");
+await writeFile(join(out, "jet/sample.json"), JSON.stringify(sample));
 
 // 2. What JET loads from the site's root, as on a Minty
 for (const d of ["maplibre", "pdfjs", "tesseract", "qrcode"]) await copyDir(join(root, "public/vendor", d), join(out, "vendor", d));

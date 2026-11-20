@@ -625,6 +625,20 @@ JET's own:
 - **A JET bug:** saving a booking from a pasted suggestion did nothing. The form has a
   `data-source` attribute, so a click on it also hit the source tabs, which re-rendered the page.
 
+### 17.0 Trying JET without trips of your own
+
+- **In the live demo** (`/demo/jet/`, linked from the demo dashboard's ⋯ menu): JET on a Minty, on
+  the demo's made-up household (`demo/data.ts`): a holiday in Lisbon last month, a work trip to
+  Chicago tagged "reimbursed" (left out of CFA, §18), Tokyo coming up with its flights paid for, and
+  a booking waiting for a trip. The trips' charges are the demo's own transactions, so the Spending
+  tab, "Open in Minty" and trip tags all work. `scripts/build-demo.mjs` copies `public/jet/` into the
+  demo with checked edits (relative paths, no service worker, no Gmail or screenshot tab).
+- **On its own:** an empty JET offers **Try a sample trip**. It loads the same trips (no people,
+  transactions or tags) from `jet/sample.json`, which `scripts/build-jet.mjs` writes from the demo's
+  data, dated from a fixed day; `shiftSample` moves them to the visitor's today. They're ordinary
+  trips in the browser, marked by localStorage `jet-sample`, and **Remove them** deletes them and
+  their bookings.
+
 ### 17.1 Gmail pull (both modes)
 
 **Why:** on a phone, the Gmail app can't save a message as an `.eml`, so "Email file" alone left JET
