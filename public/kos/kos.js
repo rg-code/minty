@@ -124,10 +124,25 @@ function home() {
       <div class="actions"><button type="button" class="btn primary" data-make-trip>Make a trip from the ticked ones</button></div>` : ""}
     ${past.length ? `<div class="section-title"><h2>Past trips</h2></div><div class="trips">${past.map(tripCard).join("")}</div>` : ""}
     ${MODE === "device" && own ? `<div id="lockLater"></div>` : ""}
+    ${MODE === "device" ? `<div class="kos-foot">${supportHtml()}<footer class="w-foot">${alsoFromHtml()}</footer>${copyHtml()}</div>` : ""}
     <a class="fab" href="#/add" aria-label="Add a booking" title="Add a booking">+</a>`;
 }
 
 // --- Kos on its own: the first screen, and the device lock as the last step (docs/trips.md §17.4) ----
+// The first screen's support pills, other projects and © line; standalone Kos's trip list ends with them too.
+const supportHtml = () => `<section class="w-support" aria-label="Support Kos">
+      <p><b>Support Kos.</b> It's free, with no ads. If it helps:</p>
+      <div class="w-cta"><a class="w-pill" href="https://ko-fi.com/mintyme" target="_blank" rel="noopener" data-goatcounter-click="kos-kofi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Support on Ko-fi</a>
+        <a class="w-pill" href="https://github.com/rg-code/minty" target="_blank" rel="noopener" data-goatcounter-click="kos-star"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>Star Minty on GitHub</a></div>
+    </section>`;
+const alsoFromHtml = () => `<p>Also from rg-code: <a href="https://milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-miles">Miles Maximizer</a>, for point transfers;
+        <a href="https://milesmaximizer.com/inkling/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-inkling">Inkling</a>, for inKind restaurants;
+        the <a href="https://milesmaximizer.com/museum_problem/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-museums">museum finder</a>, for free museum entry;
+        <a href="https://graze.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-graze">GRAZE</a>, for free EV charging;
+        and <a href="https://minty.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-minty">Minty</a>, for private money tracking.
+        On a Minty, Kos also shows what each trip cost, and live flight tracking like Flighty's, with gate, delay and landing updates, is on its way.</p>`;
+const copyHtml = () => `<p class="w-copy">© rg-code, ${new Date().getFullYear()}</p>`;
+
 function welcome() {
   // a made-up flight, drawn by the real flight card (decorative: the page's own look, not a screenshot)
   const out = addDays(localDay(), 23);                      // always about three weeks away, so it always reads "Scheduled"
@@ -158,21 +173,12 @@ function welcome() {
         <div class="actions" id="installRow" hidden><button type="button" class="w-pill" data-install data-goatcounter-click="kos-install">Install Kos</button></div></div>
       <div class="w-panel" role="tabpanel" data-wpanel="lock" hidden><div id="lockStep"><b>Last: lock Kos on this device.</b> <span class="muted">Checking what this device can do…</span></div></div>
     </section>
-    <section class="w-support" aria-label="Support Kos">
-      <p>Free, with no ads. If Kos helps:</p>
-      <div class="w-cta"><a class="w-pill" href="https://ko-fi.com/mintyme" target="_blank" rel="noopener" data-goatcounter-click="kos-kofi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>Support on Ko-fi</a>
-        <a class="w-pill" href="https://github.com/rg-code/minty" target="_blank" rel="noopener" data-goatcounter-click="kos-star"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>Star Minty on GitHub</a></div>
-    </section>
+    ${supportHtml()}
     <footer class="w-foot">
       <p>Trips stay in this browser only, so export a copy now and then (<a href="#/data" data-goatcounter-click="kos-your-data">Your data</a>). Maps come from OpenFreeMap, and each trip's city photo from Wikipedia, which is asked for it by the city's name.</p>
-      <p>Also from rg-code: <a href="https://milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-miles">Miles Maximizer</a>, for point transfers;
-        <a href="https://milesmaximizer.com/inkling/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-inkling">Inkling</a>, for inKind restaurants;
-        the <a href="https://milesmaximizer.com/museum_problem/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-museums">museum finder</a>, for free museum entry;
-        <a href="https://graze.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-graze">GRAZE</a>, for free EV charging;
-        and <a href="https://minty.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-minty">Minty</a>, for private money tracking.
-        On a Minty, Kos also shows what each trip cost, and live flight tracking like Flighty's, with gate, delay and landing updates, is on its way.</p>
+      ${alsoFromHtml()}
     </footer>
-    <p class="w-copy">© rg-code, ${new Date().getFullYear()}</p></section>`;
+    ${copyHtml()}</section>`;
 }
 /** The set-up's pill navigation (after EasyUI's Pill navigation, MIT, as Minty's header and GRAZE's
  * theme switch): one track, a thumb that slides to the step chosen, its panel under it. */

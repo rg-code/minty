@@ -390,3 +390,9 @@ a.photo-credit:hover { color: #fff; text-decoration: underline; }
 .share-bar .actions { margin-top: 0; }
 .share-count { margin: 10px 2px 4px; font-size: 13px; }
 .preview .day-head { top: 64px; }
+
+/* Standalone Kos's trip list ends like its first screen: support, other projects, © (the same classes) */
+.kos-foot { --kos-saffron: #feab0a; margin-top: 56px; }
+.kos-foot .w-support { margin-top: 0; }
+.kos-foot .w-copy { margin-top: 20px; }
+.w-support p b { color: var(--ink); font-weight: 650; }

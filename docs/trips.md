@@ -663,6 +663,9 @@ Kos's own:
 #014147, inside the safe zone) and `apple-touch-icon.png`, all made from the owner's 1254 px image.
 The old SVG is gone.
 
+**The trip list ends like the first screen** (on its own only): Support Kos (Ko-fi, Star Minty on GitHub), the
+other rg-code projects and the © line, the same markup (`supportHtml`, `alsoFromHtml`, `copyHtml`).
+
 ### 17.5 Backups, and the theme (owner, 2026-11-20)
 
 - **The reminder:** on Kos on its own, when there are trips of one's own (not only the sample's) and
