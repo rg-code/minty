@@ -1208,3 +1208,19 @@ and price", ticked; adding links each one to its booking (`trip_transactions.ite
 
 **Not yet:** a booking charged in pieces (an airline's ticket per passenger), a booking in another currency
 than the charge, and linking without a click.
+
+## 29. Every booking on the map, and the summary strip shows what's booked (owner, 2026-11-21)
+
+**On the map.** A booking with its own spot (a map link, a plus code, coordinates, or the airport a car is
+picked up at) is drawn there. One read from an email has an address but no spot, and Kos sends addresses
+to no lookup service (§22), so it used to have no dot. Now (`placeOf` in `kos.js`) it goes near its town's
+airport (the town from its address, `cityOf`, matched against `airports.json` on the device; of two towns
+with one name, the one near the trip's flights), else near the airport the trip had flown into by then.
+Those dots are paler, and a line on the map says which are approximate and how to give one its spot (edit
+the booking: a map link, a plus code or coordinates). The Lodging tab's stay cards say so too. Pins on one
+spot become one, numbered "2·3" and named for both, so none hides another at any zoom. The journal's map
+does the same.
+
+**The summary strip.** A kind with bookings shows them: Flight opens the Flights tab, Lodging the Lodging
+tab, and the others a list of their own (`#/trip/<id>/car`, …, trains with buses). A kind with none still
+adds one, and each of those views ends with "+ Add a …".

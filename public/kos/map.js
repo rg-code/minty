@@ -82,7 +82,7 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
     ...arcLines.map((a) => ({ type: "Feature", properties: { id: a.id ?? "", kind: "flight", label: a.label ?? "" }, geometry: { type: "LineString", coordinates: a.coords } })),
     ...paths.map((p) => ({ type: "Feature", properties: { id: p.id ?? "", kind: "path", color: p.color ?? "#868e96" }, geometry: { type: "LineString", coordinates: p.coords } })),
   ] };
-  const points = { type: "FeatureCollection", features: pins.map((p) => ({ type: "Feature", properties: { id: p.id ?? "", kind: p.kind, label: p.label ?? "", color: p.color ?? KIND_COLOR[p.kind] ?? KIND_COLOR.other, ...(p.num ? { num: p.num } : {}) },
+  const points = { type: "FeatureCollection", features: pins.map((p) => ({ type: "Feature", properties: { id: p.id ?? "", kind: p.kind, label: p.label ?? "", color: p.color ?? KIND_COLOR[p.kind] ?? KIND_COLOR.other, ...(p.num ? { num: p.num } : {}), ...(p.approx ? { approx: 1 } : {}) },
     geometry: { type: "Point", coordinates: [p.lon, p.lat] } })) };
   for (const [id, data] of [["kos-lines", lines], ["kos-pins", points]]) {
     if (map.getSource(id)) map.getSource(id).setData(data); else map.addSource(id, { type: "geojson", data });
@@ -97,9 +97,10 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
                    paint: { "line-color": KIND_COLOR.flight, "line-width": 8, "line-blur": 6, "line-opacity": 0.45 } }, "kos-arcs");
     // a pin with its place in the trip (num, the journal's) is bigger, with the number inside
     map.addLayer({ id: "kos-pins", type: "circle", source: "kos-pins",
-                   paint: { "circle-radius": ["case", ["has", "num"], 12, 7], "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff" } });
+                   paint: { "circle-radius": ["case", ["!", ["has", "num"]], 7, [">", ["length", ["get", "num"]], 3], 17, [">", ["length", ["get", "num"]], 2], 15, 12],   // "2·3" is wider "circle-color": ["get", "color"], "circle-stroke-width": 2, "circle-stroke-color": "#ffffff",
+                            "circle-opacity": ["case", ["has", "approx"], 0.55, 1], "circle-stroke-opacity": ["case", ["has", "approx"], 0.7, 1] } });   // approximate: paler
     map.addLayer({ id: "kos-nums", type: "symbol", source: "kos-pins", filter: ["has", "num"],
-                   layout: { "text-field": ["get", "num"], "text-font": ["Noto Sans Bold"], "text-size": 12.5, "text-allow-overlap": true, "text-ignore-placement": true },
+                   layout: { "text-field": ["get", "num"], "text-font": ["Noto Sans Bold"], "text-size": ["case", [">", ["length", ["get", "num"]], 3], 10.5, 12.5], "text-allow-overlap": true, "text-ignore-placement": true },
                    paint: { "text-color": "#ffffff", "text-halo-color": "rgba(0,0,0,0.35)", "text-halo-width": 0.6 } });
     map.addLayer({ id: "kos-labels", type: "symbol", source: "kos-pins", minzoom: 3,
                    layout: { "text-field": ["get", "label"], "text-font": ["Noto Sans Regular"], "text-size": 12, "text-offset": ["case", ["has", "num"], ["literal", [0, 1.6]], ["literal", [0, 1.2]]], "text-anchor": "top", "text-optional": true },

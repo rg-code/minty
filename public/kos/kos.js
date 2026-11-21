@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, journeys, matchBooking, planTrips, shiftSample, tripSpan, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
+import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, cityOf, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, journeys, matchBooking, planTrips, shiftSample, tripSpan, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 import { parseWhere } from "./where.js";
@@ -267,7 +267,8 @@ const GLYPH = {
 };
 function summaryHtml(t) {
   const { count, money: m } = tripSummary(t, store.spending);
-  const kinds = SUM_KINDS.map(([k, label]) => `<a class="sum-kind" href="#/add?trip=${t.id}&kind=${k}" title="Add a ${label.toLowerCase()} booking">
+  // a kind with bookings shows them (Flights, Lodging, or that kind's list); one with none adds one
+  const kinds = SUM_KINDS.map(([k, label]) => `<a class="sum-kind" href="${count[k] ? `#/trip/${t.id}/${k === "flight" ? "flights" : k}` : `#/add?trip=${t.id}&kind=${k}`}" title="${count[k] ? `This trip's ${label.toLowerCase()} bookings` : `Add a ${label.toLowerCase()} booking`}">
       <span class="sum-ico"><svg viewBox="0 0 24 24" aria-hidden="true">${GLYPH[k]}</svg>${count[k] ? `<b class="sum-n">${count[k]}</b>` : ""}</span><span class="sum-label">${label}</span></a>`).join("");
   const off = tripTags(t).filter(leftOutTag);
   const budget = m.spent !== undefined
@@ -291,12 +292,19 @@ const tripTags = (t) => (store.spending ? t.tags ?? [] : []);
 const tagChips = (tags) => tags.length ? `<div class="trip-tags">${tags.map((g) => `<span class="pill ${leftOutTag(g) ? "warn" : "dim"}" title="${leftOutTag(g) ? "Left out of CFA and the dashboard's totals" : "Its transactions have this tag"}">${esc(g)}${leftOutTag(g) ? " · left out" : ""}</span>`).join("")}</div>` : "";
 function tripView(t, tab) {
   const p = plan(t);
-  const tabs = [["", "Itinerary"], ["flights", "Flights"], ["lodging", "Lodging"], ...(store.spending ? [["spending", "Spending"]] : [])];
+  const kindTab = KIND_TABS.includes(tab) ? SUM_KINDS.find(([k]) => k === tab) : null;      // from the summary strip: one kind's bookings
+  const tabs = [["", "Itinerary"], ["flights", "Flights"], ["lodging", "Lodging"], ...(store.spending ? [["spending", "Spending"]] : []), ...(kindTab ? [kindTab] : [])];
+  const addLink = (k, words) => `<p class="kind-add"><a href="#/add?trip=${t.id}&kind=${k}">+ ${words}</a></p>`;
   const stays = t.items.filter((i) => i.kind === "lodging").sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
   const flights = t.items.filter((i) => i.kind === "flight").sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
   let body;
-  if (tab === "flights") body = flights.length ? flights.map((f) => flightCard(f)).join("") : `<div class="card muted">No flights in this trip yet.</div>`;
-  else if (tab === "lodging") body = stays.length ? stays.map(stayCard).join("") : `<div class="card muted">No stays in this trip yet. <a href="#/add?trip=${t.id}&kind=lodging">Add one</a></div>`;
+  if (tab === "flights") body = (flights.length ? flights.map((f) => flightCard(f)).join("") : `<div class="card muted">No flights in this trip yet.</div>`) + addLink("flight", "Add a flight");
+  else if (tab === "lodging") body = (stays.length ? stays.map((s) => stayCard(s, t)).join("") : `<div class="card muted">No stays in this trip yet.</div>`) + addLink("lodging", "Add a stay");
+  else if (kindTab) {
+    const list = t.items.filter((i) => i.kind === tab || (tab === "train" && i.kind === "bus")).sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
+    body = `<div class="stops kind-list">${list.map((i, n) => entryHtml({ item: i, n: n + 1, at: [fmtDay(dateOf(i.start_at)), timeOf(i.start_at)].filter(Boolean).join(" · ") })).join("")
+      || `<div class="card muted">No ${esc(kindTab[1].toLowerCase())} bookings in this trip yet.</div>`}</div>${addLink(tab, `Add a ${kindTab[1].toLowerCase()} booking`)}`;
+  }
   else if (tab === "spending") body = `<div id="spending"><p class="muted">Loading the trip's spending…</p></div>`;
   else body = `${p.before.length ? dayHtml({ label: "Before the trip", entries: p.before, color: "#8c96ad" }) : ""}
     ${p.days.map((d, n) => dayHtml({ label: `Day ${n + 1}`, sub: fmtDay(d.date), entries: d.entries, color: d.color, add: `#/place?trip=${t.id}&day=${d.date}` })).join("")}
@@ -315,12 +323,13 @@ function tripView(t, tab) {
       <div class="tabs"><div class="seg" role="group">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${(tab || "") === k}">${l}</button>`).join("")}</div></div>
       ${body}
       <p class="report-line muted">A trip worth featuring, or something Kos got wrong? <button type="button" class="linklike" data-report-trip data-goatcounter-click="kos-report-trip">Share it with the Kos team</button></p></div>
-      <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div></div></div>
+      <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div><p class="map-approx muted" id="mapApprox" hidden></p></div></div>
     <a class="fab" href="#/add?trip=${t.id}" aria-label="Add a booking" title="Add a booking">+</a>`;
 }
+const KIND_TABS = ["car", "train", "restaurant", "event", "other"];
 /** A stay, on the Lodging tab: its nights, check-in and check-out, where, and its booking. A tap
  * centres the map on it (the same [data-item] as the itinerary's). */
-function stayCard(i) {
+function stayCard(i, t) {
   const a = dateOf(i.start_at), b = dateOf(i.end_at);
   const nights = a && b ? Math.max(0, Math.round((asDay(b) - asDay(a)) / 864e5)) : null;
   const when = (d, at, word) => d ? `<div><span>${word}</span><b>${esc(fmtDay(d))}</b>${at ? `<small>${esc(at)}</small>` : ""}</div>` : "";
@@ -329,7 +338,8 @@ function stayCard(i) {
     ${i.place ? `<div class="sub">${esc(i.place)}</div>` : ""}
     <div class="stay-dates">${when(a, timeOf(i.start_at), "Check in")}${when(b, timeOf(i.end_at), "Check out")}</div>
     ${i.confirmation || i.price_cents || i.points ? `<div class="sub">${[i.confirmation ? `Conf. ${esc(i.confirmation)}` : "", i.points ? `${ptsText(i)}` : i.price_cents ? money(i.price_cents, i.currency) : ""].filter(Boolean).join(" · ")}</div>` : ""}
-    ${Number.isFinite(i.lat) && Number.isFinite(i.lon) ? "" : `<div class="sub muted">No address on the map yet: edit the stay to add one.</div>`}</button>`;
+    ${(() => { const at = placeOf(i, t); return !at ? `<div class="sub muted">Not on the map yet: edit the stay to add its address.</div>`
+      : at.approx ? `<div class="sub muted">On the map near ${esc(at.near)}, not its exact spot: edit the stay and paste a map link for it.</div>` : ""; })()}</button>`;
 }
 function dayHtml({ label: l, sub, entries, color, add }) {
   const plus = add ? `<a class="add-place" href="${add}" data-goatcounter-click="kos-add-place">+ Add a place</a>` : "";
@@ -460,6 +470,47 @@ app.addEventListener("input", (ev) => {
   }, 450);
 });
 /** What the map draws for a trip: each flight's arc, and numbered pins in their day's colour. */
+// --- where a booking goes on the map (docs/trips.md §29): its own spot when Kos has one (a map link, a plus
+// code, coordinates, or the airport a car is picked up at); else near its town's airport (airports.json, on
+// the device: Kos sends addresses to no lookup service), else near the airport the trip had flown into by
+// then. Those are marked approximate.
+let townIndex = null;
+const townAirports = (town) => {
+  if (!townIndex) { townIndex = new Map(); for (const [code, a] of Object.entries(airports)) { const k = String(a[1]).split(",")[0].trim().toLowerCase(); townIndex.set(k, [...(townIndex.get(k) ?? []), code]); } }
+  return (townIndex.get(String(town).trim().toLowerCase()) ?? []).map(airport).filter(Boolean);
+};
+function placeOf(i, t) {
+  if (Number.isFinite(i.lat) && Number.isFinite(i.lon)) return { lat: i.lat, lon: i.lon, approx: false };
+  if (i.kind === "flight") return null;
+  const flights = (t?.items ?? []).filter((f) => f.kind === "flight" && airport(f.arr_airport)).sort((a, b) => ((a.end_at ?? a.start_at ?? "") < (b.end_at ?? b.start_at ?? "") ? -1 : 1));
+  const landings = flights.map((f) => airport(f.arr_airport));
+  const far = (a) => (landings.length ? Math.min(...landings.map((r) => (a.lat - r.lat) ** 2 + (a.lon - r.lon) ** 2)) : 0);
+  const town = i.place ? cityOf(i.place) : null;
+  const byTown = town ? townAirports(town).sort((a, b) => far(a) - far(b))[0] : null;   // "Portland": the one near the trip
+  if (byTown) return { lat: byTown.lat, lon: byTown.lon, approx: true, near: town };
+  const start = String(i.start_at ?? "").slice(0, 16);
+  const landed = (start ? flights.filter((f) => String(f.end_at ?? f.start_at ?? "").slice(0, 16) <= start).at(-1) : null) ?? flights[0];
+  const a = landed ? airport(landed.arr_airport) : null;
+  if (a) return { lat: a.lat, lon: a.lon, approx: true, near: a.city.split(",")[0] };
+  if (Number.isFinite(t?.lat) && Number.isFinite(t?.lon)) return { lat: t.lat, lon: t.lon, approx: true, near: t.place ?? t.name };
+  return null;
+}
+/** Pins on the same spot (a car picked up where the flight lands, two stays near one airport) become one,
+ * numbered "2·3" and named for both, so none hides another at any zoom. `order`: its first number, for
+ * the line joining the places. */
+function spread(pins) {
+  const at = new Map(), out = [];
+  for (const p of pins) {
+    const k = `${p.lat.toFixed(3)},${p.lon.toFixed(3)}`, q = at.get(k);
+    if (!q) { const n = { ...p, order: Number(p.num ?? Infinity) }; at.set(k, n); out.push(n); continue; }
+    if (p.num) q.num = q.num ? [...new Set([...q.num.split("·"), p.num])].sort((a, b) => a - b).join("·") : p.num;
+    if (p.label && !q.label.split(", ").includes(p.label)) q.label = q.label ? `${q.label}, ${p.label}` : p.label;
+    q.order = Math.min(q.order, Number(p.num ?? Infinity));
+    if (p.kind === "lodging") q.kind = "lodging";               // the Lodging tab still frames it
+    if (!p.approx) delete q.approx;
+  }
+  return out;
+}
 function mapData(t) {
   const p = plan(t), arcs = [], pins = [];
   p.days.forEach((d) => {
@@ -469,7 +520,10 @@ function mapData(t) {
         const a = airport(i.dep_airport), b = airport(i.arr_airport);
         if (a && b && !e.repeat) arcs.push({ from: [a.lon, a.lat], to: [b.lon, b.lat], id: String(i.id), label: `${i.dep_airport}→${i.arr_airport}` });
         if (a && !e.repeat) pins.push({ lon: a.lon, lat: a.lat, kind: "flight", num: String(e.n), label: i.dep_airport, id: String(i.id), color: d.color });
-      } else if (Number.isFinite(i.lat) && Number.isFinite(i.lon) && !e.repeat) pins.push({ lon: i.lon, lat: i.lat, kind: i.kind, num: String(e.n), label: i.name ?? "", id: String(i.id), color: d.color });
+      } else if (!e.repeat) {
+        const at = placeOf(i, t);
+        if (at) pins.push({ lon: at.lon, lat: at.lat, kind: i.kind, num: String(e.n), label: i.name ?? "", id: String(i.id), color: d.color, ...(at.approx ? { approx: true, near: at.near } : {}) });
+      }
     }
   });
   // flights outside the trip's days (the flight home after the last day, say) still draw
@@ -478,7 +532,7 @@ function mapData(t) {
     if (i.kind === "flight" && a && b) arcs.push({ from: [a.lon, a.lat], to: [b.lon, b.lat], id: String(i.id) });
   }
   if (!arcs.length && !pins.length && Number.isFinite(t.lat) && Number.isFinite(t.lon)) pins.push({ lon: t.lon, lat: t.lat, kind: "other", label: t.place ?? t.name });
-  return { arcs, pins };
+  return { arcs, pins: spread(pins), approx: pins.filter((p) => p.approx) };
 }
 async function showMap(t, tab = "") {
   const el = document.getElementById("map"), note = document.getElementById("mapNote");
@@ -491,8 +545,13 @@ async function showMap(t, tab = "") {
   mapKey = key;
   if (!map) { note.hidden = false; note.textContent = "The map couldn't load here (it needs WebGL and OpenFreeMap's tiles). The plan is all here."; return; }
   const d = mapData(t);
+  const approx = d.approx, cap = document.getElementById("mapApprox"), nApprox = approx.length;
+  if (cap) {
+    cap.hidden = !approx.length;
+    cap.textContent = approx.length ? `${nApprox === 1 ? "One place is" : `${nApprox} places are`} shown near ${[...new Set(approx.map((p) => p.near))].join(", ")} (a paler dot): Kos has its address but not its spot. Edit the booking and paste a map link, a plus code or coordinates for the exact place.` : "";
+  }
   // the places joined in the trip's order (the numbers), as on the journal's map
-  const seq = d.pins.filter((p) => p.num).sort((x, y) => Number(x.num) - Number(y.num));
+  const seq = d.pins.filter((p) => p.num).sort((x, y) => x.order - y.order);
   if (seq.length > 1) d.paths = [{ coords: seq.map((p) => [p.lon, p.lat]), color: dark ? "#ffffff" : "#11162a" }];
   // pins take their day's colour (Wanderlog), flights the accent (Flighty)
   drawTrip(map, d, (id) => {
@@ -670,9 +729,11 @@ async function journalMap(t) {
   const stops = [];
   for (const dd of plan(t).days) for (const e of dd.entries) {
     const i = e.item;
-    if (i.kind === "flight" || e.repeat || !Number.isFinite(i.lat) || !Number.isFinite(i.lon)) continue;
-    stops.push({ lon: i.lon, lat: i.lat, kind: i.kind, num: String(stops.length + 1), label: i.name ?? "", id: String(i.id), color: dd.color });
+    const at = i.kind === "flight" || e.repeat ? null : placeOf(i, t);
+    if (!at) continue;
+    stops.push({ lon: at.lon, lat: at.lat, kind: i.kind, num: String(stops.length + 1), label: i.name ?? "", id: String(i.id), color: dd.color, ...(at.approx ? { approx: true } : {}) });
   }
+  stops.splice(0, stops.length, ...spread(stops));
   // K2: where photos were taken, when Immich knows (small grey dots, under the numbered stops)
   stops.unshift(...photoPins.slice(0, 300).map((p) => ({ lon: p.lon, lat: p.lat, kind: "photo", label: "", id: `photo:${p.id}`, color: "#8c96ad" })));
   const d = mapData(t);
@@ -1363,8 +1424,8 @@ app.addEventListener("click", async (ev) => {
     }
     if (at("button.item[data-item]")) {
       // Wanderlog: the first tap shows it on the map, a second opens it; no place on the map opens it at once
-      const id = Number(at("[data-item]").dataset.item), i = itemById(id);
-      if (map && i && Number.isFinite(i.lat) && Number.isFinite(i.lon) && focused !== id) { focus(map, i.lon, i.lat); focused = id; return; }
+      const id = Number(at("[data-item]").dataset.item), i = itemById(id), spot = i ? placeOf(i, tripById(i.trip_id)) : null;
+      if (map && spot && focused !== id) { focus(map, spot.lon, spot.lat); focused = id; return; }
       location.hash = `#/item/${id}`;
       return;
     }
