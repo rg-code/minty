@@ -167,7 +167,7 @@ export function programIn(text) {
 const OTHER_PROGRAMS = /\b(Mileage Plan|Flying Blue|Flying Club|Virgin Points|Miles & More|Miles&Go|KrisFlyer|Asia Miles|Qantas Points|Executive Club|Avianca LifeMiles|LifeMiles|Turkish Miles&Smiles)\b/i;
 
 // --- confirmation codes -------------------------------------------------------------------------------
-const CONF_LABEL = /\b(airline (?:confirmation|booking reference|reference|record locator)|record locator|confirmation(?: number| code| no\.?| #)?|booking (?:number|code|reference|ref\.?|id|no\.?)|reservation (?:number|code|no\.?|id)|reservation|itinerary(?: number| no\.?| #)?|trip (?:number|id)|order (?:number|no\.?|#)|pnr|booking|reference(?: number)?|ticket (?:number|no\.?)|voucher (?:number|code)|pin code)\b\s*(?:is)?\s*[:#]?\s*/gi;
+const CONF_LABEL = /\b(airline (?:confirmation|booking reference|reference|record locator)|record locator|confirmation(?: number| code| no\.?| #)?|booking (?:number|code|reference|ref\.?|id|no\.?)|reservation (?:number|code|no\.?|id)|reservation|itinerary(?: number| no\.?| #)?|trip (?:number|id)|order (?:number|no\.?|#)|pnr|booking|reference(?: number)?|ticket (?:number|no\.?)|voucher (?:number|code)|pin code)\b\s*(?:is)?\s*(?:#\s*)?:?\s*/gi;
 // a code has a digit, or is six capitals (an airline's record locator): "reference" isn't one
 const isCode = (c) => (/^(?=.*\d)[A-Z0-9][A-Z0-9/-]{3,22}[A-Z0-9]$/.test(c) && !/^\d{1,4}$/.test(c)) || /^[A-Z]{6}$/.test(c);
 /** The booking's confirmation: the airline's own when labelled so, else the first labelled code. Grouped
@@ -442,8 +442,13 @@ export function parseBookings(raw, opts = {}) {
       const pair = all.dates.map((x, i) => [x, all.dates[i + 1]]).find(([x, y]) => y && (nights ? gap(x, y) === nights : gap(x, y) >= 1 && gap(x, y) <= 60));
       if (pair) [din, dout] = pair;
     }
-    const tin = ci ? nearest(all.times, ci.index, { max: 80, lo: ci.index, hi: Math.min(coAt, ci.index + 120) }) : null;
-    const tout = co ? nearest(all.times, co.index, { max: 80, lo: co.index, hi: co.index + 120 }) : null;
+    let tin = ci ? nearest(all.times, ci.index, { max: 80, lo: ci.index, hi: Math.min(coAt, ci.index + 120) }) : null;
+    let tout = co ? nearest(all.times, co.index, { max: 80, lo: co.index, hi: co.index + 120 }) : null;
+    // "Check-in:  Check-out:" side by side (a table's two columns): the times below come in that order
+    if (ci && co && co.index > ci.index && lineOf(text, ci.index) === lineOf(text, co.index)) {
+      const below = all.times.filter((x) => x.index > co.index && x.index < co.index + 200);
+      if (below.length >= 2) [tin, tout] = below;
+    }
     if (din && dout && dout.date > din.date) {
       bookings.push({ kind: "lodging", name: stayName(text, subject), start_at: at(din, tin), end_at: at(dout, tout), ...(addressIn(text) ? { place: addressIn(text) } : {}),
         confirmation: conf, quote: text.slice(ci?.index ?? din.index, Math.min(text.length, (co?.index ?? dout.index) + 40)).trim() });
@@ -543,6 +548,11 @@ function addressIn(text) {
   if (lab && /\d/.test(lab) && !dates(lab).length && !/@|https?:/.test(lab)) return lab;
   const us = /^(\d{1,6}[A-Za-z]? [^\n]{3,90}?\b[A-Z]{2} \d{5}(?:-\d{4})?)\b/m.exec(text)?.[1];
   if (us) return us;
+  // over lines, as an email's table puts it: "12 Harbor Road / Example City / HI, United States, 96700"
+  for (const m of text.matchAll(/^(\d{1,6}[A-Za-z]? [A-Za-zÀ-ÿ][^\n]{2,60})\n((?:[^\n\d]{2,40}\n){0,2}[^\n]{2,60}?(?:\b\d{5}(?:-\d{4})?|\b\d{4}|[A-Z]\d[A-Z] ?\d[A-Z]\d)\b[^\n]{0,30})$/gm)) {
+    const a = `${m[1].trim()}, ${m[2].split("\n").map((x) => x.trim()).join(", ")}`;
+    if (!dates(a).length && !times(a).length && !/\b(tel|phone|fax|www\.|http|@|total|price|points?|nights?|guests?|rooms?)\b|[$€£¥]/i.test(a) && a.length <= 160) return a;
+  }
   for (const m of text.matchAll(/^([^\n]{3,60}?\d[^\n]{0,40}?,\s*(?:[^\n,]{2,40},\s*){0,2}(?:\d{4,5}|\d{3}-\d{4}|[A-Z]\d[A-Z] ?\d[A-Z]\d|[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2})[^\n]{0,50})$/gm)) {
     const a = m[1].trim();
     if (!dates(a).length && !times(a).length && !/\b(tel|phone|fax|www\.|http|@|total|price|points?)\b/i.test(a) && a.length <= 140) return a;
@@ -578,6 +588,9 @@ export function readEmailBookings(email, { airports } = {}) {
     const pts = email.text ? pointsIn(tidy(email.text)) : null;
     const target = markup.find((b) => b.kind === "flight") ?? markup.find((b) => b.kind === "lodging");
     if (pts?.points && target && !target.points) Object.assign(target, { points: pts.points, points_program: programIn(email.text) });
+    // markup that leaves out the price (microdata often does): the text's total, when it's one booking's
+    const total = email.text && markup.length === 1 && markup[0].price_cents == null && !pts?.points ? totalIn(tidy(email.text)) : null;
+    if (total) Object.assign(markup[0], { price_cents: total.price_cents, currency: total.currency });
     return { how: "markup", bookings: markup, cancelled: false, promotional: false };
   }
   if (!email.text) return { how: "nothing", bookings: [], cancelled: false, promotional: false };

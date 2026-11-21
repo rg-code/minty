@@ -118,6 +118,14 @@ export function htmlText(html: string | null): string | null {
     .replace(/[ \t\u00a0]+/g, " ").replace(/ *\n[ \n]*/g, "\n").trim();
 }
 
+/** The text to read an email by: its plain-text part, unless that's a stub ("View this email in your
+ * browser") and the HTML says far more, as marketing platforms send; then the HTML as text. */
+export function emailText(m: { text: string | null; html: string | null }): string | null {
+  const fromHtml = htmlText(m.html);
+  if (!m.text) return fromHtml;
+  return fromHtml && m.text.trim().length < 400 && fromHtml.length > 1.5 * m.text.trim().length ? fromHtml : m.text;
+}
+
 /** The email attached to a forwarded one ("Forward as attachment", or a filter's forward): Gmail keeps
  * its schema.org markup that way, where a typed forward drops it (docs/trips.md §27). Read like any; null
  * when there's none. */

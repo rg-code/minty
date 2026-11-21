@@ -509,14 +509,14 @@ const deviceStore = {
   async deleteItem(id) { return tx(["items"], "readwrite", async (x) => { await req(x.objectStore("items").delete(id)); return { id, removed: true }; }); },
   /** An email file, read in this browser with the same reader Minty runs (src/kos/). Nothing is kept. */
   async readEmail(buf) {
-    const [{ attachedMessage, htmlText, readMessage, viewOf }, { reservations }] = await Promise.all([import("./mail/mime.js"), import("./mail/reservations.js")]);
+    const [{ attachedMessage, emailText, readMessage, viewOf }, { reservations }] = await Promise.all([import("./mail/mime.js"), import("./mail/reservations.js")]);
     const bytes = new Uint8Array(buf);
     if (bytes.length > 2 * 1024 * 1024) throw new Error("email file too large (at most 2 MB)");
     let raw = "";
     for (let i = 0; i < bytes.length; i += 0x8000) raw += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     const outer = readMessage(raw), m = attachedMessage(raw) ?? outer;   // forwarded as an attachment: the original
     const sha = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
-    return { subject: m.subject, from: m.from, date: m.date, view: viewOf(outer), sha256: sha, bookings: reservations(m.html), text: (m.text ?? htmlText(m.html) ?? "").slice(0, 20000) || null, attachments: [] };
+    return { subject: m.subject, from: m.from, date: m.date, view: viewOf(outer), sha256: sha, bookings: reservations(m.html), text: (emailText(m) ?? "").slice(0, 20000) || null, attachments: [] };
   },
   spending: false,
 };
@@ -560,6 +560,8 @@ export function cityOf(address) {
   const states = Object.values(US_STATES).filter((x) => !x.includes(",")).join("|");
   const us = new RegExp(`,\\s*([^,\\d]+?),?\\s+(?:[A-Z]{2}|${states}),?\\s+\\d{5}(?:-\\d{4})?\\b`).exec(a);
   if (us) return us[1].trim();
+  const usLong = new RegExp(`,\\s*([^,\\d]+?),\\s*(?:[A-Z]{2}|${states}),\\s*(?:united states|usa|us)\\b,?\\s*\\d{5}\\b`, "i").exec(a);   // "…, Example City, HI, United States, 96700"
+  if (usLong) return usLong[1].trim();
   const jp = /([A-Za-zÀ-ÿ' .-]{2,30}?),?\s+\d{3}-\d{4}\b/.exec(a);
   if (jp) return jp[1].trim();
   const eu = /(?:^|[\s,])(?:\d{4,5}|\d{4}-\d{3}|\d{3} \d{2})\s+([A-Za-zÀ-ÿ'’ .-]{2,30}?)(?:\s+\d+)?(?:,|$|\s+[-–])/.exec(a);
@@ -596,7 +598,7 @@ export function planTrips(waiting, trips, airports = {}) {
   const make = groups.filter((g) => g.items.some((i) => TRAVEL.includes(i.kind))).map((g) => {
     // the stay with the most nights names the trip (its city, from its address); else where the flights stop longest
     const nightsOf = (i) => (day(i.end_at) && day(i.start_at) ? (Date.parse(day(i.end_at)) - Date.parse(day(i.start_at))) / 864e5 : 0);
-    const stay = g.items.filter((i) => i.kind === "lodging").sort((a, b) => nightsOf(b) - nightsOf(a))[0];
+    const stay = g.items.filter((i) => i.kind === "lodging").sort((a, b) => nightsOf(b) - nightsOf(a) || (b.place ? 1 : 0) - (a.place ? 1 : 0))[0];
     const town = stay?.place ? cityOf(stay.place) : null;
     const flights = g.items.filter((i) => i.kind === "flight" && i.arr_airport).sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
     // the arrival with the longest wait until the next departure (the last one: until the trip's end):

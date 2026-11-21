@@ -211,6 +211,13 @@ Total: € 39,90`;
     expect(times("08h00 Paris · Duration 1h56 · 4:35 h").map((t) => t.time)).toEqual(["08:00"]);      // durations aren't times
     expect(times("12:25 Amsterdam (AMS)").map((t) => t.time)).toEqual(["12:25"]);                      // "Am…" isn't AM
   });
+  it("a stay laid out in a table: 'Confirmation #:', an address over three lines, check-in and check-out side by side", () => {
+    const text = `Trip to Example City\nDec 2, 2026 - Dec 3, 2026\nSeaside Resort Example\nEXAMPLE HOTEL COLLECTION\n12 Harbor Road\nExample City\nHI, United States, 96700\n+1-808-555-0100
+Hotel Confirmation #: 5550001112223\nCheck-in: Check-out:\nWednesday, December 2, 2026 Thursday, December 3, 2026\n03:00 PM 12:00 PM\nNumber of Nights: 1\nGuest Name: Alex Sample\nTotal: $1,230.50`;
+    const [b] = parseBookings(text, { ref: Date.parse("2026-10-31") }).bookings;
+    expect(b).toMatchObject({ kind: "lodging", name: "Seaside Resort Example", confirmation: "5550001112223", start_at: "2026-12-02T15:00", end_at: "2026-12-03T12:00",
+      place: "12 Harbor Road, Example City, HI, United States, 96700", price_cents: 123050 });
+  });
   it("an email as Kos reads it: markup with the points from its text, else the text with its date and subject (readEmailBookings)", async () => {
     const { readEmailBookings } = await import("../public/kos/kos-parse.js");
     const markup = [{ kind: "lodging", name: "Example Lodge", start: "2027-05-10T15:00:00-06:00", end: "2027-05-13T11:00:00-06:00", confirmation: "EX12345", points: null }];

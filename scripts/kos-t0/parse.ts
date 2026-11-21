@@ -12,7 +12,7 @@
 // output is fit to paste back to Claude (it still names places and dates: paste only what you're happy to).
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, basename } from "node:path";
-import { attachedMessage, htmlText, readMessage, viewOf } from "../../src/kos/mime.ts";
+import { attachedMessage, emailText, readMessage, viewOf } from "../../src/kos/mime.ts";
 import { reservations } from "../../src/kos/reservations.ts";
 // @ts-ignore: plain JS modules, shared with the browser
 import { parseBookings, readEmailBookings } from "../../public/kos/kos-parse.js";
@@ -53,8 +53,8 @@ for (const file of files) {
     const raw = readFileSync(file, "latin1");                         // one char per byte, as Gmail delivers it
     const outer = readMessage(raw), inner = attachedMessage(raw), m = inner ?? outer;
     view = viewOf(outer);
-    const r = readEmailBookings({ markup: reservations(m.html), text: m.text ?? htmlText(m.html), date: m.date, subject: m.subject }, { airports });
-    how = (inner ? "attached original · " : "") + (r.how === "markup" ? "markup" : r.how === "text" ? (m.text ? "text" : "html as text") : "nothing to read");
+    const r = readEmailBookings({ markup: reservations(m.html), text: emailText(m), date: m.date, subject: m.subject }, { airports });
+    how = (inner ? "attached original · " : "") + (r.how === "markup" ? "markup" : r.how === "text" ? (m.text && emailText(m) === m.text ? "text" : "html as text") : "nothing to read");
     bookings = r.bookings.map(asItem);
     if (r.cancelled) note = " · a cancellation";
     if (r.promotional) note = " · looks like marketing: skipped";

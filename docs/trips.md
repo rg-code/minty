@@ -1152,6 +1152,12 @@ flight by number and day or route and day, or the same confirmation and kind). T
 "Already in Kos", or "In Kos · new time" with **Update** (only the fields that changed; its trip stays),
 or for a cancellation "Cancelled" with **Delete from Kos**.
 
+**Agency and hotel emails** (found with the real-data check, a card company's travel desk): the markup can be
+**microdata** (`itemscope` / `itemprop`, which Gmail reads too), not JSON-LD; `microdata()` in `reservations.ts`
+reads it into the same objects. A plain-text part that's only a stub ("View this email in your browser") gives
+way to the HTML (`emailText` in `mime.ts`). Markup without a price takes the text's total. The text reader takes
+"Confirmation #:", an address over three lines, and check-in and check-out side by side in a table.
+
 **The real-data check** (`scripts/kos-t0/parse.ts`, T0 check 1): the household's own `.eml` files (and
 pasted `.txt`) through the same reader Kos uses (`readEmailBookings` in `kos-parse.js`, shared with Kos's
 Gmail and email-file paths), on their machine. It prints how each was read (an attached original's markup,

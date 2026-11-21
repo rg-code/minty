@@ -190,6 +190,7 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
   });
   it("a trip's name: the longest stay's city from its address, else where the flights stop longest (cityOf, planTrips)", async () => {
     const { cityOf, planTrips } = await import("../public/kos/store.js");
+    expect(cityOf("12 Harbor Road, Example City, HI, United States, 96700")).toBe("Example City");
     expect(["100 Example Pkwy, Lake Delton, Wisconsin, 53940, USA", "Via Esempio 12, Santa Maria Novella, 50123 Florence, Italy", "1-1-1 Example, Minato-ku, Tokyo 105-0001, Japan",
             "Rua da Amostra 45, Ribeira, 4050-123 Porto, Portugal", "Example 12, 110 00 Praha 1 – Staré Město", "99 Example, Higashiyama-ku, Kyoto, 605-0052 Japan"].map(cityOf))
       .toEqual(["Lake Delton", "Florence", "Tokyo", "Porto", "Praha", "Kyoto"]);
