@@ -42,7 +42,8 @@ const after = (list, i) => list.find((x) => x.index >= i);
 const CONF = /\b(?:confirmation|booking|record locator|reservation|pnr)(?:\s+(?:number|code|no\.?|#|reference|ref\.?))?\s*[:#]?\s*([A-Za-z0-9]{5,16})\b/gi;
 // a code has a digit, or is six capitals (an airline's record locator), as written: "reference" isn't one
 const isCode = (c) => /^(?=.*\d)[A-Z0-9]{5,16}$/.test(c) || /^[A-Z]{6}$/.test(c);
-const TOTAL = /\b(?:total|amount paid|grand total|total price)\b[^$€£¥\d]{0,20}([$€£¥])\s?([\d,]+(?:\.\d{2})?)|\b(?:total|amount paid)\b[^\d]{0,20}([\d,]+(?:\.\d{2})?)\s?(USD|EUR|GBP|JPY|CAD|AUD)\b/i;
+// up to 40 characters between the word and the amount: "Estimated Total\n(includes taxes and fees)  $145.10"
+const TOTAL = /\b(?:total|amount paid|grand total|total price)\b[^$€£¥\d]{0,40}([$€£¥])\s?([\d,]+(?:\.\d{2})?)|\b(?:total|amount paid)\b[^\d]{0,20}([\d,]+(?:\.\d{2})?)\s?(USD|EUR|GBP|JPY|CAD|AUD)\b/i;
 const SYMBOL = { "$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY" };
 
 /** BAM's program named in a text (src/points/programs.ts ids), or null: the program's own name first
@@ -138,6 +139,27 @@ export function parseBookings(raw, { year, isAirport = () => true } = {}) {
         ...(place ? { place } : {}), confirmation: conf, quote: text.slice(ci?.index ?? din.index, Math.min(text.length, (co?.index ?? dout.index) + 40)).trim() });
     }
   }
+  // A car rental: a company, its pick-up and return (each a place, a date, a time):
+  // "PICK UP\nDENVER INTL ARPT (DEN)\nMon, March 8, 2027\n10:00 AM … RETURN …"
+  const company = /\b(National|Enterprise|Hertz|Avis|Budget|Alamo|Sixt|Thrifty|Dollar|Payless|Fox Rent A Car|Zipcar|Turo)\b/.exec(text)?.[1] ?? null;
+  const pu = /\b(?:pick[\s-]?up|pickup)\b/i.exec(text);
+  const ret = pu ? /\b(?:return|drop[\s-]?off)\b/i.exec(text.slice(pu.index + pu[0].length)) : null;
+  if (pu && ret && (company || /\b(?:car rental|rental car|rent a car|vehicle)\b/i.test(text))) {
+    const retAt = pu.index + pu[0].length + ret.index;
+    const din = after(all.dates, pu.index), dout = after(all.dates, retAt);
+    // the time just after each date (not the counter's opening hours further down)
+    const timeAfter = (d) => { const t = d ? after(all.times, d.index) : null; return t && t.index - d.index < 40 ? t.time : null; };
+    // the place: the first line after the label, as written ("DENVER INTL ARPT (DEN)")
+    const placeAfter = (i) => text.slice(i).split("\n").map((x) => x.trim()).filter(Boolean)[1] ?? null;
+    if (din && dout && din.index < retAt && dout.date >= din.date) {
+      const tin = timeAfter(din), tout = timeAfter(dout), place = placeAfter(pu.index);
+      bookings.push({ kind: "car", name: company ?? "Rental car", start_at: tin ? `${din.date}T${tin}` : din.date, end_at: tout ? `${dout.date}T${tout}` : dout.date,
+        ...(place && place.length <= 120 ? { place } : {}), confirmation: conf, quote: text.slice(pu.index, Math.min(text.length, retAt + 80)).trim() });
+    }
+  }
+  // the total belongs to the booking when there's just one (a car's too)
+  if (bookings.length === 1 && price.price_cents && bookings[0].kind === "car" && !bookings[0].price_cents) Object.assign(bookings[0], price);
+
   // paid in points or miles ("Total for Stay 45,000 Pts.", "Total: 35,000 miles"), and which program's
   // (BAM's ids, src/points/programs.ts): the program named nearest the amount, else anywhere in the text
   const pts = /\btotal\b[^\n\d]{0,30}([\d,]{3,})\s*(?:pts|points|miles|avios)\b/i.exec(text);
