@@ -249,8 +249,9 @@ export async function saveItem(env: Env, request: Request, id?: number): Promise
     await env.DB.prepare(`UPDATE trip_items SET ${cols.map((c) => `${c} = ?`).join(", ")}, updated_at = ${NOW} WHERE id = ?`).bind(...v, id).run();
     saved = id!;
   }
-  // no place of its own: LocationIQ, once, now (a failure leaves it for the cron); never a flight
-  if (env.LOCATIONIQ_KEY && f.lat === null && f.kind !== "flight" && (f.place || f.name) && (!old || moved || old.lat !== null)) {
+  // no place of its own: LocationIQ, now, on every save (so Save is the way to ask at once; a failure leaves it
+  // for the cron); never a flight
+  if (env.LOCATIONIQ_KEY && f.lat === null && f.kind !== "flight" && (f.place || f.name)) {
     await locateItem(env, saved).catch((e) => console.error("place lookup failed:", e instanceof Error ? e.message : e));
   }
   return json({ id: saved }, old ? 200 : 201);

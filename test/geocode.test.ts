@@ -63,6 +63,13 @@ describe("bookings' places (saved, and the quiet cron run)", () => {
     // a new address: the old lookup goes, and the new one is asked
     await getJson<any>(`/trips/items/${inn}`, { method: "PUT", body: JSON.stringify({ kind: "lodging", name: "Example Inn", place: "99 Other St, Exampleville, HI 96700", lat: 20.1, lon: -155.1 }), envOverrides: { LOCATIONIQ_KEY: "iq-key" } });
     expect(await row(inn)).toMatchObject({ lat: 20.2, lon: -155.2, geo_source: "lookup" });
+    // an existing booking without a place, saved unchanged, is asked at once too (Save asks now)
+    const iq2 = fakeIq({ "Old Inn, 7 Example St, Exampleville, HI 96700": { lat: "20.3", lon: "-155.3" } });
+    const old = await item({ kind: "lodging", name: "Old Inn", place: "7 Example St, Exampleville, HI 96700" });   // saved before the key
+    vi.stubGlobal("fetch", iq2.fn);
+    await getJson<any>(`/trips/items/${old}`, { method: "PUT", body: JSON.stringify({ kind: "lodging", name: "Old Inn", place: "7 Example St, Exampleville, HI 96700" }), envOverrides: { LOCATIONIQ_KEY: "iq-key" } });
+    expect(await row(old)).toMatchObject({ lat: 20.3, lon: -155.3, geo_source: "lookup" });
+    vi.stubGlobal("fetch", iq.fn);
     // no key: nothing is asked
     const quiet = await item({ kind: "restaurant", name: "The Table", place: "5 Example Ave, Exampleville, HI 96700" });
     expect(await row(quiet)).toMatchObject({ lat: null, geo_source: null });
