@@ -1224,3 +1224,16 @@ does the same.
 **The summary strip.** A kind with bookings shows them: Flight opens the Flights tab, Lodging the Lodging
 tab, and the others a list of their own (`#/trip/<id>/car`, …, trains with buses). A kind with none still
 adds one, and each of those views ends with "+ Add a …".
+
+## 30. A connection from an email is one booking to add (owner, 2026-11-21)
+
+The owner checked Gmail for a flight with a connection: its two legs showed as two bookings, they added the
+first, and the second could never be added. Adding one marked the email as read, and Read again counted the
+second leg as already in Kos, since both legs share a confirmation code and a day.
+
+- **One row:** from an email or Gmail, a connection (`journeys`: the same code, one leg landing where the next
+  leaves, within a day) is one row, "A → B → C · 2 legs", with one **Add** for every leg (each is still its own
+  booking). With some legs in Kos already: "1 of 2 legs in Kos" and **Add the rest**.
+- **Read again** tells legs apart by their airport and flight number as well as the code and day.
+- **An email counts as read** once each of its bookings is in Kos (or was, or is a cancellation), so adding one
+  leaves the email to offer the others.

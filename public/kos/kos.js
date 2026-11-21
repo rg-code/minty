@@ -867,8 +867,22 @@ function standing(b) {
 }
 function suggestionsHtml(list, from) {
   if (!list.length) return `<div class="suggest muted">${from === "gmail" ? "No new bookings in your Kos label." : "Nothing recognisable there: fill the form in yourself."}</div>`;
-  const n = journeys(list.map((b, k) => ({ ...asItem(b, null), id: k }))).length;
-  return `<div class="suggest"><b>Found ${n} booking${n === 1 ? "" : "s"}</b>${n !== list.length ? ` (${list.length} parts: each flight leg is its own)` : ""}, check each:<div class="list" style="margin-top:8px">${list.map((b, n) => `<div class="row"><span class="grow"><b>${esc(itemTitle(b))}</b>
+  const groups = journeys(list.map((b, k) => ({ ...asItem(b, null), id: k }))), n = groups.length;
+  const fromEmail = from === "email" || from === "gmail";
+  // from an email, a connection is one row and one Add (each leg is still saved as its own booking)
+  const legsOf = new Map(fromEmail ? groups.filter((g) => g.length > 1).map((g) => [g[0].id, g.map((x) => x.id)]) : []);
+  const inGroup = new Set([...legsOf.values()].flatMap((ids) => ids.slice(1)));
+  const journeyRow = (ids) => {
+    const legs = ids.map((k) => list[k]), it = legs.map((b) => asItem(b, null)), st = legs.map(standing);
+    const route = [...it.map((x) => x.dep_airport ?? "?"), it.at(-1).arr_airport ?? "?"].join(" → ");
+    const nums = it.map((x) => [x.airline, x.flight_number].filter(Boolean).join(" ")).filter(Boolean).join(", ");
+    const have = st.filter((s) => s.kind === "same").length;
+    const action = have === legs.length ? `<span class="pill good">Already in Kos</span>`
+      : `${have ? `<span class="pill info">${have} of ${legs.length} legs in Kos</span>` : ""}<button type="button" class="btn small primary" data-add-now="${ids.join(",")}">${have ? "Add the rest" : st.some((s) => s.kind === "change") ? "Add / update" : "Add"}</button>`;
+    return `<div class="row"><span class="grow"><b>${esc(route)}</b>
+      <span class="muted">Flight · ${legs.length} legs${nums ? ` (${esc(nums)})` : ""} · ${esc(fmtDay(dateOf(it[0].start_at)) || "no date")}${it[0].confirmation ? ` · ${esc(it[0].confirmation)}` : ""}${suggestTrip(legs[0]) ? ` · <b>→ ${esc(suggestTrip(legs[0]).name)}</b>` : ""}</span>${legs[0].quote ? `<q>${esc(legs[0].quote)}</q>` : ""}</span>${action}</div>`;
+  };
+  return `<div class="suggest"><b>Found ${n} booking${n === 1 ? "" : "s"}</b>${n !== list.length && !legsOf.size ? ` (${list.length} parts: each flight leg is its own)` : ""}, check each:<div class="list" style="margin-top:8px">${list.map((b, n) => inGroup.has(n) ? "" : legsOf.has(n) ? journeyRow(legsOf.get(n)) : `<div class="row"><span class="grow"><b>${esc(itemTitle(b))}</b>
       <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at ?? b.start)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}${suggestTrip(b) ? ` · <b>→ ${esc(suggestTrip(b).name)}</b>` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
       ${(() => {
         const s = standing(b);
@@ -879,7 +893,7 @@ function suggestionsHtml(list, from) {
         if (s.kind === "change") return `<span class="pill info">In Kos · new ${esc([...new Set(s.changes.map((k) => CHANGE_WORD[k] ?? k))].join(", "))}</span>${add ? `<button type="button" class="btn small primary" data-add-now="${n}">Update</button>` : ""}`;
         return `<button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" || from === "gmail" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}`;
       })()}</div>`).join("")}</div>
-    ${(from === "email" || from === "gmail") && list.length > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${list.length}</button></div>` : ""}</div>`;
+    ${fromEmail && n > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${n}</button></div>` : ""}</div>`;
 }
 let found = [], foundFrom = "", pulled = [], tabSwitch = false;
 /** Where a found booking will go: the trip it was sent to, else the trip being added to, else the trip its dates fall in. */
@@ -1209,7 +1223,8 @@ async function gmailPull(box, quiet = false, again = false) {
   // kind, day and airport, or by confirmation, kind and day for one typed in
   const all = [...data.trips.flatMap((t) => t.items), ...data.unassigned];
   const keyOf = (sha, i) => `${sha}|${i.kind}|${dateOf(i.start_at) ?? ""}|${i.dep_airport ?? ""}`;
-  const confOf = (i) => (i.confirmation ? `${i.kind}|${i.confirmation}|${dateOf(i.start_at) ?? ""}` : null);
+  // a connection's legs share a code and a day: each is its own by its airport and flight number
+  const confOf = (i) => (i.confirmation ? `${i.kind}|${i.confirmation}|${dateOf(i.start_at) ?? ""}|${i.dep_airport ?? ""}|${i.flight_number ?? ""}` : null);
   const have = new Set(all.flatMap((i) => [i.source_sha256 ? keyOf(i.source_sha256, i) : null, confOf(i)].filter(Boolean)));
   for (const m of msgs) {
     const r = await store.readEmail(gmail.rawBytes(m.raw).buffer);
@@ -1583,7 +1598,7 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at("[data-add-now]") || at("[data-add-all]")) {
-      const list = at("[data-add-all]") ? found : [found[Number(at("[data-add-now]").dataset.addNow)]];
+      const list = at("[data-add-all]") ? found : at("[data-add-now]").dataset.addNow.split(",").map((k) => found[Number(k)]).filter(Boolean);
       // a booking sent to a trip's own address goes in that trip; the rest in the trip being added to, else the
       // one its dates fall in. One Kos already has: updated with what changed (its trip stays), or left as is;
       // a cancellation is never added (its Delete button is beside it)
@@ -1600,7 +1615,12 @@ app.addEventListener("click", async (ev) => {
         }
         await store.saveItem(null, { ...asItem(b, intoTrip(b)), source: "email", source_sha256: b.sha256 ?? null });
       }
-      if (foundFrom === "gmail") gmail.markSeen(list.map((b) => b.msgId).filter(Boolean));
+      // an email counts as read once each of its bookings is added (or was already in Kos, or is a cancellation):
+      // adding one leg of a connection leaves the email to offer the other
+      if (foundFrom === "gmail") {
+        const done = (b) => list.includes(b) || ["same", "cancel", "cancelled-gone"].includes(standing(b).kind);
+        gmail.markSeen([...new Set(list.map((b) => b.msgId).filter(Boolean))].filter((id) => found.filter((b) => b.msgId === id).every(done)));
+      }
       const into = [...new Set(list.map(intoTrip))];
       data = null; draft = null; found = [];
       location.hash = into.length === 1 && into[0] ? `#/trip/${into[0]}` : "#/";
