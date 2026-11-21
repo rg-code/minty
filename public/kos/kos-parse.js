@@ -74,27 +74,43 @@ export function parseBookings(raw, { year, isAirport = () => true } = {}) {
   const total = TOTAL.exec(text);
   const price = total ? { price_cents: Math.round(Number((total[2] ?? total[3]).replace(/,/g, "")) * 100), currency: total[1] ? SYMBOL[total[1]] : total[4].toUpperCase() } : {};
 
-  // Flights: a flight number near an airport pair: "UA 837 SFO → NRT", "SFO-NRT United 837".
-  const seen = new Set();
-  for (const m of text.matchAll(/\b([A-Z]{3})\s*(?:→|->|-|–|to|✈)\s*([A-Z]{3})\b/g)) {
+  // Flights: a flight number near an airport pair: "UA 837 SFO → NRT", "SFO-NRT United 837", or a leg
+  // laid out as a block (an airline's eTicket): "UA1234 … dates … times … Denver, CO, US (DEN)  Chicago, IL, US (ORD)".
+  const pairs = [...text.matchAll(/\b([A-Z]{3})\s*(?:→|->|-|–|to|✈)\s*([A-Z]{3})\b/g), ...text.matchAll(/\(([A-Z]{3})\)[^\n()]{1,80}\(([A-Z]{3})\)/g)]
+    .sort((x, y) => x.index - y.index);
+  const legs = [];                                           // [from, to, flight number] already found
+  let prevEnd = 0;
+  for (const m of pairs) {
     const [from, to] = [m[1], m[2]];
+    const end = m.index + m[0].length;
     if (from === to || !isAirport(from) || !isAirport(to)) continue;
-    // the flight number just before the airports (else just after), not another leg's
-    const FN = /\b([A-Z][A-Z0-9]|[A-Z0-9][A-Z])\s?(\d{1,4})\b/g;
-    const before = [...text.slice(Math.max(0, m.index - 40), m.index).replace(/\b[A-Z]{3}\b/g, " ").matchAll(FN)].at(-1);
-    const fn = before ?? FN.exec(text.slice(m.index + m[0].length, m.index + m[0].length + 40).replace(/\b[A-Z]{3}\b/g, " "));
-    const key = `${from}${to}${fn?.[0] ?? ""}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    // its date and times: the first ones after the airports (else the last date before)
-    // its date: the nearest one, before or after the airports (an itinerary heads a day's legs with
-    // its date; a short line puts it after); a later section's date (a receipt's) is further away
-    const prev = [...all.dates].reverse().find((x) => x.index < m.index), next = after(all.dates, m.index);
-    const d = !prev ? next : !next ? prev : (m.index - prev.index) < (next.index - m.index) ? prev : next;
-    const t1 = after(all.times, m.index), t2 = t1 ? after(all.times, t1.index + 1) : null;
-    const sentence = text.slice(Math.max(0, m.index - 60), m.index + m[0].length + 60).trim();
+    // the flight number before the airports, since the last leg (an eTicket's is a few lines up), else
+    // just after; three-letter words (airport codes) aren't flight numbers
+    // (not "AM 08" out of "06:00 AM 08:15": a number followed by ":" is a time)
+    const FN = /\b(?!AM\b|PM\b)([A-Z][A-Z0-9]|[A-Z0-9][A-Z])\s?(\d{1,4})\b(?!:)/g;
+    const from0 = Math.max(prevEnd, m.index - 300);
+    const before = [...text.slice(from0, m.index).replace(/\b[A-Z]{3}\b/g, (w) => " ".repeat(w.length)).matchAll(FN)].at(-1);
+    const fnAt = before ? from0 + before.index : -1;
+    const fn = before ?? FN.exec(text.slice(end, end + 40).replace(/\b[A-Z]{3}\b/g, " "));
+    // the same leg again (a receipt's fare lines, a summary): only once
+    if (legs.some(([f, t, n]) => f === from && t === to && (!fn || !n || n === fn[0].replace(/\s/g, "")))) continue;
+    legs.push([from, to, fn ? fn[0].replace(/\s/g, "") : null]);
+    prevEnd = end;
+    // its dates and times: those in its own block (from its flight number to its airports: departure, then
+    // arrival), else the date nearest the airports, before or after (an itinerary heads a day's legs with
+    // its date; a short line puts it after; a receipt's date is further away), and the times after them
+    const inBlock = (list) => fnAt >= 0 ? list.filter((x) => x.index > fnAt && x.index < m.index) : [];
+    const bd = inBlock(all.dates), bt = inBlock(all.times);
+    let d1, d2, t1, t2;
+    if (bd.length) { [d1, d2] = [bd[0], bd[1] ?? bd[0]]; [t1, t2] = [bt[0], bt[1]]; }
+    else {
+      const prev = [...all.dates].reverse().find((x) => x.index < m.index), next = after(all.dates, m.index);
+      d1 = d2 = !prev ? next : !next ? prev : (m.index - prev.index) < (next.index - m.index) ? prev : next;
+      t1 = bt[0] ?? after(all.times, m.index); t2 = bt[1] ?? (t1 ? after(all.times, t1.index + 1) : null);
+    }
+    const sentence = text.slice(Math.max(0, m.index - 60), end + 60).trim();
     bookings.push({ kind: "flight", airline: fn?.[1] ?? null, flight_number: fn?.[2] ?? null, dep_airport: from, arr_airport: to,
-      start_at: d ? (t1 ? `${d.date}T${t1.time}` : d.date) : null, end_at: d && t2 ? `${d.date}T${t2.time}` : null,
+      start_at: d1 ? (t1 ? `${d1.date}T${t1.time}` : d1.date) : null, end_at: d2 && t2 ? `${d2.date}T${t2.time}` : null,
       confirmation: conf, quote: sentence });
   }
 
