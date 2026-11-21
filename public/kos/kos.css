@@ -415,3 +415,4 @@ a.photo-credit:hover { color: #fff; text-decoration: underline; }
 
 /* Bills from Gmail (docs/bills.md): each bill's email or PDF under it */
 .bill-src { display: block; font-size: 13px; }
+.auto-note { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; border-color: var(--accent); }

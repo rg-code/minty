@@ -518,3 +518,53 @@ export function splitBills(rows) {
   return out;
 }
 
+/** Kos pools waiting bookings into trips by itself (owner, 2026-11-20; docs/trips.md §26): a booking whose
+ * date falls in an existing trip goes in it (`tripFor`); the rest are grouped by date (a booking starting
+ * within 2 days of the group's end joins it; a group that starts with a flight stays open, up to 30 days,
+ * until a flight lands back where it left from) and each group becomes a new trip, named after where it
+ * goes: its stay's town, else the last flight's arrival city on its first day. Undated bookings wait,
+ * and so does a group with no travel in it (a restaurant or an event on its own).
+ * `airports`: code → [name, city, country, lat, lon]. Returns { into: [{ trip_id, items }], make: [trip
+ * with `items`] }. Pure. */
+export function planTrips(waiting, trips, airports = {}) {
+  const day = (s) => (typeof s === "string" && /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null);
+  const into = new Map(), loose = [];
+  for (const i of waiting) {
+    const d = day(i.start_at);
+    if (!d) continue;
+    const t = tripFor(d, trips);
+    if (t) (into.get(t.id) ?? into.set(t.id, []).get(t.id)).push(i.id); else loose.push(i);
+  }
+  loose.sort((a, b) => (a.start_at < b.start_at ? -1 : a.start_at > b.start_at ? 1 : a.id - b.id));
+  const groups = [];
+  const gap = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+  for (const i of loose) {
+    const start = day(i.start_at), end = day(i.end_at) ?? start;
+    const g = groups.at(-1);
+    const away = g && g.home && !g.back && gap(g.start, start) <= 30;      // left home by air, not back yet
+    if (g && (away || gap(g.end, start) <= 2)) {
+      g.items.push(i);
+      if (end > g.end) g.end = end;
+      if (g.home && i.kind === "flight" && i.arr_airport === g.home) g.back = true;
+    } else {
+      groups.push({ start, end: end > start ? end : start, items: [i], home: i.kind === "flight" ? i.dep_airport ?? null : null, back: false });
+    }
+  }
+  // a trip needs travel in it (a flight, stay, train, bus or car): a dinner or a show on its own waits
+  const TRAVEL = ["flight", "lodging", "train", "bus", "car"];
+  const make = groups.filter((g) => g.items.some((i) => TRAVEL.includes(i.kind))).map((g) => {
+    const stay = g.items.find((i) => i.kind === "lodging");
+    const town = stay?.place ? /,\s*([^,\d]+?),?\s+[A-Z]{2}\s+\d{5}/.exec(stay.place)?.[1]?.trim() ?? stay.place.split(",").map((x) => x.trim()).filter((x) => x && !/\d/.test(x))[0] : null;
+    // the first day's flights, chained: where they end
+    const flights = g.items.filter((i) => i.kind === "flight" && i.arr_airport);
+    const firstDay = flights.length ? day(flights[0].start_at) : null;
+    const lastLeg = flights.filter((f) => day(f.start_at) === firstDay).at(-1);
+    const ap = lastLeg ? airports[lastLeg.arr_airport] : null;
+    const name = (town || ap?.[1] || stay?.name || g.items[0].name || "A trip").slice(0, 100);
+    const place = stay?.place ?? (ap ? [ap[1], ap[2]].filter(Boolean).join(", ") : null);
+    const lat = Number.isFinite(stay?.lat) ? stay.lat : ap ? ap[3] : null, lon = Number.isFinite(stay?.lon) ? stay.lon : ap ? ap[4] : null;
+    return { name, start_date: g.start, end_date: g.end, place, lat, lon, items: g.items.map((i) => i.id) };
+  });
+  return { into: [...into].map(([trip_id, items]) => ({ trip_id, items })), make };
+}
+

@@ -146,6 +146,31 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
     expect(alone).not.toMatch(/bills\(|BILLS|Bills/);
     expect(() => new Function(alone)).not.toThrow();
   });
+  it("waiting bookings: into a trip their dates fall in, else new trips grouped by date and named for where they go (planTrips)", async () => {
+    const { planTrips } = await import("../public/kos/store.js");
+    const airports = { LIH: ["Lihue Airport", "Lihue", "United States", 21.976, -159.339], LAX: ["Los Angeles International", "Los Angeles", "United States", 33.94, -118.4] };
+    const waiting = [
+      { id: 1, kind: "flight", name: "United", dep_airport: "SFO", arr_airport: "LAX", start_at: "2027-09-17T07:00", end_at: "2027-09-17T08:30" },
+      { id: 2, kind: "flight", name: "United", dep_airport: "LAX", arr_airport: "LIH", start_at: "2027-09-17T10:00", end_at: "2027-09-17T13:00" },
+      { id: 3, kind: "flight", name: "United", dep_airport: "LIH", arr_airport: "SFO", start_at: "2027-09-21T14:00", end_at: "2027-09-21T22:00" },
+      { id: 4, kind: "lodging", name: "Example Vacation Resort", place: "100 Example Road, Example Town, HI 96700", start_at: "2026-11-26T16:00", end_at: "2026-11-29T10:00" },
+      { id: 5, kind: "restaurant", name: "Dinner", start_at: "2027-03-12T19:00" },     // inside Tokyo's dates
+      { id: 6, kind: "other", name: "No date" },
+    ];
+    const trips = [{ id: 9, name: "Tokyo", start_date: "2027-03-10", end_date: "2027-03-15" }];
+    const plan = planTrips(waiting, trips, airports);
+    expect(plan.into).toEqual([{ trip_id: 9, items: [5] }]);
+    expect(plan.make).toEqual([
+      { name: "Example Town", start_date: "2026-11-26", end_date: "2026-11-29", place: "100 Example Road, Example Town, HI 96700", lat: null, lon: null, items: [4] },
+      // left SFO by air: the trip runs until the flight back to SFO, 4 days later; named for where the first day's legs end
+      { name: "Lihue", start_date: "2027-09-17", end_date: "2027-09-21", place: "Lihue, United States", lat: 21.976, lon: -159.339, items: [1, 2, 3] },
+    ]);
+    // a one-way flight with nothing after: a trip of its own; a stay 3 days after a flight that never came back still joins (open, under 30 days)
+    expect(planTrips([waiting[0], { ...waiting[3], start_at: "2027-09-20T16:00", end_at: "2027-09-23T10:00" }], [], airports).make.map((g: any) => [g.name, g.start_date, g.end_date, g.items]))
+      .toEqual([["Example Town", "2027-09-17", "2027-09-23", [1, 4]]]);
+    // a dinner on its own isn't a trip: it waits
+    expect(planTrips([{ id: 7, kind: "restaurant", name: "Harvest Example", start_at: "2027-01-10T19:00" }], [], airports)).toEqual({ into: [], make: [] });
+  });
   it("Bills by email: a complete new bill is added, an incomplete one listed, card statements and known ones left (splitBills)", async () => {
     const { splitBills } = await import("../public/kos/store.js");
     const pge = { file: "pge.pdf", sha: "a", biller: "PG&E", amount_cents: 12033, due_date: "2026-12-05" };
