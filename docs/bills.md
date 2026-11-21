@@ -21,11 +21,12 @@ PG&E, water, trash and the like, one entry per bill (a quarterly bill is one ent
 - **By hand:** **+ Add a bill** (or **+ Add a bill due this day** on a selected day): biller, amount, due date (picked on the calendar), bill date, person, and the name its payment goes by in transactions (by default the biller's first word, e.g. PG&E).
 - **From PDFs:** **Add from PDFs** (several files) or **Add a folder** (desktop browsers; phones can't pick a folder). The browser reads each PDF with pdf.js 4.10.38, stored in `public/vendor/pdfjs/` (never a CDN, so the CSP stays `'self'`, and only loaded when used), and `public/bill-parse.js` finds the biller, amount due, due date, bill date and the account's last 4 digits. A review table shows them, editable, with date pickers; a PDF already added is recognised by its SHA-256 (`POST /bills/known`) and skipped. **The PDFs never leave the device**: only those fields and the fingerprint are saved.
 - **By email, through Kos (owner, 2026-11-20):** forward a bill to the household's Gmail at `+bills`,
-  where a filter labels it **Bills**. Kos (on a Minty) reads it and adds it to Bills; Bills' **From
+  where a filter labels it **Bills** (or **Bill**: Gmail may refuse "Bills"). Kos (on a Minty) reads it and adds it to Bills; Bills' **From
   Gmail…** opens Kos's page for it (`/kos/#/bills`). Kos does it, not the dashboard, because Kos's page
   policy already lets it ask the person's Gmail script (trips.md §17.1); the dashboard's stays `'self'`.
   - **The Gmail script's `view=bills`** (only in a script made on a Minty; Kos on its own leaves it
-    out) returns the Bills label's emails from the last 90 days (20 at most, not ones this device
+    out) returns the emails labelled Bills or Bill, or sent to `you+bills@` exactly (when the set-up page
+    has the person's Gmail address, so no filter is needed), from the last 90 days (20 at most, not ones this device
     offered before), each as its plain text and its PDF attachments (up to 5, 5 MB each). Still only
     reads (`gmail.readonly`). One set-up for Kos and Bills.
   - **When:** Kos checks when it opens, at most every 30 minutes, and on **Check now**.

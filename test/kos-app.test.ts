@@ -133,8 +133,10 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
     const g = await import("../public/kos/gmail.js");
     const code = g.script(g.newKey(), "Kos", true);
     expect(code).toContain("|| /\\.pdf$/i.test(a.getName())");
-    expect(code).toContain('if (e.parameter.view === "bills") return out({ view: "bills", messages: bills(skip), v: 3 });');
-    expect(code).toContain(`GmailApp.search('newer_than:90d label:"' + BILLS + '"', 0, 30)`);
+    expect(code).toContain('if (e.parameter.view === "bills") return out({ view: "bills", messages: bills(skip, String(e.parameter.address || "")');
+    expect(code).toContain('const BILLS = ["Bills", "Bill"];');
+    expect(code).toContain('terms.push("to:" + p[0] + "+bills@" + p[1]);');
+    expect(code).toContain('GmailApp.search("newer_than:90d {" + terms.join(" ") + "}", 0, 30)');
     expect(code).toContain("getAttachments({ includeInlineImages: false })");
     expect(code).toContain("a.getSize() <= 5000000");
     expect(code).not.toMatch(/GmailApp\.(send|move|mark|delete|create)|addLabel|UrlFetchApp|MailApp|DriveApp/);
