@@ -816,14 +816,17 @@ and check-out, where, the booking), and the map zooms in on them (`drawTrip`'s "
 
 **A city photo on a trip's cover** (§19.1, owner, 2026-11-20): Wikipedia's lead image for one of the
 trip's cities, hotlinked from Wikimedia Commons, on the trip's card and its cover, under a scrim.
-- **Which city:** the trip's place as typed ("Tokyo, Japan"), then its first part, then the city its
-  first flight lands in (`cityNames`). A disambiguation page ("Portland") is skipped.
+- **Which city** (`cityNames`), best first: a street address's town as Wikipedia titles US places
+  ("Town, State", and the part before a hyphen); else the place as typed ("Tokyo, Japan") and its first
+  part, never a street; then the city the first day's flights end in (the destination, never a
+  connection's stop); the trip's name last. A disambiguation page ("Portland") is skipped. (Owner,
+  2026-11-21: a trip with a connection got the connection city's photo.)
 - **Which photo:** the page's lead image (Wikipedia's PageImages gives only freely licensed ones), as a
   960 px thumbnail from `thumb.wikimedia.org` or `upload.wikimedia.org`; nothing else is accepted
   (`isWikimediaImage`), and it's set through the DOM, never the page's HTML.
 - **Credit:** its photographer and licence (from the file's metadata), on the cover; on the trip's
   page it links to the file on Commons.
-- **Asked once per city:** each answer, or "none", is kept in localStorage (`kos-photos`).
+- **Asked once per city:** each answer, or "none", is kept in localStorage (`kos-photos-2`; the `-2` dropped the picks made before).
 - **What Wikipedia learns:** the city's name and the browser's address, once per city, from the
   browser (on a Minty too). The first screen says so.
 - **The policy:** `/kos/*` may reach `en.wikipedia.org` (the lookups) and the two Wikimedia image
