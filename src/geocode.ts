@@ -21,6 +21,27 @@ export function queriesFor(b: Place): string[] {
               name && town ? `${name}, ${town}` : ""];
   return [...new Set(qs.filter((q): q is string => q.length >= 4))].map((q) => q.slice(0, 200)).slice(0, 3);
 }
+// The address's country, so a search stays in it (a stay's name once matched a namesake on another continent).
+const US_STATES = new Set("AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY DC PR".split(" "));
+const COUNTRIES: Record<string, string> = {
+  "united states": "us", "usa": "us", "u.s.a.": "us", "us": "us", "united states of america": "us", "canada": "ca", "mexico": "mx", "méxico": "mx",
+  "united kingdom": "gb", "uk": "gb", "england": "gb", "scotland": "gb", "wales": "gb", "ireland": "ie", "france": "fr", "spain": "es", "españa": "es",
+  "portugal": "pt", "italy": "it", "italia": "it", "germany": "de", "deutschland": "de", "netherlands": "nl", "belgium": "be", "switzerland": "ch",
+  "austria": "at", "czechia": "cz", "czech republic": "cz", "greece": "gr", "iceland": "is", "norway": "no", "sweden": "se", "denmark": "dk",
+  "japan": "jp", "south korea": "kr", "korea": "kr", "china": "cn", "taiwan": "tw", "hong kong": "hk", "singapore": "sg", "thailand": "th",
+  "vietnam": "vn", "viet nam": "vn", "india": "in", "indonesia": "id", "philippines": "ph", "malaysia": "my", "australia": "au", "new zealand": "nz",
+  "united arab emirates": "ae", "uae": "ae", "turkey": "tr", "türkiye": "tr", "israel": "il", "egypt": "eg", "morocco": "ma", "south africa": "za",
+  "brazil": "br", "argentina": "ar", "chile": "cl", "peru": "pe", "colombia": "co", "costa rica": "cr", "croatia": "hr", "poland": "pl", "hungary": "hu",
+};
+export function countryOf(place: string | null): string | null {
+  const p = tidy(place);
+  if (!p) return null;
+  const parts = p.split(",").map((x) => x.trim().toLowerCase().replace(/\.$/, ""));
+  for (const part of parts.slice().reverse()) if (COUNTRIES[part]) return COUNTRIES[part];
+  // "Town, ST 12345" or "…, ST, 12345": a US state with a ZIP code
+  const st = /\b([A-Z]{2})\b,?\s+\d{5}(?:-\d{4})?\b/.exec(p)?.[1];
+  return st && US_STATES.has(st) ? "us" : null;
+}
 /** A hit that names a different postcode than the address's isn't it (a namesake in another town). */
 function fits(hit: { display_name?: string }, place: string | null): boolean {
   const zip = /\b(\d{5})(?:-\d{4})?\b/.exec(place ?? "")?.[1];
@@ -34,13 +55,15 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * couldn't answer (no key, down, over its limit), so it's asked again later. */
 export async function locate(key: string | undefined, b: Place, fetchFn: typeof fetch = fetch): Promise<Found> {
   if (!key || b.kind === "flight") return "unavailable";
-  const qs = queriesFor(b);
+  const qs = queriesFor(b), country = countryOf(b.place);
   if (!qs.length) return null;
   for (const [n, q] of qs.entries()) {
     if (n) await wait(GAP_MS);
     let res: Response;
     try {
-      res = await fetchFn(`${SEARCH}?${new URLSearchParams({ key, q, format: "json", limit: "1" })}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(5000) });
+      const params = new URLSearchParams({ key, q, format: "json", limit: "1" });
+      if (country) params.set("countrycodes", country);              // kept to the address's country
+      res = await fetchFn(`${SEARCH}?${params}`, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(5000) });
     } catch { return "unavailable"; }
     if (res.status === 404) { await res.body?.cancel(); continue; }            // LocationIQ's "nothing found"
     if (!res.ok) { await res.body?.cancel(); return "unavailable"; }

@@ -487,8 +487,13 @@ function mapsUrl(i) {
   const q = ap ? `${ap.name}, ${ap.city}` : [i.name, i.place].filter(Boolean).join(", ") || (Number.isFinite(i.lat) && Number.isFinite(i.lon) ? `${i.lat},${i.lon}` : "");
   return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : null;
 }
+const km = (a, b) => { const r = Math.PI / 180, x = Math.sin(((b.lat - a.lat) * r) / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(((b.lon - a.lon) * r) / 2) ** 2; return 12742 * Math.asin(Math.sqrt(x)); };
 function placeOf(i, t) {
-  if (Number.isFinite(i.lat) && Number.isFinite(i.lon)) return { lat: i.lat, lon: i.lon, approx: false };
+  // a place LocationIQ found more than 1,500 km from every airport the trip flies through is a namesake
+  // elsewhere: shown as an approximate place instead (docs/trips.md §31)
+  const tripAirports = (t?.items ?? []).filter((f) => f.kind === "flight").flatMap((f) => [airport(f.dep_airport), airport(f.arr_airport)]).filter(Boolean);
+  const farOff = i.geo_source === "lookup" && tripAirports.length && Math.min(...tripAirports.map((a) => km(a, i))) > 1500;
+  if (Number.isFinite(i.lat) && Number.isFinite(i.lon) && !farOff) return { lat: i.lat, lon: i.lon, approx: false };
   if (i.kind === "flight") return null;
   const flights = (t?.items ?? []).filter((f) => f.kind === "flight" && airport(f.arr_airport)).sort((a, b) => ((a.end_at ?? a.start_at ?? "") < (b.end_at ?? b.start_at ?? "") ? -1 : 1));
   const landings = flights.map((f) => airport(f.arr_airport));

@@ -31,6 +31,25 @@ describe("what Kos asks LocationIQ", () => {
     expect(queriesFor({ kind: "restaurant", name: "The Table", place: null })).toEqual([]);   // a name alone is too vague to place
     expect(queriesFor({ kind: "other", name: null, place: null })).toEqual([]);
   });
+  it("keeps a search to the address's country (a US state and ZIP, or a country's name)", async () => {
+    const { countryOf } = await import("../src/geocode");
+    expect(["1 Example Bay Rd, Example City, HI, United States, 96700", "100 Example Rd, Exampleville, HI 96700", "Via Esempio 12, 50123 Florence, Italy",
+            "1-1-1 Example, Minato-ku, Tokyo 105-0001, Japan", "Example Lodge", "12 Example St, Springfield"].map(countryOf))
+      .toEqual(["us", "us", "it", "jp", null, null]);
+    let params: URLSearchParams | null = null;
+    const fn = (async (url: string) => { params = new URL(url).searchParams; return Response.json([{ lat: "20.8", lon: "-156.9" }]); }) as unknown as typeof fetch;
+    expect(await locate("iq-key", { kind: "lodging", name: "Example Resort", place: "1 Example Bay Rd, Example City, HI, United States, 96700" }, fn)).toEqual({ lat: 20.8, lon: -156.9 });
+    expect(params!.get("countrycodes")).toBe("us");
+    // a chain's generic name with a US address: a namesake abroad unless the search is kept to the US
+    const chain = (async (url: string) => {
+      const sp = new URL(url).searchParams;
+      return Response.json([sp.get("countrycodes") === "us" ? { lat: "22.2", lon: "-159.4", display_name: "Example Vacation Resort, Example-north, Hawaii, 96700, United States" }
+                                                           : { lat: "16.0", lon: "108.2", display_name: "Example Vacation Resort, Somewhere, Asia" }]);
+    }) as unknown as typeof fetch;
+    expect(await locate("iq-key", { kind: "lodging", name: "Example Vacation Resort", place: "3970 Example Road, Example-north, HI 96700" }, chain)).toEqual({ lat: 22.2, lon: -159.4 });
+    await locate("iq-key", { kind: "lodging", name: "Example Lodge", place: "Example Lodge, Somewhere" }, fn);
+    expect(params!.has("countrycodes")).toBe(false);                                  // no country to tell: none
+  });
   it("takes the first answer that fits; a namesake with another postcode isn't it; 'unavailable' when LocationIQ can't answer", async () => {
     const b = { kind: "lodging", name: "Example Resort", place: "100 Example Rd, Exampleville, HI 96700" };
     const wrongTown = fakeIq({ "Example Resort, 100 Example Rd, Exampleville, HI 96700": { lat: "40.1", lon: "-75.2", display_name: "Example Resort, Elsewhere, PA, 19000, USA" },
