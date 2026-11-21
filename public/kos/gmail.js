@@ -143,10 +143,11 @@ export function rawBytes(raw) {
 export let oldScript = false;
 /** The new emails in the label, or sent to one of `codes`' trip addresses (not read on this device
  * before); each says which trip's code it was sent to (`trip`), when it was. */
-export async function pull(codes = []) {
+export async function pull(codes = [], { again = false } = {}) {
   const c = config();
   if (!c) throw new Error("Gmail pull isn't set up on this device yet.");
-  const seen = [...seenSet()].slice(-200);                         // the script skips these
+  // the script skips these; `again` (Read again): none, to find a booking deleted by mistake
+  const seen = again ? [] : [...seenSet()].slice(-200);
   const u = new URL(c.url);
   u.searchParams.set("key", c.key);
   if (seen.length) u.searchParams.set("seen", seen.join(","));
@@ -159,7 +160,7 @@ export async function pull(codes = []) {
   const d = await r.json().catch(() => null);
   if (!d) throw new Error("Your Gmail script didn't answer with JSON: check its deployment (Execute as: Me, Who has access: Anyone).");
   if (d.error) throw new Error(d.error === "forbidden" ? "Your Gmail script refused the key: copy the script from this page again, and deploy a new version." : d.error);
-  const s = seenSet();
+  const s = again ? new Set() : seenSet();
   if (valid.length && !(d.v >= 2)) oldScript = true;             // made before trip addresses: copy it again
   return (d.messages ?? []).filter((m) => !s.has(m.id)).map((m) => ({ ...m, trip: valid.includes(m.trip) ? m.trip : null }));
 }

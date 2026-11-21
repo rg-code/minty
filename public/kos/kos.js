@@ -780,7 +780,7 @@ const PLUS = MODE === "minty" ? "trip" : "kos";
 function sourceBox(source) {
   if (source === "gmail") return gmail.config()
     ? `<div class="card"><p class="muted" style="margin-top:0">Bookings you've forwarded to your Gmail's <b>Kos</b> label, read with your Gmail script (<a href="#/gmail">set-up</a>).</p>
-        <div class="actions"><button type="button" class="btn primary" data-gmail-pull>Check Gmail</button></div></div>`
+        <div class="actions"><button type="button" class="btn primary" data-gmail-pull>Check Gmail</button><button type="button" class="btn ghost" data-gmail-again title="Kos skips emails it read before: this looks again, and offers only bookings no longer in Kos">Deleted one? Read again</button></div></div>`
     : `<div class="card"><p style="margin-top:0"><b>Read bookings from your Gmail.</b> Forward confirmations to your Gmail with <b>+${PLUS}</b> in the address (or a trip's own, +<i>its code</i>), and Kos reads them from there, from any device, with no server.</p>
         <div class="actions"><a class="btn primary" href="#/gmail">Set it up (about 5 minutes)</a></div></div>`;
   if (source === "paste") return `<div class="card"><textarea class="paste" id="pasteText" placeholder="Paste a confirmation: the flight's number, airports, dates and times, or a stay's check-in and check-out"></textarea>
@@ -1115,25 +1115,35 @@ async function emailBookings(r) {
 /** New emails from the Kos label, each read with the email reader, as suggestions. quiet: the
  * Add page's own check when it opens; it shows only bookings, never "nothing new" or an error. */
 let pullSeq = 0;
-async function gmailPull(box, quiet = false) {
+async function gmailPull(box, quiet = false, again = false) {
   const mine = ++pullSeq;
-  if (!quiet) box.innerHTML = `<div class="suggest muted">Asking your Gmail…</div>`;
+  if (!quiet) box.innerHTML = `<div class="suggest muted">${again ? "Reading the last 60 days of your Kos label again…" : "Asking your Gmail…"}</div>`;
   // the codes of trips still worth mail (coming up, on now, or ended in the last 60 days)
   const since = addDays(localDay(), -60), byCode = new Map(data.trips.filter((t) => isTripCode(t.code) && t.end_date >= since).map((t) => [t.code, t]));
-  const msgs = await gmail.pull([...byCode.keys()]);
+  const msgs = await gmail.pull([...byCode.keys()], { again });
   const got = [], empty = [];
+  // Read again: only the bookings that aren't in Kos anymore, by the email they came from (its SHA-256),
+  // kind, day and airport, or by confirmation, kind and day for one typed in
+  const all = [...data.trips.flatMap((t) => t.items), ...data.unassigned];
+  const keyOf = (sha, i) => `${sha}|${i.kind}|${dateOf(i.start_at) ?? ""}|${i.dep_airport ?? ""}`;
+  const confOf = (i) => (i.confirmation ? `${i.kind}|${i.confirmation}|${dateOf(i.start_at) ?? ""}` : null);
+  const have = new Set(all.flatMap((i) => [i.source_sha256 ? keyOf(i.source_sha256, i) : null, confOf(i)].filter(Boolean)));
   for (const m of msgs) {
     const r = await store.readEmail(gmail.rawBytes(m.raw).buffer);
     const list = await emailBookings(r);
     if (!list.length) empty.push(m);
     const trip = m.trip ? byCode.get(m.trip) : null;               // sent to a trip's own address: it goes in that trip
-    for (const b of list) got.push({ ...b, sha256: r.sha256, msgId: m.id, quote: m.subject, tripId: trip?.id ?? null });
+    for (const b of list) {
+      if (again) { const it = asItem(b, null); if (have.has(keyOf(r.sha256, it)) || (confOf(it) && have.has(confOf(it)))) continue; }
+      got.push({ ...b, sha256: r.sha256, msgId: m.id, quote: m.subject, tripId: trip?.id ?? null });
+    }
   }
   // the page moved on, a newer check ran, or (quietly) something else is being suggested: leave it
   if (!box.isConnected || mine !== pullSeq || (quiet && (!got.length || (found.length && foundFrom !== "gmail")))) return;
   found = got; foundFrom = "gmail"; pulled = msgs.map((m) => m.id);
-  box.innerHTML = (quiet ? `<div class="suggest-head muted">New in your Gmail</div>` : "") + suggestionsHtml(found, "gmail") + (empty.length ? `<div class="suggest muted">${empty.length} email${empty.length === 1 ? "" : "s"} with no booking details Kos can read (${empty.slice(0, 3).map((m) => `“${esc(m.subject)}”`).join(", ")}): paste their text instead.</div>` : "")
-    + (msgs.length ? `<div class="actions"><button type="button" class="btn ghost" data-gmail-skip>Don't show these again</button></div>` : "")
+  if (again && !got.length) { box.innerHTML = `<div class="suggest muted">Everything Kos can read from the last 60 days of your Kos label is already in Kos.</div>`; return; }
+  box.innerHTML = (quiet ? `<div class="suggest-head muted">New in your Gmail</div>` : again ? `<div class="suggest-head muted">From the last 60 days, not in Kos</div>` : "") + suggestionsHtml(found, "gmail") + (empty.length && !again ? `<div class="suggest muted">${empty.length} email${empty.length === 1 ? "" : "s"} with no booking details Kos can read (${empty.slice(0, 3).map((m) => `“${esc(m.subject)}”`).join(", ")}): paste their text instead.</div>` : "")
+    + `<div class="actions">${msgs.length && !again ? `<button type="button" class="btn ghost" data-gmail-skip>Don't show these again</button>` : ""}<button type="button" class="btn ghost" data-gmail-again title="Kos skips emails it read before: this looks again, and offers only bookings no longer in Kos">Deleted one? Read again</button></div>`
     + (gmail.oldScript ? `<div class="suggest muted">Your Gmail script reads only the Kos label. To use each trip's own address, copy the script from <a href="#/gmail">the set-up page</a> into Apps Script again and deploy a new version.</div>` : "");
 }
 
@@ -1395,6 +1405,11 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at("[data-gmail-pull]")) { await gmailPull(document.getElementById("suggestBox")); return; }
+    if (at("[data-gmail-again]")) {                               // a booking deleted by mistake: the emails read before, again
+      const box = document.getElementById("suggestBox");
+      try { await gmailPull(box, false, true); } catch (e2) { box.innerHTML = `<div class="suggest err">${esc(e2.message)}</div>`; }
+      return;
+    }
     if (at("[data-gmail-skip]")) { gmail.markSeen(pulled); document.getElementById("suggestBox").innerHTML = `<div class="suggest muted">Done: those won't show again on this device.</div>`; found = []; return; }
     if (at("[data-copy-text]")) {
       const b = at("[data-copy-text]");

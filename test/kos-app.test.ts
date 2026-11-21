@@ -202,6 +202,23 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
     expect(out.known.map((r: any) => r.sha)).toEqual(["f"]);
     expect(out.unreadable.map((r: any) => r.sha)).toEqual(["g"]);
   });
+  it("Read again asks without the skip list and keeps emails read before (a booking deleted by mistake)", async () => {
+    const store = new Map<string, string>();
+    const was = (globalThis as any).localStorage;
+    (globalThis as any).localStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) };
+    try {
+      const g = await import("../public/kos/gmail.js");
+      g.save("https://script.google.com/macros/s/AKfycbx_example_deployment_id_1234/exec");
+      g.markSeen(["m1"]);
+      const asked: string[] = [];
+      const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (u: any) => { asked.push(String(u)); return new Response(JSON.stringify({ label: "Kos", v: 3, messages: [{ id: "m1", raw: "x", subject: "s" }, { id: "m2", raw: "y", subject: "t" }] })); });
+      expect((await g.pull()).map((m: any) => m.id)).toEqual(["m2"]);                      // the usual check skips m1
+      expect(new URL(asked[0]).searchParams.get("seen")).toBe("m1");
+      expect((await g.pull([], { again: true })).map((m: any) => m.id)).toEqual(["m1", "m2"]);
+      expect(new URL(asked[1]).searchParams.get("seen")).toBeNull();
+      spy.mockRestore();
+    } finally { (globalThis as any).localStorage = was; }
+  });
   it("pullBills asks with view=bills, decodes the PDFs, and leaves out what Bills already offered", async () => {
     const store = new Map<string, string>();
     const was = (globalThis as any).localStorage;
