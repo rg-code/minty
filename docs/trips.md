@@ -1098,7 +1098,7 @@ When the trip list opens with bookings waiting for a trip, Kos files them by its
   skip list and offers only the bookings no longer in Kos: matched by the email's SHA-256 with the
   booking's kind, day and airport, or by confirmation, kind and day for one typed in. (Forwarding the
   email again also works: it's a new email.)
-- **Check Gmail from anywhere:** a magnifier in Kos's header opens Add booking with Gmail's results (on a
+- **Check Gmail from anywhere:** a lighthouse in Kos's header (its beams flash while it checks) opens Add booking with Gmail's results (on a
   trip, for that trip), turning while it checks; on a Minty it checks for bills too. Before Gmail is set
   up, it opens the set-up page. The demo has none.
 - **A connection is one booking** (`journeys` in `store.js`): flights with the same confirmation, each
