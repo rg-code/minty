@@ -44,6 +44,8 @@ export interface Env {
   /** Secrets, only when Immich's address is behind Cloudflare Access: a service token's id and secret. */
   IMMICH_ACCESS_CLIENT_ID?: string;
   IMMICH_ACCESS_CLIENT_SECRET?: string;
+  /** Secret: a LocationIQ access token (src/geocode.ts), for Kos bookings' exact places. Unset: no lookups. */
+  LOCATIONIQ_KEY?: string;
 
   [key: string]: unknown;
 }

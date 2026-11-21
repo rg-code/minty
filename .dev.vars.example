@@ -21,3 +21,6 @@ TOKEN_ENC_KEY=
 # albumAsset.create), and only when Immich's address is behind Cloudflare Access, a service token's
 # IMMICH_ACCESS_CLIENT_ID and IMMICH_ACCESS_CLIENT_SECRET. Not listed as lines, so the Deploy button
 # doesn't ask for them.
+
+# Optional, Kos bookings' exact places (docs/trips.md §31): LOCATIONIQ_KEY, a LocationIQ access token used
+# only by the Worker. Not listed as a line, so the Deploy button doesn't ask for it.

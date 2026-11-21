@@ -25,6 +25,7 @@ import { PlaidError } from "./plaid";
 import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 import { runStatementSync } from "./statements";
 import { requestAlbum, runImmichSync, thumb, tripPhotos } from "./immich";
+import { locateSome } from "./geocode";
 import { rekeyTokens } from "./token-key";
 import { refreshTotals, snapshotBalances } from "./audit/totals";
 import { isPending, markSwept, syncState } from "./routes/syncrequest";
@@ -231,6 +232,9 @@ export default {
         return null;
       });
       if (totals?.from) console.log("monthly totals", JSON.stringify(totals));
+      // Kos: a few bookings' exact places from LocationIQ, when its key is set (docs/trips.md §31)
+      const places = await locateSome(env).catch((e) => ({ failed: e instanceof Error ? e.message : String(e) }));
+      if (Object.keys(places).length) console.log("places", JSON.stringify(places));   // booking id -> found / not found / unavailable
       // Kos K2, last (so it never costs the steps above): one trip's Immich album, if one is due
       // (docs/trips.md §25). Nothing at all when Immich isn't set up.
       const photos = await runImmichSync(env).catch((e) => ({ failed: e instanceof Error ? e.message : String(e) }));

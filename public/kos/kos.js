@@ -323,7 +323,8 @@ function tripView(t, tab) {
       <div class="tabs"><div class="seg" role="group">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${(tab || "") === k}">${l}</button>`).join("")}</div></div>
       ${body}
       <p class="report-line muted">A trip worth featuring, or something Kos got wrong? <button type="button" class="linklike" data-report-trip data-goatcounter-click="kos-report-trip">Share it with the Kos team</button></p></div>
-      <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div><p class="map-approx muted" id="mapApprox" hidden></p></div></div>
+      <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div><p class="map-approx muted" id="mapApprox" hidden></p>
+        ${t.items.some((i) => i.geo_source === "lookup") ? `<span class="map-credit">Places by <a href="https://locationiq.com/" target="_blank" rel="noopener">LocationIQ.com</a></span>` : ""}</div></div>
     <a class="fab" href="#/add?trip=${t.id}" aria-label="Add a booking" title="Add a booking">+</a>`;
 }
 const KIND_TABS = ["car", "train", "restaurant", "event", "other"];
@@ -479,6 +480,13 @@ const townAirports = (town) => {
   if (!townIndex) { townIndex = new Map(); for (const [code, a] of Object.entries(airports)) { const k = String(a[1]).split(",")[0].trim().toLowerCase(); townIndex.set(k, [...(townIndex.get(k) ?? []), code]); } }
   return (townIndex.get(String(town).trim().toLowerCase()) ?? []).map(airport).filter(Boolean);
 };
+/** A booking in Google Maps (its app on a phone): its name and address, which Google finds itself; a
+ * flight, its departure airport; else its coordinates. null with nothing to show. */
+function mapsUrl(i) {
+  const ap = i.kind === "flight" ? airport(i.dep_airport) : null;
+  const q = ap ? `${ap.name}, ${ap.city}` : [i.name, i.place].filter(Boolean).join(", ") || (Number.isFinite(i.lat) && Number.isFinite(i.lon) ? `${i.lat},${i.lon}` : "");
+  return q ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : null;
+}
 function placeOf(i, t) {
   if (Number.isFinite(i.lat) && Number.isFinite(i.lon)) return { lat: i.lat, lon: i.lon, approx: false };
   if (i.kind === "flight") return null;
@@ -824,7 +832,9 @@ function itemForm(i, tripId) {
     <label class="wide">Notes<textarea name="notes" rows="2" maxlength="2000">${v("notes")}</textarea></label>
   </div><div class="actions"><button class="btn primary" type="submit">${i?.id ? "Save" : "Add booking"}</button>
     <a class="btn ghost" href="${tripId || i?.trip_id ? `#/trip/${i?.trip_id ?? tripId}` : "#/"}">Cancel</a>
-    ${i?.id ? `<button type="button" class="btn danger" data-del-item="${i.id}">Delete</button>` : ""}<span class="err" id="formErr"></span></div></form>`;
+    ${i?.id && mapsUrl(i) ? `<a class="btn ghost" href="${esc(mapsUrl(i))}" target="_blank" rel="noopener">Open in Google Maps</a>` : ""}
+    ${i?.id ? `<button type="button" class="btn danger" data-del-item="${i.id}">Delete</button>` : ""}<span class="err" id="formErr"></span></div>
+    ${i?.geo_source === "lookup" ? `<p class="muted" style="font-size:12px;margin:8px 0 0">Its place on the map was found from its name and address by <a href="https://locationiq.com/" target="_blank" rel="noopener">LocationIQ.com</a>. A map link in the address replaces it.</p>` : ""}</form>`;
 }
 const offsetOf = (s) => (s ? (/(Z|[+-]\d{2}:?\d{2})$/.exec(s)?.[1] ?? "") : "");
 
@@ -1658,6 +1668,13 @@ app.addEventListener("click", async (ev) => {
       data = null; await load(); spending(tripById(id)); return;
     }
   } catch (e) { err(e.message); }
+});
+// a booking card's swipe (swipe.js): Edit opens it, Maps opens it in Google Maps
+app.addEventListener("kosaction", (e) => {
+  const i = itemById(e.detail.id);
+  if (!i) return;
+  if (e.detail.act === "edit") location.hash = `#/item/${i.id}`;
+  else if (e.detail.act === "maps") { const u = mapsUrl(i); if (u) window.open(u, "_blank", "noopener"); }
 });
 app.addEventListener("change", async (ev) => {
   const t = ev.target;
