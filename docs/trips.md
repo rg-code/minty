@@ -1111,3 +1111,55 @@ When the trip list opens with bookings waiting for a trip, Kos files them by its
   left out. "26NOV" dates are read too. (Owner, 2026-11-21: a forwarded eTicket was dated by when it was
   booked.)
 
+## 27. Reading bookings, tested against six made-up travellers (owner, 2026-11-21)
+
+The owner: "so far all booking I sent required custom parser and broke multiple times." So the reader was
+tested against six made-up travellers instead of one email at a time: a US family, a business traveller, a
+budget traveller in Europe, a points-and-miles traveller, a couple who book through online agencies, and a
+points family of three. 100 emails, pastes, PDFs and screenshots, 139 bookings, 19 trips, each with the right
+answer written down. They were written by subagents from memory of each company's layout: not real
+inboxes, so the categories of failure are sound and the exact rates less so. The corpus and its harness are
+kept outside this repository.
+
+**Before:** 64 of 139 bookings found, 14 invented, 11 of 100 files fully right. Emails with schema.org markup
+read well; forwarded emails, HTML-only emails, PDFs, pastes and screenshots didn't. Trip pooling (§26) was
+not the problem: given the right bookings it made all 19 trips with the right bookings and dates.
+
+**The reader now** (`public/kos/kos-parse.js`), general rules only, nothing for one company's layout:
+- **Dates:** day-first numbers ("16/04/2027", "16.04.2027", "13-06-2027"), two-digit years ("16 Apr 27"),
+  "26NOV27", "18. 9. 2027". A date without a year is the next one after the email's date (or today, for a
+  paste). Left out: a forward's header, when it was booked, issued, purchased or printed, until when it can
+  be cancelled or paid, and a schedule change's old times ("was", "original flight", "no longer valid").
+- **Times:** "4 PM", "15h00"; not durations ("1h56", "4:35 h"); "12:25 Amsterdam" isn't "12:25 AM".
+- **Money and points:** any currency and format ("€ 89,99", "1 250 Kč", "13,970 yen"); a total, not a
+  subtotal; miles + cash ("52,500 Miles + 168,46 €"), points totals over per-night rows, never miles earned
+  or a balance. With markup (which lists the cash only) the points still come from the text.
+- **Flights:** two airports (a code, "(XXX)", "(ORD - O'HARE)", or an airport's name when no code is
+  printed) with the dates and times nearest them, read as a block when the flight number comes first. A
+  flight number may follow its airports, or be "Flight # 2316" (the airline from the email), "Delta 1387",
+  "EZY4873"; never an aircraft ("A321"). A summary line that other legs connect, a receipt's fare lines and
+  connection notes aren't flights.
+- **Trains, buses, events, tours, restaurants, transfers** are read from text too; stays find their names
+  ("Your stay at …") and addresses (with postcodes abroad); cars "Trip starts … / Trip ends …".
+- **A cancellation** comes back marked; **a marketing email** gives nothing (unless something in it is
+  anchored like a real booking).
+- **Markup listing a flight once per passenger** gives one flight (`reservations.ts`).
+- **An email forwarded as an attachment** is read from the attached original, markup and all
+  (`attachedMessage` in `src/kos/mime.ts`).
+
+**A booking read again** (owner: update): `matchBooking` in `store.js` finds the one Kos has (the same
+flight by number and day or route and day, or the same confirmation and kind). The suggestion then says
+"Already in Kos", or "In Kos · new time" with **Update** (only the fields that changed; its trip stays),
+or for a cancellation "Cancelled" with **Delete from Kos**.
+
+**Trip names:** the city of the stay with the most nights (from its address: "50123 Florence", "Tokyo
+105-0001", "Lake Delton, Wisconsin 53940"), else the airport where the flights stop longest (a day trip's
+turnaround, not home; a destination, not a connection).
+
+**After:** on the four travellers the rules were tuned with, 79 of 81 bookings found, none invented; on the
+two held out and never looked at while tuning, 43 of 58 (from 27), 6 invented (4 of them bookings found
+under another kind than the answer's: a tour as an event rather than "other"). All six: 122 of 139 (from 64).
+Still missed in the held-out travellers: a corporate travel agency's itinerary, a multi-leg airline e-ticket
+PDF, an HTML-only car rental, a screenshot of a car-sharing trip, an airline receipt laid out by date
+codes, and a concert in Czech.
+

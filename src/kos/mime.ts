@@ -118,6 +118,27 @@ export function htmlText(html: string | null): string | null {
     .replace(/[ \t\u00a0]+/g, " ").replace(/ *\n[ \n]*/g, "\n").trim();
 }
 
+/** The email attached to a forwarded one ("Forward as attachment", or a filter's forward): Gmail keeps
+ * its schema.org markup that way, where a typed forward drops it (docs/trips.md §27). Read like any; null
+ * when there's none. */
+export function attachedMessage(raw: string, depth = 0): Message | null {
+  const { headers, body } = split(raw);
+  const { type, params } = contentType(headers["content-type"]);
+  if (type === "message/rfc822" && depth > 0) {
+    const bytes = decodeBody(body, headers["content-transfer-encoding"]);
+    let inner = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) inner += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return readMessage(inner);
+  }
+  if (type.startsWith("multipart/") && params.boundary && depth < 8) {
+    for (const s of body.split(`--${params.boundary}`).slice(1).filter((x) => !x.startsWith("--"))) {
+      const found = attachedMessage(s.replace(/^\r?\n/, "").replace(/\r?\n$/, ""), depth + 1);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 /** A raw message (as Gmail's "Show original" or an Email Worker gives it) read for Kos. `raw` is the
  * message as a "binary string" (one char per byte), which is what both deliver. */
 export function readMessage(raw: string): Message {

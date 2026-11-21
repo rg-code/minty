@@ -509,14 +509,14 @@ const deviceStore = {
   async deleteItem(id) { return tx(["items"], "readwrite", async (x) => { await req(x.objectStore("items").delete(id)); return { id, removed: true }; }); },
   /** An email file, read in this browser with the same reader Minty runs (src/kos/). Nothing is kept. */
   async readEmail(buf) {
-    const [{ htmlText, readMessage, viewOf }, { reservations }] = await Promise.all([import("./mail/mime.js"), import("./mail/reservations.js")]);
+    const [{ attachedMessage, htmlText, readMessage, viewOf }, { reservations }] = await Promise.all([import("./mail/mime.js"), import("./mail/reservations.js")]);
     const bytes = new Uint8Array(buf);
     if (bytes.length > 2 * 1024 * 1024) throw new Error("email file too large (at most 2 MB)");
     let raw = "";
     for (let i = 0; i < bytes.length; i += 0x8000) raw += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    const m = readMessage(raw);
+    const outer = readMessage(raw), m = attachedMessage(raw) ?? outer;   // forwarded as an attachment: the original
     const sha = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
-    return { subject: m.subject, from: m.from, date: m.date, view: viewOf(m), sha256: sha, bookings: reservations(m.html), text: (m.text ?? htmlText(m.html) ?? "").slice(0, 20000) || null, attachments: [] };
+    return { subject: m.subject, from: m.from, date: m.date, view: viewOf(outer), sha256: sha, bookings: reservations(m.html), text: (m.text ?? htmlText(m.html) ?? "").slice(0, 20000) || null, attachments: [] };
   },
   spending: false,
 };
@@ -552,6 +552,21 @@ export function splitBills(rows) {
  * and so does a group with no travel in it (a restaurant or an event on its own).
  * `airports`: code → [name, city, country, lat, lon]. Returns { into: [{ trip_id, items }], make: [trip
  * with `items`] }. Pure. */
+/** A city from an address: before a US state and ZIP ("…, Lake Delton, WI 53940"), after a postcode
+ * ("…, 50123 Florence, Italy"), or before a Japanese one ("…, Chuo-ku, Tokyo 104-0061"); else its last part
+ * that's a place and not a country or a number. */
+export function cityOf(address) {
+  const a = String(address ?? "");
+  const states = Object.values(US_STATES).filter((x) => !x.includes(",")).join("|");
+  const us = new RegExp(`,\\s*([^,\\d]+?),?\\s+(?:[A-Z]{2}|${states}),?\\s+\\d{5}(?:-\\d{4})?\\b`).exec(a);
+  if (us) return us[1].trim();
+  const jp = /([A-Za-zÀ-ÿ' .-]{2,30}?),?\s+\d{3}-\d{4}\b/.exec(a);
+  if (jp) return jp[1].trim();
+  const eu = /(?:^|[\s,])(?:\d{4,5}|\d{4}-\d{3}|\d{3} \d{2})\s+([A-Za-zÀ-ÿ'’ .-]{2,30}?)(?:\s+\d+)?(?:,|$|\s+[-–])/.exec(a);
+  if (eu) return eu[1].trim();
+  const parts = a.split(",").map((x) => x.trim()).filter((x) => x && !/\d/.test(x) && !/^(usa|us|united states|uk|united kingdom|japan|italy|france|spain|portugal|germany|mexico|canada|czechia|czech republic)$/i.test(x));
+  return parts.at(-1) ?? null;
+}
 export function planTrips(waiting, trips, airports = {}) {
   const day = (s) => (typeof s === "string" && /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null);
   const into = new Map(), loose = [];
@@ -579,13 +594,21 @@ export function planTrips(waiting, trips, airports = {}) {
   // a trip needs travel in it (a flight, stay, train, bus or car): a dinner or a show on its own waits
   const TRAVEL = ["flight", "lodging", "train", "bus", "car"];
   const make = groups.filter((g) => g.items.some((i) => TRAVEL.includes(i.kind))).map((g) => {
-    const stay = g.items.find((i) => i.kind === "lodging");
-    const town = stay?.place ? /,\s*([^,\d]+?),?\s+[A-Z]{2}\s+\d{5}/.exec(stay.place)?.[1]?.trim() ?? stay.place.split(",").map((x) => x.trim()).filter((x) => x && !/\d/.test(x))[0] : null;
-    // the first day's flights, chained: where they end
-    const flights = g.items.filter((i) => i.kind === "flight" && i.arr_airport);
-    const firstDay = flights.length ? day(flights[0].start_at) : null;
-    const lastLeg = flights.filter((f) => day(f.start_at) === firstDay).at(-1);
-    const ap = lastLeg ? airports[lastLeg.arr_airport] : null;
+    // the stay with the most nights names the trip (its city, from its address); else where the flights stop longest
+    const nightsOf = (i) => (day(i.end_at) && day(i.start_at) ? (Date.parse(day(i.end_at)) - Date.parse(day(i.start_at))) / 864e5 : 0);
+    const stay = g.items.filter((i) => i.kind === "lodging").sort((a, b) => nightsOf(b) - nightsOf(a))[0];
+    const town = stay?.place ? cityOf(stay.place) : null;
+    const flights = g.items.filter((i) => i.kind === "flight" && i.arr_airport).sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
+    // the arrival with the longest wait until the next departure (the last one: until the trip's end):
+    // a connection is an hour, the destination days; a day trip's turnaround is hours
+    let dest = null, longest = -1;
+    flights.forEach((f, k) => {
+      const next = flights[k + 1], arr = Date.parse(String(f.end_at ?? f.start_at ?? "").slice(0, 16));
+      const leave = next ? Date.parse(String(next.start_at ?? "").slice(0, 16)) : Date.parse(`${g.end}T23:59`);
+      const wait = Number.isFinite(arr) && Number.isFinite(leave) ? leave - arr : -1;
+      if (wait > longest && f.arr_airport !== flights[0].dep_airport) { longest = wait; dest = f; }
+    });
+    const ap = dest ? airports[dest.arr_airport] : null;
     const name = (town || ap?.[1] || stay?.name || g.items[0].name || "A trip").slice(0, 100);
     const place = stay?.place ?? (ap ? [ap[1], ap[2]].filter(Boolean).join(", ") : null);
     const lat = Number.isFinite(stay?.lat) ? stay.lat : ap ? ap[3] : null, lon = Number.isFinite(stay?.lon) ? stay.lon : ap ? ap[4] : null;
@@ -624,5 +647,36 @@ export function tripSpan(t) {
     if (b > end) end = b;
   }
   return { start_date: start, end_date: end, outside };
+}
+
+/** A booking read from an email or a paste against the ones already in Kos (owner, 2026-11-21: "update",
+ * docs/trips.md §27): the same flight (number and day, or route and day), or the same confirmation and
+ * kind. Returns { item, same, changes } where `changes` are the fields the new one has and differ (a
+ * schedule change's times, say); `same` when there are none. No match: { item: null }. Pure. */
+export function matchBooking(b, items) {
+  const day = (s) => (s ? String(s).slice(0, 10) : null);
+  const min = (s) => (s ? String(s).slice(0, 16) : null);
+  const norm = (s) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const same = items.filter((i) => i.kind === b.kind);
+  let item = null;
+  if (b.kind === "flight") {
+    item = same.find((i) => b.flight_number && norm(i.flight_number) === norm(b.flight_number) && (!b.airline || !i.airline || i.airline === b.airline)
+      && b.dep_airport === i.dep_airport && (!day(b.start_at) || !day(i.start_at) || Math.abs(Date.parse(day(b.start_at)) - Date.parse(day(i.start_at))) <= 864e5 * 2))
+      ?? same.find((i) => b.dep_airport && i.dep_airport === b.dep_airport && i.arr_airport === b.arr_airport && day(i.start_at) && day(i.start_at) === day(b.start_at))
+      ?? same.find((i) => norm(b.confirmation) && norm(i.confirmation) === norm(b.confirmation) && i.dep_airport === b.dep_airport && i.arr_airport === b.arr_airport);
+  } else {
+    item = same.find((i) => norm(b.confirmation) && norm(i.confirmation) === norm(b.confirmation))
+      ?? same.find((i) => b.name && norm(i.name) === norm(b.name) && day(i.start_at) && day(i.start_at) === day(b.start_at));
+  }
+  if (!item) return { item: null, same: false, changes: [] };
+  const fields = ["start_at", "end_at", "airline", "flight_number", "dep_airport", "arr_airport", "place", "confirmation", "price_cents", "currency", "points", "points_program"];
+  const changes = fields.filter((k) => {
+    const v = b[k];
+    if (v === null || v === undefined || v === "") return false;
+    if (k === "start_at" || k === "end_at") return min(v) !== min(item[k]) && !(String(v).length <= 10 && day(v) === day(item[k]));
+    if (k === "confirmation" || k === "flight_number") return norm(v) !== norm(item[k]);
+    return v !== item[k];
+  });
+  return { item, same: !changes.length, changes };
 }
 
