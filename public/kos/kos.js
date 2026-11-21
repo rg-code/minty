@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, journeys, planTrips, shiftSample, tripSpan, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
+import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, journeys, matchBooking, planTrips, shiftSample, tripSpan, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 import { parseWhere } from "./where.js";
@@ -791,12 +791,29 @@ function sourceBox(source) {
   if (source === "email") return `<div class="card"><p class="muted" style="margin-top:0">An email file (in Gmail: open the email → ⋮ → Download message). ${MODE === "device" ? "It's read here, on this device" : "Minty reads its booking details"}, and nothing is kept until you add them.</p><input type="file" accept=".eml,message/rfc822" id="emlFile" /></div>`;
   return "";
 }
+/** A found booking against Kos's own: new, already there, a change to one there, or a cancellation. */
+const allItems = () => (data ? [...data.trips.flatMap((t) => t.items), ...data.unassigned] : []);
+const CHANGE_WORD = { start_at: "time", end_at: "time", dep_airport: "airport", arr_airport: "airport", place: "place", price_cents: "price", points: "points", flight_number: "flight", confirmation: "confirmation" };
+function standing(b) {
+  const m = matchBooking(asItem(b, null), allItems());
+  if (b.status === "cancelled") return { kind: m.item ? "cancel" : "cancelled-gone", item: m.item };
+  if (!m.item) return { kind: "new" };
+  return m.same ? { kind: "same", item: m.item } : { kind: "change", item: m.item, changes: m.changes };
+}
 function suggestionsHtml(list, from) {
   if (!list.length) return `<div class="suggest muted">${from === "gmail" ? "No new bookings in your Kos label." : "Nothing recognisable there: fill the form in yourself."}</div>`;
   const n = journeys(list.map((b, k) => ({ ...asItem(b, null), id: k }))).length;
   return `<div class="suggest"><b>Found ${n} booking${n === 1 ? "" : "s"}</b>${n !== list.length ? ` (${list.length} parts: each flight leg is its own)` : ""}, check each:<div class="list" style="margin-top:8px">${list.map((b, n) => `<div class="row"><span class="grow"><b>${esc(itemTitle(b))}</b>
       <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at ?? b.start)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}${suggestTrip(b) ? ` · <b>→ ${esc(suggestTrip(b).name)}</b>` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
-      <button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" || from === "gmail" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}</div>`).join("")}</div>
+      ${(() => {
+        const s = standing(b);
+        if (s.kind === "cancel") return `<span class="pill warn">Cancelled</span><button type="button" class="btn small danger" data-del-match="${s.item.id}">Delete from Kos</button>`;
+        if (s.kind === "cancelled-gone") return `<span class="pill dim">Cancelled · not in Kos</span>`;
+        if (s.kind === "same") return `<span class="pill good">Already in Kos</span>`;
+        const add = from === "email" || from === "gmail" || from === "paste" || from === "pdf" || from === "screenshot";
+        if (s.kind === "change") return `<span class="pill info">In Kos · new ${esc([...new Set(s.changes.map((k) => CHANGE_WORD[k] ?? k))].join(", "))}</span>${add ? `<button type="button" class="btn small primary" data-add-now="${n}">Update</button>` : ""}`;
+        return `<button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" || from === "gmail" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}`;
+      })()}</div>`).join("")}</div>
     ${(from === "email" || from === "gmail") && list.length > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${list.length}</button></div>` : ""}</div>`;
 }
 let found = [], foundFrom = "", pulled = [], tabSwitch = false;
@@ -823,8 +840,8 @@ function asItem(b, tripId) {
 }
 async function readText(text, source) {
   const { parseBookings } = await import("./kos-parse.js");
-  const year = new Date().getFullYear();
-  found = parseBookings(text, { year, isAirport: (c) => Boolean(airports[c]) }).bookings.map((b) => ({ ...b, source }));
+  // a date written without a year is the next one after today (docs/trips.md §27)
+  found = parseBookings(text, { ref: Date.now(), airports }).bookings.map((b) => ({ ...b, source }));
   foundFrom = source;
   document.getElementById("suggestBox").innerHTML = suggestionsHtml(found, source);
 }
@@ -1107,10 +1124,17 @@ function billsView() {
 /** An email's bookings: its schema.org markup when it has some, else its text read like pasted text (a
  * forwarded email loses the markup, docs/trips.md §17.1), with the year from the email's date. */
 async function emailBookings(r) {
-  if (r.bookings.length || !r.text) return r.bookings;
-  const { parseBookings } = await import("./kos-parse.js");
-  const sent = Date.parse(r.date ?? ""), year = Number.isFinite(sent) ? new Date(sent).getFullYear() : new Date().getFullYear();
-  return parseBookings(r.text, { year, isAirport: (c) => Boolean(airports[c]) }).bookings;
+  const { parseBookings, pointsIn, programIn, tidy } = await import("./kos-parse.js");
+  if (r.bookings.length) {
+    // markup gives the cash part only: the points or miles are in the email's text (docs/trips.md §27)
+    const pts = r.text ? pointsIn(tidy(r.text)) : null;
+    const target = r.bookings.find((b) => b.kind === "flight") ?? r.bookings.find((b) => b.kind === "lodging");
+    if (pts?.points && target && !target.points) Object.assign(target, { points: pts.points, points_program: programIn(r.text) });
+    return r.bookings;
+  }
+  if (!r.text) return [];
+  const sent = Date.parse(r.date ?? "");
+  return parseBookings(r.text, { ref: Number.isFinite(sent) ? sent : Date.now(), airports, subject: r.subject ?? undefined }).bookings;
 }
 /** New emails from the Kos label, each read with the email reader, as suggestions. quiet: the
  * Add page's own check when it opens; it shows only bookings, never "nothing new" or an error. */
@@ -1500,12 +1524,32 @@ app.addEventListener("click", async (ev) => {
     }
     if (at("[data-add-now]") || at("[data-add-all]")) {
       const list = at("[data-add-all]") ? found : [found[Number(at("[data-add-now]").dataset.addNow)]];
-      // a booking sent to a trip's own address goes in that trip; the rest in the trip being added to, else the one its dates fall in
-      for (const b of list) await store.saveItem(null, { ...asItem(b, intoTrip(b)), source: "email", source_sha256: b.sha256 ?? null });
+      // a booking sent to a trip's own address goes in that trip; the rest in the trip being added to, else the
+      // one its dates fall in. One Kos already has: updated with what changed (its trip stays), or left as is;
+      // a cancellation is never added (its Delete button is beside it)
+      for (const b of list) {
+        const s = standing(b);
+        if (s.kind === "same" || s.kind === "cancel" || s.kind === "cancelled-gone") continue;
+        if (s.kind === "change") {
+          const fresh = asItem(b, s.item.trip_id);
+          const patch = Object.fromEntries(s.changes.map((k) => [k, fresh[k]]));
+          const { id, created_at, updated_at, ...keep } = s.item;
+          await store.saveItem(s.item.id, { ...keep, ...patch });
+          continue;
+        }
+        await store.saveItem(null, { ...asItem(b, intoTrip(b)), source: "email", source_sha256: b.sha256 ?? null });
+      }
       if (foundFrom === "gmail") gmail.markSeen(list.map((b) => b.msgId).filter(Boolean));
       const into = [...new Set(list.map(intoTrip))];
       data = null; draft = null; found = [];
       location.hash = into.length === 1 && into[0] ? `#/trip/${into[0]}` : "#/";
+      return;
+    }
+    if (at("[data-del-match]")) {                                 // a cancellation's booking, deleted from Kos
+      const i = itemById(Number(at("[data-del-match]").dataset.delMatch));
+      if (!i || !confirm(`Delete ${itemTitle(i)} from Kos? The email says it was cancelled.`)) return;
+      await store.deleteItem(i.id); data = null; await load();
+      document.getElementById("suggestBox").innerHTML = suggestionsHtml(found, foundFrom);
       return;
     }
     if (at("[data-del-item]")) {

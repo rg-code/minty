@@ -126,3 +126,20 @@ describe("an HTML part as text (a forwarded email has no markup left to read)", 
   });
 });
 
+describe("an email forwarded as an attachment, and markup listing a flight once per passenger (docs/trips.md §27)", () => {
+  it("reads the attached original, markup and all; one flight however many passengers", async () => {
+    const { readMessage, attachedMessage } = await import("../src/kos/mime");
+    const ld = JSON.stringify([1, 2, 3].map(() => ({ "@context": "http://schema.org", "@type": "FlightReservation", reservationNumber: "QZ7XKM",
+      reservationFor: { "@type": "Flight", flightNumber: "1234", airline: { "@type": "Airline", iataCode: "UA" }, departureAirport: { "@type": "Airport", iataCode: "DEN" },
+        arrivalAirport: { "@type": "Airport", iataCode: "ORD" }, departureTime: "2027-04-05T06:00:00-06:00", arrivalTime: "2027-04-05T08:15:00-05:00" } })));
+    const inner = `From: Example Air <a@example.com>\r\nSubject: Your flight\r\nDate: Mon, 1 Feb 2027 10:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><script type="application/ld+json">${ld}</script><body>Your flight</body></html>\r\n`;
+    const outer = `From: me@example.com\r\nSubject: Fwd: Your flight\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="b1"\r\n\r\n--b1\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nSee attached.\r\n--b1\r\nContent-Type: message/rfc822\r\nContent-Disposition: attachment; filename="Your flight.eml"\r\n\r\n${inner}--b1--\r\n`;
+    const m = attachedMessage(outer);
+    expect(m?.subject).toBe("Your flight");
+    const b = reservations(m!.html);
+    expect(b).toHaveLength(1);                                                // three passengers, one flight
+    expect(b[0]).toMatchObject({ kind: "flight", confirmation: "QZ7XKM", flight: { airline: "UA", number: "1234", from: "DEN", to: "ORD" } });
+    expect(attachedMessage(inner)).toBeNull();
+  });
+});
+

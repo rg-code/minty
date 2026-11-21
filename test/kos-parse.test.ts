@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dates, parseBookings, times } from "../public/kos/kos-parse.js";
+import { dates, parseBookings, pointsIn, times } from "../public/kos/kos-parse.js";
 
 // Reading bookings from pasted, PDF or screenshot text (public/kos/kos-parse.js). Made-up texts.
 describe("dates and times", () => {
@@ -193,4 +193,68 @@ Total may vary slightly.`;
   it("dates with the weekday before the year, or the year on the next line", () => {
     expect(dates("MAR 11 THU\n2027, Mar 3, Wed, 2027 and Apr 9 2027", 2020).map((d) => d.date)).toEqual(["2027-03-11", "2027-03-03", "2027-04-09"]);
   });
+
+  // docs/trips.md §27: rules learned from a made-up corpus of six travellers (all values made up)
+  it("a train: service and number, its date, departure and arrival lines, stations, the booking's code", () => {
+    const t = `Booking code: TR7Q2X
+Train / Treno: Frecciarossa 9512
+Departure / Partenza: Milano Centrale 12/05/2027 ore 09:10
+Arrival / Arrivo: Bologna Centrale 12/05/2027 ore 10:12
+Coach 6 · Seat 8A
+Total: € 39,90`;
+    const [b] = parseBookings(t, { ref: Date.parse("2027-02-01") }).bookings;
+    expect(b).toMatchObject({ kind: "train", name: "Frecciarossa 9512", start_at: "2027-05-12T09:10", end_at: "2027-05-12T10:12", confirmation: "TR7Q2X", price_cents: 3990, currency: "EUR" });
+  });
+  it("European forms: day-first dates, two-digit years, comma decimals, 24-hour times, 'h' times", () => {
+    expect(dates("16/04/2027 · 16.04.2027 · Fri, 16 Apr 27 · 13-06-2027", { year: 2027 }).map((d) => d.date)).toEqual(["2027-04-16", "2027-04-16", "2027-04-16", "2027-06-13"]);
+    expect(dates("04/16/2027", { year: 2027 }).map((d) => d.date)).toEqual(["2027-04-16"]);              // can only be month first
+    expect(times("08h00 Paris · Duration 1h56 · 4:35 h").map((t) => t.time)).toEqual(["08:00"]);      // durations aren't times
+    expect(times("12:25 Amsterdam (AMS)").map((t) => t.time)).toEqual(["12:25"]);                      // "Am…" isn't AM
+  });
+  it("a screenshot's misreads are fixed in numbers only: an email's code or a name keeps its letters", async () => {
+    const { tidy } = await import("../public/kos/kos-parse.js");
+    expect(tidy("16:3O · 2O27 · ¥28,34O · l8:16")).toBe("16:30 · 2027 · ¥28,340 · 18:16");
+    expect(tidy("Confirmation K2OXYZ at the O2 Arena, seat I2")).toBe("Confirmation K2OXYZ at the O2 Arena, seat I2");
+  });
+  it("a date without a year is the next one after the email (or today, for a paste)", () => {
+    expect(dates("Sat, Jul 17", { ref: Date.parse("2027-06-28") }).map((d) => d.date)).toEqual(["2027-07-17"]);
+    expect(dates("Tue, Jan 12", { ref: Date.parse("2026-11-21") }).map((d) => d.date)).toEqual(["2027-01-12"]);
+  });
+  it("a cancellation's bookings come back marked; a marketing email gives nothing", () => {
+    const c = parseBookings("Your flight has been cancelled.\nConfirmation: QZ7XKM\nUA 1234 DEN → ORD Mon, Apr 5, 2027 06:00 AM 08:15 AM", { ref: Date.parse("2027-02-01") });
+    expect(c.cancelled).toBe(true);
+    expect(c.bookings.map((b: any) => b.status)).toEqual(["cancelled"]);
+    const promo = parseBookings("Spring sale! Fares from €19.99. Berlin (BER) → Bergamo (BGY), Oct 19. Book now, limited time.", { ref: Date.parse("2027-02-01") });
+    expect(promo.bookings).toEqual([]);
+    expect(promo.promotional).toBe(true);
+  });
+  it("a schedule change: the new times, not the old ones it still shows", () => {
+    const t = `Confirmation: QZ7XKM
+Your new itinerary
+UA 1234 DEN → ORD Mon, Apr 5, 2027 Depart 07:30 AM Arrive 09:45 AM
+Original flight (no longer valid)
+UA 1234 DEN → ORD Mon, Apr 5, 2027 Depart 06:00 AM Arrive 08:15 AM`;
+    const b = parseBookings(t, { ref: Date.parse("2027-02-01") }).bookings;
+    expect(b).toHaveLength(1);
+    expect(b[0]).toMatchObject({ start_at: "2027-04-05T07:30", end_at: "2027-04-05T09:45" });
+  });
+  it("points: a total wins over a per-night breakdown; miles + cash on one line; earned miles aren't paid", () => {
+    expect(pointsIn("Points + Cash per night: 20,000 points + 10,000 JPY\nTue, Mar 2, 2027 20,000 points + 10,000 JPY\nTotal points: 40,000\nTotal cash: 20,000 JPY")).toEqual({ points: 40000, cash: null });
+    expect(pointsIn("Total paid: 52,500 Miles + 168,46 €")).toMatchObject({ points: 52500, cash: { price_cents: 16846, currency: "EUR" } });
+    expect(pointsIn("You'll earn 2,140 miles on this trip")).toBeNull();
+  });
+  it("a leg laid out with its times first and its flight number after (two legs, a connection)", () => {
+    const t = `Booking code: 5XKQ7P
+Thursday, 10 June 2027
+07:00 Denver (DEN), Terminal 1
+08:10 Chicago (ORD), Terminal 1
+UA 183 | Economy | Airbus A321
+Connection in Chicago (ORD): 1 h 35 min
+09:45 Chicago (ORD), Terminal 1
+11:50 Boston (BOS), Terminal B
+UA 1166 | Economy | Airbus A320`;
+    expect(parseBookings(t, { ref: Date.parse("2027-03-01") }).bookings.map((b) => [b.airline, b.flight_number, b.dep_airport, b.arr_airport, b.start_at, b.end_at]))
+      .toEqual([["UA", "183", "DEN", "ORD", "2027-06-10T07:00", "2027-06-10T08:10"], ["UA", "1166", "ORD", "BOS", "2027-06-10T09:45", "2027-06-10T11:50"]]);
+  });
 });
+

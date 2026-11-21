@@ -172,6 +172,32 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
     // a dinner on its own isn't a trip: it waits
     expect(planTrips([{ id: 7, kind: "restaurant", name: "Harvest Example", start_at: "2027-01-10T19:00" }], [], airports)).toEqual({ into: [], make: [] });
   });
+  it("a booking read again: already in Kos, a change (a schedule change's times), or new (matchBooking)", async () => {
+    const { matchBooking } = await import("../public/kos/store.js");
+    const items = [{ id: 1, kind: "flight", airline: "UA", flight_number: "1234", dep_airport: "DEN", arr_airport: "ORD", start_at: "2027-04-05T06:00", end_at: "2027-04-05T08:15", confirmation: "QZ7XKM" },
+                   { id: 2, kind: "lodging", name: "Example Lodge", start_at: "2027-04-05", end_at: "2027-04-08", confirmation: "4127583906" }];
+    expect(matchBooking({ kind: "flight", airline: "UA", flight_number: "1234", dep_airport: "DEN", arr_airport: "ORD", start_at: "2027-04-05T06:00" }, items)).toMatchObject({ item: { id: 1 }, same: true });
+    expect(matchBooking({ kind: "flight", airline: "UA", flight_number: "1234", dep_airport: "DEN", arr_airport: "ORD", start_at: "2027-04-05T07:30", end_at: "2027-04-05T09:45" }, items))
+      .toMatchObject({ item: { id: 1 }, same: false, changes: ["start_at", "end_at"] });
+    expect(matchBooking({ kind: "lodging", confirmation: "4127 583 906", start_at: "2027-04-05T15:00" }, items)).toMatchObject({ item: { id: 2 }, changes: ["start_at"] });
+    expect(matchBooking({ kind: "flight", flight_number: "99", dep_airport: "ORD", arr_airport: "DEN", start_at: "2027-04-09T10:00" }, items)).toEqual({ item: null, same: false, changes: [] });
+    // a train out and back on one booking code, read again: each its own, never the return over the outbound
+    const out = { id: 7, kind: "train", name: "Example 21", confirmation: "TR7Q2X", start_at: "2027-04-07T09:00" };
+    expect(matchBooking({ kind: "train", name: "Example 220", confirmation: "TR7Q2X", start_at: "2027-04-10T10:13" }, [out]).item).toBeNull();
+    expect(matchBooking({ kind: "train", name: "Example 21", confirmation: "TR7Q2X", start_at: "2027-04-07T09:00" }, [out]).same).toBe(true);
+    // two flights on different confirmations aren't one, even on the same route and day
+    expect(matchBooking({ kind: "flight", flight_number: "1234", airline: "UA", dep_airport: "DEN", arr_airport: "ORD", start_at: "2027-04-05T06:00", confirmation: "OTHER1" }, items).item).toBeNull();
+  });
+  it("a trip's name: the longest stay's city from its address, else where the flights stop longest (cityOf, planTrips)", async () => {
+    const { cityOf, planTrips } = await import("../public/kos/store.js");
+    expect(["100 Example Pkwy, Lake Delton, Wisconsin, 53940, USA", "Via Esempio 12, Santa Maria Novella, 50123 Florence, Italy", "1-1-1 Example, Minato-ku, Tokyo 105-0001, Japan",
+            "Rua da Amostra 45, Ribeira, 4050-123 Porto, Portugal", "Example 12, 110 00 Praha 1 – Staré Město", "99 Example, Higashiyama-ku, Kyoto, 605-0052 Japan"].map(cityOf))
+      .toEqual(["Lake Delton", "Florence", "Tokyo", "Porto", "Praha", "Kyoto"]);
+    const aps = { ORD: ["O'Hare", "Chicago", "US", 41.9, -87.9], LGA: ["LaGuardia", "New York", "US", 40.7, -73.8] };
+    const day = [{ id: 1, kind: "flight", dep_airport: "LGA", arr_airport: "ORD", start_at: "2027-08-18T06:00", end_at: "2027-08-18T07:45" },
+                 { id: 2, kind: "flight", dep_airport: "ORD", arr_airport: "LGA", start_at: "2027-08-18T19:55", end_at: "2027-08-18T23:05" }];
+    expect(planTrips(day, [], aps).make[0].name).toBe("Chicago");                // a day trip: where it turns around, not home
+  });
   it("a trip's dates widen to cover its bookings, never narrow (tripSpan)", async () => {
     const { tripSpan } = await import("../public/kos/store.js");
     const t = { start_date: "2027-03-11", end_date: "2027-03-14", items: [

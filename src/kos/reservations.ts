@@ -119,5 +119,14 @@ export function reservations(html: string | null): Booking[] {
         place: address(loc.address ?? f.address) ?? str(loc.name ?? null), ...geo(loc, f) });
     }
   }
-  return out;
+  // the same reservation once per passenger (or repeated): once, keeping a price when one copy has it
+  const kept: Booking[] = [];
+  for (const b of out) {
+    const k = kept.find((x) => x.kind === b.kind && x.start === b.start && x.end === b.end && x.name === b.name
+      && (x.flight?.number ?? null) === (b.flight?.number ?? null) && (x.flight?.from ?? null) === (b.flight?.from ?? null));
+    if (!k) { kept.push(b); continue; }
+    if (k.price_cents === null && b.price_cents !== null) Object.assign(k, { price_cents: b.price_cents, currency: b.currency });
+    k.confirmation ??= b.confirmation;
+  }
+  return kept;
 }
