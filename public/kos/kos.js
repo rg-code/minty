@@ -793,7 +793,7 @@ const suggestTrip = (b) => { const id = b.tripId ?? (pageTrip() ? null : tripGue
 function asItem(b, tripId) {
   const out = { kind: b.kind, trip_id: tripId ?? null, name: b.name ?? null, confirmation: b.confirmation ?? null, guest: b.guest ?? null,
     start_at: b.start ?? b.start_at ?? null, end_at: b.end ?? b.end_at ?? null, place: b.place ?? null, lat: b.lat ?? null, lon: b.lon ?? null,
-    price_cents: b.price_cents ?? null, currency: b.currency ?? null, points: b.points ?? null };
+    price_cents: b.price_cents ?? null, currency: b.currency ?? null, points: b.points ?? null, points_program: b.points_program ?? null };
   const f = b.flight ?? b;
   if (b.kind === "flight") Object.assign(out, { airline: f.airline ?? null, flight_number: f.number ?? f.flight_number ?? null, dep_airport: f.from ?? f.dep_airport ?? null,
     arr_airport: f.to ?? f.arr_airport ?? null, dep_terminal: f.terminal ?? f.dep_terminal ?? null, dep_gate: f.gate ?? f.dep_gate ?? null, seat: f.seat ?? null });
@@ -1043,6 +1043,14 @@ function billsView() {
     <div id="billsResult">${gmail.config() ? billsResultHtml() : `<div class="suggest muted">Set up Gmail first: <a href="#/gmail">Gmail set-up</a>.</div>`}</div>`;
 }
 
+/** An email's bookings: its schema.org markup when it has some, else its text read like pasted text (a
+ * forwarded email loses the markup, docs/trips.md §17.1), with the year from the email's date. */
+async function emailBookings(r) {
+  if (r.bookings.length || !r.text) return r.bookings;
+  const { parseBookings } = await import("./kos-parse.js");
+  const sent = Date.parse(r.date ?? ""), year = Number.isFinite(sent) ? new Date(sent).getFullYear() : new Date().getFullYear();
+  return parseBookings(r.text, { year, isAirport: (c) => Boolean(airports[c]) }).bookings;
+}
 /** New emails from the Kos label, each read with the email reader, as suggestions. quiet: the
  * Add page's own check when it opens; it shows only bookings, never "nothing new" or an error. */
 let pullSeq = 0;
@@ -1055,9 +1063,10 @@ async function gmailPull(box, quiet = false) {
   const got = [], empty = [];
   for (const m of msgs) {
     const r = await store.readEmail(gmail.rawBytes(m.raw).buffer);
-    if (!r.bookings.length) empty.push(m);
+    const list = await emailBookings(r);
+    if (!list.length) empty.push(m);
     const trip = m.trip ? byCode.get(m.trip) : null;               // sent to a trip's own address: it goes in that trip
-    for (const b of r.bookings) got.push({ ...b, sha256: r.sha256, msgId: m.id, quote: m.subject, tripId: trip?.id ?? null });
+    for (const b of list) got.push({ ...b, sha256: r.sha256, msgId: m.id, quote: m.subject, tripId: trip?.id ?? null });
   }
   // the page moved on, a newer check ran, or (quietly) something else is being suggested: leave it
   if (!box.isConnected || mine !== pullSeq || (quiet && (!got.length || (found.length && foundFrom !== "gmail")))) return;
@@ -1119,7 +1128,7 @@ async function readShared() {
   }
   if (file && (/rfc822/.test(file.type) || /\.eml$/i.test(file.name))) {
     const r = await store.readEmail(await file.blob.arrayBuffer());
-    found = r.bookings.map((b) => ({ ...b, sha256: r.sha256 })); foundFrom = "email";
+    found = (await emailBookings(r)).map((b) => ({ ...b, sha256: r.sha256 })); foundFrom = "email";
     box.innerHTML = suggestionsHtml(found, "email"); return;
   }
   const text = [s.title, s.text, s.url, file && /^text\//.test(file.type) ? await file.blob.text() : ""].filter(Boolean).join("\n");
@@ -1438,9 +1447,9 @@ app.addEventListener("change", async (ev) => {
     box.innerHTML = `<div class="suggest muted">Reading…</div>`;
     try {
       const r = await store.readEmail(await t.files[0].arrayBuffer());
-      found = r.bookings.map((b) => ({ ...b, sha256: r.sha256 }));
+      found = (await emailBookings(r)).map((b) => ({ ...b, sha256: r.sha256 }));
       foundFrom = "email";
-      box.innerHTML = r.bookings.length ? suggestionsHtml(found, "email")
+      box.innerHTML = found.length ? suggestionsHtml(found, "email")
         : `<div class="suggest muted">No booking details in "${esc(r.subject ?? "this email")}". ${r.text ? "Its text is below to paste instead." : ""}</div>${r.text ? `<textarea class="paste" readonly>${esc(r.text)}</textarea>` : ""}`;
     } catch (e) { box.innerHTML = `<div class="suggest err">${esc(e.message)}</div>`; }
   }

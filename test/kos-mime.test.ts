@@ -114,3 +114,15 @@ describe("reservations (schema.org JSON-LD)", () => {
     expect(reservations(null)).toEqual([]);
   });
 });
+
+describe("an HTML part as text (a forwarded email has no markup left to read)", () => {
+  it("keeps the words and the line breaks, drops tags, styles and scripts, decodes entities", async () => {
+    const { htmlText } = await import("../src/kos/mime");
+    const html = `<html><head><style>p{color:red}</style><title>x</title></head><body><script>var a = 1;</script>
+      <table><tr><td>Check-In</td><td>4:00&nbsp;p.m.</td></tr><tr><td>Checkout</td><td>10:00 a.m.</td></tr></table>
+      <p>Total for Stay&nbsp;&nbsp;90,000 Pts.</p><div>Club Example &amp; Spa<br>100 Example Road</div><p>&#8594; &#x2192;</p></body></html>`;
+    expect(htmlText(html)).toBe("Check-In 4:00 p.m.\nCheckout 10:00 a.m.\nTotal for Stay 90,000 Pts.\nClub Example & Spa\n100 Example Road\n→ →");
+    expect(htmlText(null)).toBeNull();
+  });
+});
+

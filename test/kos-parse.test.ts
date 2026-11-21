@@ -32,7 +32,7 @@ describe("parseBookings", () => {
   it("a stay: the hotel's name, check-in and check-out", () => {
     const t = "Thank you for booking Park Example Hotel Tokyo. Check-in: Thu, Mar 11, 2027 from 3:00 PM. Check-out: Mon, Mar 15, 2027 by 11:00 AM. Confirmation number 88213345. Total ¥88,000";
     const { bookings } = parseBookings(t);
-    expect(bookings).toEqual([expect.objectContaining({ kind: "lodging", name: "Park Example Hotel Tokyo", start_at: "2027-03-11", end_at: "2027-03-15",
+    expect(bookings).toEqual([expect.objectContaining({ kind: "lodging", name: "Park Example Hotel Tokyo", start_at: "2027-03-11T15:00", end_at: "2027-03-15T11:00",   // with the check-in and check-out times
       confirmation: "88213345", price_cents: 8800000, currency: "JPY" })]);
   });
 
@@ -44,5 +44,52 @@ describe("parseBookings", () => {
 
   it("finds nothing in text without a booking, and never guesses", () => {
     expect(parseBookings("Lovely to see you last week. See you in March!").bookings).toEqual([]);
+  });
+
+  it("a stay laid out like a vacation club's confirmation: dates above the labels, the year on its own line, points (made-up copy)", () => {
+    const t = `Example Vacation Clubs
+ Alex Example
+Member: XXXXXX123A
+Your Reservation Is Confirmed, Alex!
+
+Club Example Ka 'Ula Kai
+100 Example Road, Example Town, HI 96700 US (808) 555-0100
+Confirmation Number: 12345EF000001
+See Trip Details
+NOV 26     THU
+2026
+
+NOV 29     SUN
+2026
+Hotel Details
+Reservation Details
+1 Room(s) / 3 Night(s)
+One Bedroom
+Check-In
+4:00 p.m.     Checkout
+10:00 a.m.
+Rate Details
+Free Night     90,000 Pts.
+Taxes & Fees     0
+Total for Stay     90,000 Pts.
+    10% Points Discount
+Cancellation Policy
+Cancel 72 Hours prior to 4pm day of arrival.`;
+    const { bookings } = parseBookings(t, { year: 2025 });                     // the year written wins over the one given
+    expect(bookings).toHaveLength(1);
+    expect(bookings[0]).toMatchObject({ kind: "lodging", name: "Club Example Ka 'Ula Kai", start_at: "2026-11-26T16:00", end_at: "2026-11-29T10:00",
+      place: "100 Example Road, Example Town, HI 96700", confirmation: "12345EF000001", points: 90000, points_program: null });
+    // with its program named, as such emails do ("Wyndham Rewards Redemption Guarantee"): BAM's id
+    const named = parseBookings(t.replace("Cancellation Policy", "Deposit Policy\nWyndham Rewards Redemption Guarantee\nCancellation Policy"), { year: 2025 });
+    expect(named.bookings[0]).toMatchObject({ points: 90000, points_program: "wyndham" });
+  });
+
+  it("an award flight's miles and its program", () => {
+    const { bookings } = parseBookings("United Airlines UA 837 SFO → NRT Mar 10 2027 11:05 15:00. Paid with MileagePlus. Total: 35,000 miles. Confirmation QXRTAB");
+    expect(bookings[0]).toMatchObject({ points: 35000, points_program: "united" });
+  });
+
+  it("dates with the weekday before the year, or the year on the next line", () => {
+    expect(dates("NOV 26 THU\n2026, Mar 3, Wed, 2027 and Apr 9 2027", 2020).map((d) => d.date)).toEqual(["2026-11-26", "2027-03-03", "2027-04-09"]);
   });
 });

@@ -483,14 +483,14 @@ const deviceStore = {
   async deleteItem(id) { return tx(["items"], "readwrite", async (x) => { await req(x.objectStore("items").delete(id)); return { id, removed: true }; }); },
   /** An email file, read in this browser with the same reader Minty runs (src/kos/). Nothing is kept. */
   async readEmail(buf) {
-    const [{ readMessage, viewOf }, { reservations }] = await Promise.all([import("./mail/mime.js"), import("./mail/reservations.js")]);
+    const [{ htmlText, readMessage, viewOf }, { reservations }] = await Promise.all([import("./mail/mime.js"), import("./mail/reservations.js")]);
     const bytes = new Uint8Array(buf);
     if (bytes.length > 2 * 1024 * 1024) throw new Error("email file too large (at most 2 MB)");
     let raw = "";
     for (let i = 0; i < bytes.length; i += 0x8000) raw += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     const m = readMessage(raw);
     const sha = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
-    return { subject: m.subject, from: m.from, date: m.date, view: viewOf(m), sha256: sha, bookings: reservations(m.html), text: (m.text ?? "").slice(0, 8000) || null, attachments: [] };
+    return { subject: m.subject, from: m.from, date: m.date, view: viewOf(m), sha256: sha, bookings: reservations(m.html), text: (m.text ?? htmlText(m.html) ?? "").slice(0, 20000) || null, attachments: [] };
   },
   spending: false,
 };

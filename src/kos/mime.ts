@@ -104,6 +104,20 @@ export function parts(raw: string, depth = 0): Part[] {
 
 const addresses = (v: string | undefined) => (v ?? "").split(/[,\n]/).map((a) => (/<([^>]+)>/.exec(a)?.[1] ?? a).trim().toLowerCase()).filter((a) => a.includes("@"));
 
+/** An HTML part as plain text, for reading a booking from it when the email has no text part (a
+ * forwarded email loses its schema.org markup, so its text is all Kos has): blocks and line breaks
+ * become new lines, tags go, and the common entities are decoded. Never rendered. */
+export function htmlText(html: string | null): string | null {
+  if (!html) return null;
+  const named: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "-", mdash: "-", rarr: "→", hellip: "…" };
+  return html
+    .replace(/<(script|style|head|title)\b[\s\S]*?<\/\1\s*>/gi, " ")
+    .replace(/<br\s*\/?>|<\/(p|div|tr|li|h[1-6]|table|section|td)\s*>/gi, (m) => (/td/i.test(m) ? "  " : "\n"))
+    .replace(/<[^>]+>/g, "")
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : named[e.toLowerCase()] ?? m)
+    .replace(/[ \t\u00a0]+/g, " ").replace(/ *\n[ \n]*/g, "\n").trim();
+}
+
 /** A raw message (as Gmail's "Show original" or an Email Worker gives it) read for Kos. `raw` is the
  * message as a "binary string" (one char per byte), which is what both deliver. */
 export function readMessage(raw: string): Message {
