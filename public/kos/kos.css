@@ -162,6 +162,21 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 .stop { position: relative; min-width: 0; }
 .marker { position: absolute; left: -38px; top: 12px; width: 28px; height: 28px; border-radius: 50%; background: var(--day); color: #fff; display: grid; place-items: center;
           font-size: 13px; font-weight: 800; border: 2px solid var(--bg); box-shadow: 0 2px 6px rgba(0, 0, 0, .25); }
+/* swipe actions behind a booking card (swipe.js): Google Maps on the left, Edit on the right */
+.stop > button.item, .stop > article.flight, .plan > article.flight, .plan > button.item.stay { position: relative; z-index: 1; touch-action: pan-y; transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
+.stop > .dragging, .plan > .dragging { transition: none; }
+.kos-swipe { position: absolute; z-index: 0; display: flex; justify-content: space-between; overflow: hidden; border-radius: 16px; }
+.kos-swipe > div { display: flex; height: 100%; width: 0; overflow: hidden; transition: width .3s cubic-bezier(.2, .8, .2, 1); }
+.kos-swipe.dragging > div { transition: none; }
+.kos-swipe[data-side="lead"] .lead, .kos-swipe[data-side="trail"] .trail { width: var(--gap); }
+.kos-swipe button { flex: 1 1 0; min-width: 0; border: 0; margin: 0; padding: 0 6px; font: inherit; font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.kos-swipe.full .trail button { text-align: left; padding-left: 22px; }
+.kos-swipe.full .lead button { text-align: right; padding-right: 22px; }
+[data-kos-swipe="maps"] { background: #2f9e44; }
+[data-kos-swipe="edit"] { background: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .stop > button.item, .stop > article.flight, .plan > article.flight, .plan > button.item.stay, .kos-swipe > div { transition: none !important; } }
+.map-credit { position: absolute; left: 10px; bottom: 10px; font-size: 11px; color: var(--muted); background: color-mix(in srgb, var(--surface) 85%, transparent); padding: 2px 6px; border-radius: 6px; }
+.map-credit a { color: inherit; }
 .item { background: var(--surface); border: 1px solid var(--hairline); border-radius: 16px; padding: 12px 14px; cursor: pointer; text-align: left; width: 100%; display: block; color: var(--ink); }
 .item:hover { border-color: var(--hairline-2); }
 .item .row1 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }

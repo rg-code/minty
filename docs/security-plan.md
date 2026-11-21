@@ -405,3 +405,18 @@ first service it calls that the household runs itself, and the first photo it se
 - **Never:** deleting or editing a photo, taking one out of an album, a shared or public link, or an
   album Kos wasn't asked for beyond trips that just ended.
 
+
+## 10. Kos: bookings' exact places from LocationIQ (owner, 2026-11-21)
+
+- **What's sent:** a booking's name and address (its `name` and `place`: "Example Resort, 1 Example Rd,
+  Town, ST 12345"), never a person's name, a confirmation, a price, a card or a date. Flights are never sent.
+- **From where:** Minty's Worker only (`src/geocode.ts`), to `https://us1.locationiq.com/v1/search`. No page
+  calls LocationIQ, so no Content-Security-Policy changes. Kos on its own makes no lookups.
+- **The key:** `LOCATIONIQ_KEY`, a Worker secret: an access token of its own (it can share a LocationIQ account,
+  and its daily allowance, with other projects). A browser key limited to another site's referrers isn't
+  borrowed, and Minty never fakes a referrer.
+- **When:** a booking saved without coordinates (once), and a quiet catch-up cron run, 3 at a time; one that
+  found nothing waits 30 days. A change to its name or address looks again; coordinates the household gives
+  (a map link, a plus code) are never replaced.
+- **What D1 keeps:** the coordinates, `geo_source = 'lookup'` and when it was asked. The pages credit
+  LocationIQ.com where a looked-up place shows (its free plan asks for a visible link).

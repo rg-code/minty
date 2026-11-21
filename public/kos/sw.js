@@ -2,8 +2,8 @@
 // own static files (and the vendored map library), network first so updates land at once. API
 // responses (trips, bookings, transactions) and map tiles are never cached: they always go to the
 // network (the API behind Cloudflare Access). A redirect (the Access sign-in) is never cached.
-const CACHE = "kos-v4";               // v4: places (where.js); v3: the journal; v2: the new icon; v1: Kos (was JET)
-const SHELL = ["/kos/", "/kos/kos.js", "/kos/kos.css", "/kos/map.js", "/kos/map-style.js", "/kos/kos-parse.js", "/kos/theme.js", "/kos/mode.js", "/kos/store.js", "/kos/gmail.js", "/kos/journal.js", "/kos/where.js", "/kos/airports.json",
+const CACHE = "kos-v5";               // v5: swipe actions (swipe.js); v4: places (where.js); v3: the journal; v2: the new icon; v1: Kos (was JET)
+const SHELL = ["/kos/", "/kos/kos.js", "/kos/kos.css", "/kos/map.js", "/kos/map-style.js", "/kos/kos-parse.js", "/kos/theme.js", "/kos/mode.js", "/kos/store.js", "/kos/gmail.js", "/kos/journal.js", "/kos/where.js", "/kos/swipe.js", "/kos/airports.json",
                "/kos/manifest.webmanifest", "/kos/icon-64.png", "/kos/icon-192.png", "/kos/icon-512.png", "/kos/apple-touch-icon.png",
                "/vendor/maplibre/maplibre-gl-csp.js", "/vendor/maplibre/maplibre-gl-csp-worker.js", "/vendor/maplibre/maplibre-gl.css",
                "/lock.js", "/lock.css", "/pdf-read.js"];

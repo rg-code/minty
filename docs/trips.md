@@ -1238,3 +1238,20 @@ second leg as already in Kos, since both legs share a confirmation code and a da
 - **Read again** tells legs apart by their airport and flight number as well as the code and day.
 - **An email counts as read** once each of its bookings is in Kos (or was, or is a cancellation), so adding one
   leaves the email to offer the others.
+
+## 31. Swipe a booking; exact places from LocationIQ (owner, 2026-11-21)
+
+**Swipe** (`public/kos/swipe.js`, after Minty's `swipe.js`): on the itinerary, Flights, Lodging and each kind's
+list, drag a booking right for **Maps** (Google Maps, its app on a phone: the booking's name and address,
+which Google finds itself; a flight's departure airport) or left for **Edit**; a long drag does it. Touch and
+pen only; with a mouse, the booking's page has **Open in Google Maps**.
+
+**Exact places** (owner: LocationIQ, on save plus a backfill, Kos inside Minty only): a booking without
+coordinates is looked up by its name and address (`src/geocode.ts`): the name with the address, the address,
+then the name with its town; a hit naming another postcode is a namesake and skipped; a name alone isn't
+asked. It runs when the booking is saved, and from a quiet catch-up cron run for the rest (3 a run; one that
+found nothing waits 30 days). Found places are marked `geo_source = 'lookup'` (`0031_trip_item_geo.sql`) and
+are exact on the map; a change to the name or address looks again, and coordinates the household gives are
+never replaced. LocationIQ.com is credited under the map and on the booking. Set-up: a LocationIQ access
+token as the `LOCATIONIQ_KEY` secret (security plan §10). Without it, and in Kos on its own, places stay
+approximate (§29).

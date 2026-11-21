@@ -7,6 +7,7 @@ import { attachedMessage, emailText, readMessage, viewOf } from "../kos/mime";
 import { MAX_TAGS_PER_TXN, MAX_TAG_LENGTH, normaliseTags } from "./data";
 import { markIfLeftOutTags } from "../audit/totals";
 import { reservations } from "../kos/reservations";
+import { locateItem } from "../geocode";
 
 /** Kos, trips (docs/trips.md): trips, their bookings, and the transactions in them. The household
  * writes these; sync never does. The Kos app (public/kos/) is the page; the dashboard filters by a
@@ -233,13 +234,26 @@ export async function saveItem(env: Env, request: Request, id?: number): Promise
   const old = id === undefined ? null : await env.DB.prepare("SELECT * FROM trip_items WHERE id = ?").bind(id).first<ItemRow>();
   if (id !== undefined && !old) throw new HttpError(404, "booking not found");
   const f = await itemFields(env, await body(request), old);
-  const v = ITEM_COLS.map((c) => f[c]);
+  // a place Kos looked up (docs/trips.md §31) goes when the name or address it came from changes; coordinates
+  // given with the booking (a map link, a plus code) are the household's own
+  const moved = old && (f.name !== old.name || f.place !== old.place);
+  const keptLookup = old?.geo_source === "lookup" && f.lat === old.lat && f.lon === old.lon && f.lat !== null;
+  if (keptLookup && moved) { f.lat = null; f.lon = null; }
+  const geo = { geo_source: keptLookup && !moved ? "lookup" : null, geo_tried_at: old && !moved ? old.geo_tried_at ?? null : null };
+  const cols = [...ITEM_COLS, "geo_source", "geo_tried_at"] as const;
+  const v = [...ITEM_COLS.map((c) => f[c]), geo.geo_source, geo.geo_tried_at];
+  let saved: number;
   if (!old) {
-    const r = await env.DB.prepare(`INSERT INTO trip_items (${ITEM_COLS.join(", ")}) VALUES (${ITEM_COLS.map(() => "?").join(", ")}) RETURNING id`).bind(...v).first<{ id: number }>();
-    return json({ id: r!.id }, 201);
+    saved = (await env.DB.prepare(`INSERT INTO trip_items (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")}) RETURNING id`).bind(...v).first<{ id: number }>())!.id;
+  } else {
+    await env.DB.prepare(`UPDATE trip_items SET ${cols.map((c) => `${c} = ?`).join(", ")}, updated_at = ${NOW} WHERE id = ?`).bind(...v, id).run();
+    saved = id!;
   }
-  await env.DB.prepare(`UPDATE trip_items SET ${ITEM_COLS.map((c) => `${c} = ?`).join(", ")}, updated_at = ${NOW} WHERE id = ?`).bind(...v, id).run();
-  return json({ id });
+  // no place of its own: LocationIQ, once, now (a failure leaves it for the cron); never a flight
+  if (env.LOCATIONIQ_KEY && f.lat === null && f.kind !== "flight" && (f.place || f.name) && (!old || moved || old.lat !== null)) {
+    await locateItem(env, saved).catch((e) => console.error("place lookup failed:", e instanceof Error ? e.message : e));
+  }
+  return json({ id: saved }, old ? 200 : 201);
 }
 
 export async function deleteItem(env: Env, id: number): Promise<Response> {
