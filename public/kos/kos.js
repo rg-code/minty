@@ -522,7 +522,8 @@ function mapData(t) {
         if (a && !e.repeat) pins.push({ lon: a.lon, lat: a.lat, kind: "flight", num: String(e.n), label: i.dep_airport, id: String(i.id), color: d.color });
       } else if (!e.repeat) {
         const at = placeOf(i, t);
-        if (at) pins.push({ lon: at.lon, lat: at.lat, kind: i.kind, num: String(e.n), label: i.name ?? "", id: String(i.id), color: d.color, ...(at.approx ? { approx: true, near: at.near } : {}) });
+        // no name on the map (the numbers match the plan's): only airports are named
+        if (at) pins.push({ lon: at.lon, lat: at.lat, kind: i.kind, num: String(e.n), label: "", id: String(i.id), color: d.color, ...(at.approx ? { approx: true, near: at.near } : {}) });
       }
     }
   });
@@ -550,9 +551,6 @@ async function showMap(t, tab = "") {
     cap.hidden = !approx.length;
     cap.textContent = approx.length ? `${nApprox === 1 ? "One place is" : `${nApprox} places are`} shown near ${[...new Set(approx.map((p) => p.near))].join(", ")} (a paler dot): Kos has its address but not its spot. Edit the booking and paste a map link, a plus code or coordinates for the exact place.` : "";
   }
-  // the places joined in the trip's order (the numbers), as on the journal's map
-  const seq = d.pins.filter((p) => p.num).sort((x, y) => x.order - y.order);
-  if (seq.length > 1) d.paths = [{ coords: seq.map((p) => [p.lon, p.lat]), color: dark ? "#ffffff" : "#11162a" }];
   // pins take their day's colour (Wanderlog), flights the accent (Flighty)
   drawTrip(map, d, (id) => {
     const card = app.querySelector(`[data-item="${CSS.escape(id)}"]`);

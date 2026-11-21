@@ -1218,8 +1218,9 @@ airport (the town from its address, `cityOf`, matched against `airports.json` on
 with one name, the one near the trip's flights), else near the airport the trip had flown into by then.
 Those dots are paler, and a line on the map says which are approximate and how to give one its spot (edit
 the booking: a map link, a plus code or coordinates). The Lodging tab's stay cards say so too. Pins on one
-spot become one, numbered "2·3" and named for both, so none hides another at any zoom. The journal's map
-does the same.
+spot become one, numbered "2·3", so none hides another at any zoom. The journal's map does the same. On the
+trip's map only airports are named (the numbers match the plan), and the flights are its only lines: the solid
+line joining the places in order ran beside them once every booking had a dot, so it went (owner, 2026-11-21).
 
 **The summary strip.** A kind with bookings shows them: Flight opens the Flights tab, Lodging the Lodging
 tab, and the others a list of their own (`#/trip/<id>/car`, …, trains with buses). A kind with none still
