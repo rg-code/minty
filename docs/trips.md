@@ -1252,6 +1252,6 @@ then the name with its town; a hit naming another postcode is a namesake and ski
 asked. It runs when the booking is saved, and from a quiet catch-up cron run for the rest (3 a run; one that
 found nothing waits 30 days). Found places are marked `geo_source = 'lookup'` (`0031_trip_item_geo.sql`) and
 are exact on the map; a change to the name or address looks again, and coordinates the household gives are
-never replaced. LocationIQ.com is credited under the map and on the booking. Set-up: a LocationIQ access
+never replaced. "Search by LocationIQ.com" (its free plan's wording) links under the map and on the booking. Set-up: a LocationIQ access
 token as the `LOCATIONIQ_KEY` secret (security plan §10). Without it, and in Kos on its own, places stay
 approximate (§29).

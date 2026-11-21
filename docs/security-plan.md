@@ -418,5 +418,10 @@ first service it calls that the household runs itself, and the first photo it se
 - **When:** a booking saved without coordinates (once), and a quiet catch-up cron run, 3 at a time; one that
   found nothing waits 30 days. A change to its name or address looks again; coordinates the household gives
   (a map link, a plus code) are never replaced.
-- **What D1 keeps:** the coordinates, `geo_source = 'lookup'` and when it was asked. The pages credit
-  LocationIQ.com where a looked-up place shows (its free plan asks for a visible link).
+- **What D1 keeps:** the coordinates, `geo_source = 'lookup'` and when it was asked (LocationIQ's terms, read
+  2026-11-21: "You can store response data forever"; only request-response pairs are limited to 48 hours on the
+  free plan, and Minty keeps none). The pages link "Search by LocationIQ.com", the wording its free plan asks for,
+  where a looked-up place shows. Free plan: 5,000 requests a day, 2 a second; its keys can't be limited to a site
+  or an IP, so the token stays a Worker secret only.
+- **Logs:** the request URL carries the key, so it's never logged: failed calls are caught without it, and the
+  cron logs booking ids and outcomes only.

@@ -324,7 +324,7 @@ function tripView(t, tab) {
       ${body}
       <p class="report-line muted">A trip worth featuring, or something Kos got wrong? <button type="button" class="linklike" data-report-trip data-goatcounter-click="kos-report-trip">Share it with the Kos team</button></p></div>
       <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div><p class="map-approx muted" id="mapApprox" hidden></p>
-        ${t.items.some((i) => i.geo_source === "lookup") ? `<span class="map-credit">Places by <a href="https://locationiq.com/" target="_blank" rel="noopener">LocationIQ.com</a></span>` : ""}</div></div>
+        ${t.items.some((i) => i.geo_source === "lookup") ? `<span class="map-credit"><a href="https://locationiq.com/" target="_blank" rel="noopener">Search by LocationIQ.com</a></span>` : ""}</div></div>
     <a class="fab" href="#/add?trip=${t.id}" aria-label="Add a booking" title="Add a booking">+</a>`;
 }
 const KIND_TABS = ["car", "train", "restaurant", "event", "other"];
@@ -834,7 +834,7 @@ function itemForm(i, tripId) {
     <a class="btn ghost" href="${tripId || i?.trip_id ? `#/trip/${i?.trip_id ?? tripId}` : "#/"}">Cancel</a>
     ${i?.id && mapsUrl(i) ? `<a class="btn ghost" href="${esc(mapsUrl(i))}" target="_blank" rel="noopener">Open in Google Maps</a>` : ""}
     ${i?.id ? `<button type="button" class="btn danger" data-del-item="${i.id}">Delete</button>` : ""}<span class="err" id="formErr"></span></div>
-    ${i?.geo_source === "lookup" ? `<p class="muted" style="font-size:12px;margin:8px 0 0">Its place on the map was found from its name and address by <a href="https://locationiq.com/" target="_blank" rel="noopener">LocationIQ.com</a>. A map link in the address replaces it.</p>` : ""}</form>`;
+    ${i?.geo_source === "lookup" ? `<p class="muted" style="font-size:12px;margin:8px 0 0">Its place on the map was found from its name and address (<a href="https://locationiq.com/" target="_blank" rel="noopener">Search by LocationIQ.com</a>). A map link in the address replaces it.</p>` : ""}</form>`;
 }
 const offsetOf = (s) => (s ? (/(Z|[+-]\d{2}:?\d{2})$/.exec(s)?.[1] ?? "") : "");
 
