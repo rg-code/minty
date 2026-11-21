@@ -244,7 +244,7 @@ person, and the cost per day. "Open in dashboard" sets `/?trip=<id>`.
   until a newer reading replaces it. Readings stay readings: nothing is written to `point_balances`.
   **Built (T4, 2026-11-20):** a reading dated on or after the day the booking was added to Kos ends it;
   the balance is the trip's one traveller's, or the only person's, else the household's. Kos names the
-  program on the booking ("90,000 Wyndham Rewards points") and its edit page says it's pending in BAM.
+  program on the booking ("45,000 Wyndham Rewards points") and its edit page says it's pending in BAM.
   An email's points and program are read by `kos-parse.js` (`programIn`).
 - **Earned:** only when the booking says so ("you'll earn 2,140 miles"). Miles earned depend on
   fare and status, so they're never estimated.
@@ -1086,4 +1086,13 @@ When the trip list opens with bookings waiting for a trip, Kos files them by its
   does a group with no travel in it (no flight, stay, train, bus or car): a dinner isn't a trip.
 - **By hand still works:** "Make a trip from the ticked ones" opens the trip form filled in the same
   way (name, dates, place), listing the bookings going in.
+- **A connection is one booking** (`journeys` in `store.js`): flights with the same confirmation, each
+  leaving within a day of the last landing, show and count as one ("UA 100 · SFO → ORD → BOS, 1
+  connection") in the waiting list, the found-bookings count and Kos's note. Each leg stays its own item
+  underneath (its own times, gate and seat).
+- **A flight's date** (`kos-parse.js`): the date nearest its airports, before or after (an itinerary heads
+  a day's legs with the date; a receipt's date is further away). Dates on a forwarded email's header
+  line ("Date: …") or saying when it was booked or issued ("Issue date", "Booked on", "Purchased") are
+  left out. "26NOV" dates are read too. (Owner, 2026-11-21: a forwarded eTicket was dated by when it was
+  booked.)
 

@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, planTrips, shiftSample, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
+import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, journeys, planTrips, shiftSample, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 import { parseWhere } from "./where.js";
@@ -37,16 +37,16 @@ let data = null, users = [], airports = {}, programs = null, map = null, mapKey 
 // Trips and bookings come from the store (store.js): Minty's API at /kos/ on a Minty, this
 // browser's IndexedDB when Kos runs on its own.
 async function load() {
-  // with BAM's programs on a Minty (once), for an award booking's name: "90,000 Wyndham Rewards points"
+  // with BAM's programs on a Minty (once), for an award booking's name: "45,000 Wyndham Rewards points"
   const [t, u, a, p] = await Promise.all([store.list(), store.users(), loadAirports(), !programs && MODE === "minty" ? store.programs() : null]);
   data = t; users = Array.isArray(u) ? u : []; airports = a;
   if (p) programs = p;
 }
-/** An award booking's points with its program: "90,000 Wyndham Rewards points" (docs/trips.md §7). */
+/** An award booking's points with its program: "45,000 Wyndham Rewards points" (docs/trips.md §7). */
 const ptsText = (i) => { const p = programs?.find((x) => x.id === i.points_program); return `${Number(i.points).toLocaleString()} ${p ? `${p.name} ${p.unit}` : "pts"}`; };
 const label = (k) => users.find((u) => u.key === k)?.label ?? k;
 const airport = (code) => (code && airports[code] ? { name: airports[code][0], city: airports[code][1], country: airports[code][2], lat: airports[code][3], lon: airports[code][4] } : null);
-const tripById = (id) => data.trips.find((t) => t.id === id);
+const tripById = (id) => data?.trips.find((t) => t.id === id);   // null while reloading (a photo lookup may still be running)
 /** The trip a found booking goes in by its dates, when it wasn't sent to a trip's address (store.tripFor). */
 const tripGuess = (b) => tripFor(dateOf(b.start_at ?? b.start), data.trips)?.id ?? null;
 const itemById = (id) => [...data.trips.flatMap((t) => t.items), ...data.unassigned].find((i) => i.id === id);
@@ -123,9 +123,9 @@ function home() {
     <div class="section-title"><h2>Trips</h2><a class="btn small" href="#/new">New trip</a></div>
     ${upcoming.length ? `<div class="trips">${upcoming.map(tripCard).join("")}</div>` : `<div class="card muted">No trips coming up. Make one, or add a booking and Kos will hold it until you do.${MODE === "device" && empty ? `
       <div class="actions"><button type="button" class="btn primary" data-sample>Try a sample trip</button><span class="err" id="sampleErr"></span></div>` : ""}</div>`}
-    ${data.unassigned.length ? `<div class="section-title"><h2>Bookings waiting for a trip</h2><span class="muted">${data.unassigned.length}</span></div>
-      <div class="list">${data.unassigned.map((i) => `<label class="row"><input type="checkbox" data-pick="${i.id}" /><span class="grow"><b>${esc(itemTitle(i))}</b><span class="muted">${esc(KIND[i.kind])} · ${esc(fmtDay(dateOf(i.start_at)) || "no date")}</span></span><a href="#/item/${i.id}" class="btn small ghost">Edit</a></label>`).join("")}</div>
-      <div class="actions"><button type="button" class="btn primary" data-make-trip>Make a trip from the ticked ones</button></div>` : ""}
+    ${data.unassigned.length ? (() => { const js = journeys(data.unassigned); return `<div class="section-title"><h2>Bookings waiting for a trip</h2><span class="muted">${js.length}</span></div>
+      <div class="list">${js.map((g) => `<label class="row"><input type="checkbox" data-pick="${g.map((i) => i.id).join(",")}" /><span class="grow"><b>${esc(journeyTitle(g))}</b><span class="muted">${esc(KIND[g[0].kind])}${g.length > 1 ? `, ${g.length - 1} connection${g.length > 2 ? "s" : ""}` : ""} · ${esc(fmtDay(dateOf(g[0].start_at)) || "no date")}</span></span><a href="#/item/${g[0].id}" class="btn small ghost">Edit</a></label>`).join("")}</div>
+      <div class="actions"><button type="button" class="btn primary" data-make-trip>Make a trip from the ticked ones</button></div>`; })() : ""}
     ${past.length ? `<div class="section-title"><h2>Past trips</h2></div><div class="trips">${past.map(tripCard).join("")}</div>` : ""}
     ${MODE === "device" && own ? `<div id="lockLater"></div>` : ""}
     ${MODE === "device" ? `<div class="kos-foot">${supportHtml()}<footer class="w-foot">${alsoFromHtml()}</footer>${copyHtml()}</div>` : ""}
@@ -219,6 +219,9 @@ async function lockOffer() {
     : `Ask for ${why}${buttons}`}`;
   if (later) later.innerHTML = st === "unset" ? `<div class="card lock-later"><b>Last step: lock Kos on this device?</b> <span class="muted">Ask for ${why}</span>${buttons}</div>` : "";
 }
+/** A connection as one booking (store.journeys): "UA 100 · SFO → ORD → BOS". */
+const journeyTitle = (g) => g.length < 2 ? itemTitle(g[0])
+  : `${[g[0].airline, g[0].flight_number].filter(Boolean).join(" ") || g[0].name || "Flight"} · ${[g[0].dep_airport, ...g.map((i) => i.arr_airport)].filter(Boolean).join(" → ")}`;
 const itemTitle = (i) => i.kind === "flight" ? [[i.airline, i.flight_number].filter(Boolean).join(" "), [i.dep_airport, i.arr_airport].filter(Boolean).join(" → ")].filter(Boolean).join(" · ") || "Flight" : i.name || KIND[i.kind];
 
 // --- Wanderlog: the trip ----------------------------------------------------------------------
@@ -787,7 +790,8 @@ function sourceBox(source) {
 }
 function suggestionsHtml(list, from) {
   if (!list.length) return `<div class="suggest muted">${from === "gmail" ? "No new bookings in your Kos label." : "Nothing recognisable there: fill the form in yourself."}</div>`;
-  return `<div class="suggest"><b>Found ${list.length} booking${list.length === 1 ? "" : "s"}</b> (check each):<div class="list" style="margin-top:8px">${list.map((b, n) => `<div class="row"><span class="grow"><b>${esc(itemTitle(b))}</b>
+  const n = journeys(list.map((b, k) => ({ ...asItem(b, null), id: k }))).length;
+  return `<div class="suggest"><b>Found ${n} booking${n === 1 ? "" : "s"}</b>${n !== list.length ? ` (${list.length} parts: each flight leg is its own)` : ""}, check each:<div class="list" style="margin-top:8px">${list.map((b, n) => `<div class="row"><span class="grow"><b>${esc(itemTitle(b))}</b>
       <span class="muted">${esc(KIND[b.kind] ?? "")} · ${esc(fmtDay(dateOf(b.start_at ?? b.start)) || "no date")}${b.confirmation ? ` · ${esc(b.confirmation)}` : ""}${suggestTrip(b) ? ` · <b>→ ${esc(suggestTrip(b).name)}</b>` : ""}</span>${b.quote ? `<q>${esc(b.quote)}</q>` : ""}</span>
       <button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" || from === "gmail" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}</div>`).join("")}</div>
     ${(from === "email" || from === "gmail") && list.length > 1 ? `<div class="actions"><button type="button" class="btn primary" data-add-all>Add all ${list.length}</button></div>` : ""}</div>`;
@@ -996,14 +1000,15 @@ async function autoTrips() {
   } catch (e) { console.warn("Kos couldn't pool bookings into trips:", e.message); }
   finally { autoRunning = false; }
   if (!done.made.length && !done.moved.length) return;
-  lastAuto = done;
+  lastAuto = { ...done, items: waiting };
   data = null;
   if (!route().parts.length) await render();
 }
 function autoBanner() {
   const a = lastAuto;
   if (!a) return "";
-  const n = a.made.reduce((s, t) => s + t.items.length, 0) + a.moved.length;
+  const pooled = [...a.made.flatMap((t) => t.items), ...a.moved.map((m) => m.id)].map((id) => a.items?.find((i) => i.id === id)).filter(Boolean);
+  const n = pooled.length ? journeys(pooled).length : a.made.reduce((s, t) => s + t.items.length, 0) + a.moved.length;
   const span = (t) => `${fmtDay(t.start_date)}${t.end_date !== t.start_date ? ` – ${fmtDay(t.end_date)}` : ""}`;
   const made = a.made.map((t) => `<a href="#/trip/${t.id}">${esc(t.name)}</a> <span class="muted">(${esc(span(t))})</span>`);
   const into = [...new Set(a.moved.map((m) => m.trip_id))].map((id) => tripById(id)).filter(Boolean).map((t) => `<a href="#/trip/${t.id}">${esc(t.name)}</a>`);
@@ -1436,7 +1441,7 @@ app.addEventListener("click", async (ev) => {
     }
     if (at("[data-backup-later]")) { lsSet(SNOOZE, Date.now() + 7 * 864e5); document.getElementById("backupNote")?.remove(); return; }
     if (at("[data-make-trip]")) {
-      const ids = [...app.querySelectorAll("[data-pick]:checked")].map((x) => x.dataset.pick);
+      const ids = [...app.querySelectorAll("[data-pick]:checked")].flatMap((x) => x.dataset.pick.split(","));
       if (!ids.length) { alert("Tick the bookings to put in the trip first."); return; }
       location.hash = `#/new?items=${ids.join(",")}`; return;
     }
