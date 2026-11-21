@@ -131,6 +131,56 @@ ORD-BOS`;
       ["UA", "567", "ORD", "BOS", "2027-04-05T09:30", "2027-04-05T12:40", "QZ7XKM"]]);
   });
 
+  it("a car rental: company, pick-up and return with their times, the place, the confirmation and the total (made-up copy)", () => {
+    const t = `Confirmation:
+55500011
+
+Your Reservation is Confirmed.
+
+Thanks for choosing Enterprise. You reserved a Midsize vehicle on March 8, 2027 at DENVER INTL ARPT.
+
+Your confirmation number is: 55500011
+
+Itinerary
+
+PICK UP
+
+DENVER INTL ARPT (DEN)
+Mon, March 8, 2027
+10:00 AM
+
+100 EXAMPLE BLVD
+Sun-Sat
+    6:00 AM-11:00 PM
+Hours subject to change. Please call to verify.
+DENVER CO 80000 US
+(303) 555-0100
+
+
+RETURN
+
+DENVER INTL ARPT (DEN)
+Thu, March 11, 2027
+9:00 AM
+
+Vehicle
+Midsize
+Example Sedan or similar
+
+RATES & CHARGES
+
+Vehicle
+TIME & DISTANCE     3 DAILY @ $40.00      $120.00
+
+Estimated Total
+(includes taxes and fees)     $145.10
+Total may vary slightly.`;
+    const { bookings } = parseBookings(t, { year: 2027 });
+    expect(bookings).toHaveLength(1);
+    expect(bookings[0]).toMatchObject({ kind: "car", name: "Enterprise", start_at: "2027-03-08T10:00", end_at: "2027-03-11T09:00",
+      place: "DENVER INTL ARPT (DEN)", confirmation: "55500011", price_cents: 14510, currency: "USD" });
+  });
+
   it("an itinerary's 26NOV dates", () => {
     expect(dates("DEPART 11MAR SFO, RETURN 15MAR27 BOS", 2027).map((d) => d.date)).toEqual(["2027-03-11", "2027-03-15"]);
   });
