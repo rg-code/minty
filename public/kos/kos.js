@@ -1124,17 +1124,9 @@ function billsView() {
 /** An email's bookings: its schema.org markup when it has some, else its text read like pasted text (a
  * forwarded email loses the markup, docs/trips.md §17.1), with the year from the email's date. */
 async function emailBookings(r) {
-  const { parseBookings, pointsIn, programIn, tidy } = await import("./kos-parse.js");
-  if (r.bookings.length) {
-    // markup gives the cash part only: the points or miles are in the email's text (docs/trips.md §27)
-    const pts = r.text ? pointsIn(tidy(r.text)) : null;
-    const target = r.bookings.find((b) => b.kind === "flight") ?? r.bookings.find((b) => b.kind === "lodging");
-    if (pts?.points && target && !target.points) Object.assign(target, { points: pts.points, points_program: programIn(r.text) });
-    return r.bookings;
-  }
-  if (!r.text) return [];
-  const sent = Date.parse(r.date ?? "");
-  return parseBookings(r.text, { ref: Number.isFinite(sent) ? sent : Date.now(), airports, subject: r.subject ?? undefined }).bookings;
+  // markup first (with the points from the text), else the text: kos-parse.js, shared with the real-data check
+  const { readEmailBookings } = await import("./kos-parse.js");
+  return readEmailBookings({ markup: r.bookings, text: r.text, date: r.date, subject: r.subject }, { airports }).bookings;
 }
 /** New emails from the Kos label, each read with the email reader, as suggestions. quiet: the
  * Add page's own check when it opens; it shows only bookings, never "nothing new" or an error. */

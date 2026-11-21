@@ -211,6 +211,16 @@ Total: € 39,90`;
     expect(times("08h00 Paris · Duration 1h56 · 4:35 h").map((t) => t.time)).toEqual(["08:00"]);      // durations aren't times
     expect(times("12:25 Amsterdam (AMS)").map((t) => t.time)).toEqual(["12:25"]);                      // "Am…" isn't AM
   });
+  it("an email as Kos reads it: markup with the points from its text, else the text with its date and subject (readEmailBookings)", async () => {
+    const { readEmailBookings } = await import("../public/kos/kos-parse.js");
+    const markup = [{ kind: "lodging", name: "Example Lodge", start: "2027-05-10T15:00:00-06:00", end: "2027-05-13T11:00:00-06:00", confirmation: "EX12345", points: null }];
+    const m = readEmailBookings({ markup, text: "Thanks for booking with World of Hyatt. Total: 45,000 Points", date: "Mon, 1 Feb 2027 10:00:00 +0000", subject: "Your stay" });
+    expect(m.how).toBe("markup");
+    expect(m.bookings[0]).toMatchObject({ points: 45000, points_program: "hyatt" });
+    const t = readEmailBookings({ markup: [], text: "Confirmation: QZ7XKM\nUA 1234 DEN → ORD Mon, Apr 5 Depart 06:00 AM Arrive 08:15 AM", date: "Mon, 1 Feb 2027 10:00:00 +0000", subject: "Your flight" });
+    expect(t).toMatchObject({ how: "text", bookings: [{ kind: "flight", start_at: "2027-04-05T06:00" }] });   // no year: the one after the email
+    expect(readEmailBookings({ markup: [], text: null }).how).toBe("nothing");
+  });
   it("a screenshot's misreads are fixed in numbers only: an email's code or a name keeps its letters", async () => {
     const { tidy } = await import("../public/kos/kos-parse.js");
     expect(tidy("16:3O · 2O27 · ¥28,34O · l8:16")).toBe("16:30 · 2027 · ¥28,340 · 18:16");

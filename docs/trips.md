@@ -1152,6 +1152,12 @@ flight by number and day or route and day, or the same confirmation and kind). T
 "Already in Kos", or "In Kos · new time" with **Update** (only the fields that changed; its trip stays),
 or for a cancellation "Cancelled" with **Delete from Kos**.
 
+**The real-data check** (`scripts/kos-t0/parse.ts`, T0 check 1): the household's own `.eml` files (and
+pasted `.txt`) through the same reader Kos uses (`readEmailBookings` in `kos-parse.js`, shared with Kos's
+Gmail and email-file paths), on their machine. It prints how each was read (an attached original's markup,
+the email's own, or its text), every booking with its fields (confirmations masked unless `--codes`), and
+the trips Kos would make. Nothing is saved or sent.
+
 **Trip names:** the city of the stay with the most nights (from its address: "50123 Florence", "Tokyo
 105-0001", "Lake Delton, Wisconsin 53940"), else the airport where the flights stop longest (a day trip's
 turnaround, not home; a destination, not a connection).

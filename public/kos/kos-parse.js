@@ -271,7 +271,7 @@ export function parseBookings(raw, opts = {}) {
   const subject = opts.subject ?? /^\s*subject:\s*(.+)$/im.exec(text)?.[1] ?? "";
   // dates that aren't the trip's: a forwarded email's header line, and when it was booked, issued,
   // purchased or printed, or until when it can be cancelled or paid
-  const notTrip = [...text.matchAll(/^[>\s]*(?:date\s*:|sent\s*:|issued?(?: on| date)?\b|date (?:of issue|issued|booked)\b|printed\b|(?:free )?cancell?ation[^\n]{0,40}(?:until|by|before)\b|cancel (?:by|before|until)\b|(?:pay|due|payable)[^\n]{0,20}(?:by|on|before)\b)[^\n]*|^[^\n]{0,32}?\b(?:purchase date|booking date|booked on|date booked|order date|transaction date|payment date|issue date|date of issue|ticket issue date|purchased on|booked:|purchased:)[^\n]*|^\d{1,2}\/\d{1,2}\/\d{2},\s+\d{1,2}:\d{2}\s?[AP]M\b[^\n]*/gim)]
+  const notTrip = [...text.matchAll(/^[>\s]*(?:date\s*:|sent\s*:|booked\b|purchased\b|ordered\b|issued?(?: on| date)?\b|date (?:of issue|issued|booked)\b|printed\b|(?:free )?cancell?ation[^\n]{0,40}(?:until|by|before)\b|cancel (?:by|before|until)\b|(?:pay|due|payable)[^\n]{0,20}(?:by|on|before)\b)[^\n]*|^[^\n]{0,32}?\b(?:purchase date|booking date|booked on|date booked|order date|transaction date|payment date|issue date|date of issue|ticket issue date|purchased on|booked:|purchased:)[^\n]*|^\d{1,2}\/\d{1,2}\/\d{2},\s+\d{1,2}:\d{2}\s?[AP]M\b[^\n]*/gim)]
     .map((m) => [m.index, m.index + m[0].length]);
   // a schedule change's old times ("Was 11:25", "Original flight (no longer valid)", struck through):
   // the line, and a block it heads up to the next blank line
@@ -567,3 +567,22 @@ function eventName(text, subject, kind) {
   }
   return null;
 }
+
+/** An email's bookings, as Kos reads them (docs/trips.md §27), shared by Kos and the real-data check
+ * (scripts/kos-t0/parse.ts): its schema.org markup when it has some, with the points or miles from its text
+ * (markup gives the cash part only); else its text, read with the email's date and subject.
+ * `email`: { markup: [bookings from reservations()], text, date, subject }. Returns { how, bookings, cancelled, promotional }. */
+export function readEmailBookings(email, { airports } = {}) {
+  const markup = email.markup ?? [];
+  if (markup.length) {
+    const pts = email.text ? pointsIn(tidy(email.text)) : null;
+    const target = markup.find((b) => b.kind === "flight") ?? markup.find((b) => b.kind === "lodging");
+    if (pts?.points && target && !target.points) Object.assign(target, { points: pts.points, points_program: programIn(email.text) });
+    return { how: "markup", bookings: markup, cancelled: false, promotional: false };
+  }
+  if (!email.text) return { how: "nothing", bookings: [], cancelled: false, promotional: false };
+  const sent = Date.parse(email.date ?? "");
+  const r = parseBookings(email.text, { ref: Number.isFinite(sent) ? sent : Date.now(), airports, subject: email.subject ?? undefined });
+  return { how: "text", bookings: r.bookings, cancelled: r.cancelled, promotional: r.promotional };
+}
+
