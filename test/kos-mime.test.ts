@@ -152,20 +152,20 @@ describe("microdata, and a stub text part (an agency's hotel email, docs/trips.m
       <div itemprop="address" itemscope itemtype="http://schema.org/PostalAddress"><span itemprop="streetAddress">12 Harbor Road</span>
         <span itemprop="addressLocality">Example City</span><meta itemprop="addressRegion" content="HI"/><meta itemprop="postalCode" content="96700"/>
         <meta itemprop="addressCountry" content="US"/></div><img itemprop="image" src="https://example.com/a.jpg"/></div>
-    <time itemprop="checkinDate" datetime="2026-12-02T15:00:00-10:00">Wed</time><meta itemprop="checkoutDate" content="2026-12-03T12:00:00-10:00"/>
+    <time itemprop="checkinDate" datetime="2027-03-09T15:00:00-10:00">Wed</time><meta itemprop="checkoutDate" content="2027-03-10T12:00:00-10:00"/>
   </div><p>Total: $1,230.50</p></body></html>`;
   it("reads itemscope / itemprop like JSON-LD: nested things, content, datetime and text values", async () => {
     const { microdata } = await import("../src/kos/reservations");
     expect(microdata(html)[0]).toMatchObject({ "@type": "http://schema.org/LodgingReservation", reservationNumber: "5550001112223",
       reservationFor: { name: "Seaside Resort & Spa", address: { streetAddress: "12 Harbor Road", postalCode: "96700" }, image: "https://example.com/a.jpg" } });
     expect(reservations(html)).toEqual([expect.objectContaining({ kind: "lodging", confirmation: "5550001112223", guest: "Alex Sample", name: "Seaside Resort & Spa",
-      start: "2026-12-02T15:00:00-10:00", end: "2026-12-03T12:00:00-10:00", place: "12 Harbor Road, Example City, HI 96700, US" })]);
+      start: "2027-03-09T15:00:00-10:00", end: "2027-03-10T12:00:00-10:00", place: "12 Harbor Road, Example City, HI 96700, US" })]);
     expect(microdata("<p itemprop='name'>no scope</p>")).toEqual([]);
   });
   it("a stub plain-text part gives way to the HTML; a real one is kept (emailText)", async () => {
     const { emailText } = await import("../src/kos/mime");
     expect(emailText({ text: "View this email in your browser.", html })).toContain("Total: $1,230.50");
-    const real = "Your stay at Seaside Resort. Check-in Wed, Dec 2. ".repeat(10);
+    const real = "Your stay at Seaside Resort. Check-in Tue, Mar 9. ".repeat(10);
     expect(emailText({ text: real, html })).toBe(real);
     expect(emailText({ text: null, html })).toContain("Seaside Resort & Spa");
   });

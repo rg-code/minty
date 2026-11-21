@@ -212,11 +212,17 @@ Total: € 39,90`;
     expect(times("12:25 Amsterdam (AMS)").map((t) => t.time)).toEqual(["12:25"]);                      // "Am…" isn't AM
   });
   it("a stay laid out in a table: 'Confirmation #:', an address over three lines, check-in and check-out side by side", () => {
-    const text = `Trip to Example City\nDec 2, 2026 - Dec 3, 2026\nSeaside Resort Example\nEXAMPLE HOTEL COLLECTION\n12 Harbor Road\nExample City\nHI, United States, 96700\n+1-808-555-0100
-Hotel Confirmation #: 5550001112223\nCheck-in: Check-out:\nWednesday, December 2, 2026 Thursday, December 3, 2026\n03:00 PM 12:00 PM\nNumber of Nights: 1\nGuest Name: Alex Sample\nTotal: $1,230.50\nDue at Property: $0.00`;   // not the hotel's name
-    const [b] = parseBookings(text, { ref: Date.parse("2026-10-31") }).bookings;
-    expect(b).toMatchObject({ kind: "lodging", name: "Seaside Resort Example", confirmation: "5550001112223", start_at: "2026-12-02T15:00", end_at: "2026-12-03T12:00",
+    const text = `Trip to Example City\nMar 9, 2027 - Mar 10, 2027\nSeaside Resort Example\nEXAMPLE HOTEL COLLECTION\n12 Harbor Road\nExample City\nHI, United States, 96700\n+1-808-555-0100
+Hotel Confirmation #: 5550001112223\nCheck-in: Check-out:\nTuesday, March 9, 2027 Wednesday, March 10, 2027\n03:00 PM 12:00 PM\nNumber of Nights: 1\nGuest Name: Alex Sample\nTotal: $1,230.50\nDue at Property: $0.00`;   // not the hotel's name
+    const [b] = parseBookings(text, { ref: Date.parse("2027-01-15") }).bookings;
+    expect(b).toMatchObject({ kind: "lodging", name: "Seaside Resort Example", confirmation: "5550001112223", start_at: "2027-03-09T15:00", end_at: "2027-03-10T12:00",
       place: "12 Harbor Road, Example City, HI, United States, 96700", price_cents: 123050 });
+  });
+  it("the booking's total, not a benefit's 'total value', and a named total over a bare one", () => {
+    const stay = "Seaside Resort Kalani\nCheck-in: Tue, Mar 9, 2027 3:00 PM\nCheck-out: Wed, Mar 10, 2027 12:00 PM\nHotel Confirmation #: 5550001112223\n";
+    const tail = "Cost & Billing\n\nCost:\n\n$980.00\n\nTaxes & Fees:\n\n$171.45\n\nTotal Cost:\n\n$1,151.45\n\nDue at Hotel:\n\n$0.00\n";
+    for (const extra of ["Your benefits have an average total value of $600.\n", "Total value of your benefits: $600\n", "Total savings: $200.00\n", "Total: $600.00\n"])
+      expect(parseBookings(stay + extra + tail, { ref: Date.parse("2027-01-15") }).bookings[0], extra).toMatchObject({ price_cents: 115145, currency: "USD" });
   });
   it("the card it was paid with, and the day it was booked (cardIn, bookedOn, docs/trips.md §28)", async () => {
     const { cardIn, bookedOn } = await import("../public/kos/kos-parse.js");
@@ -225,7 +231,7 @@ Hotel Confirmation #: 5550001112223\nCheck-in: Check-out:\nWednesday, December 2
       { last4: "1234", network: "visa" }, { last4: "4321", network: null }, { last4: "5678", network: "visa" }, { last4: "9012", network: "mastercard" },
       { last4: "3141", network: "amex" }, { last4: "3456", network: "visa" }, { last4: "6060", network: "amex" }, { last4: "7788", network: null }]);
     expect(["MileagePlus number: XXXXX1234\nTotal $10", "Phone ending 4455", "Earned 1,234 miles", "Room 1 · 2 nights", "Use your card: offer ends 2027"].map(cardIn)).toEqual([null, null, null, null, null]);
-    expect(bookedOn("---------- Forwarded message ---------\nFrom: X <x@example.com>\nDate: Sat, Oct 31, 2026 at 10:06 AM\nSubject: y", "Fri, 20 Nov 2026 09:00:00 -0800")).toBe("2026-10-31");
+    expect(bookedOn("---------- Forwarded message ---------\nFrom: X <x@example.com>\nDate: Fri, Jan 15, 2027 at 9:12 AM\nSubject: y", "Mon, 18 Jan 2027 09:00:00 -0800")).toBe("2027-01-15");
     expect(bookedOn("hello", "Fri, 20 Nov 2026 09:00:00 -0800")).toBe("2026-11-20");
     expect(bookedOn("Your tickets\nDate: Sat, Mar 13, 2027 8:00 PM\nVenue: Example Hall", "Mon, 4 Jan 2027 10:00:00 +0000")).toBe("2027-01-04");   // the event's date isn't the booking's
     expect(bookedOn("-----Original Message-----\nFrom: X\nSent: Monday, January 4, 2027 9:00 AM\nTo: Y", "Fri, 20 Nov 2027 09:00:00 -0800")).toBe("2027-01-04");
