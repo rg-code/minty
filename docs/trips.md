@@ -694,7 +694,9 @@ on its own with no way to read a forwarded booking.
   has none, Kos reads its text as it reads pasted text (`kos-parse.js`), the HTML part turned to text when
   there's no text part (`htmlText` in `src/kos/mime.ts`), with the year from the email's date (owner,
   2026-11-20). The text reader knows stays laid out with their dates above "Check-In", the year on its own
-  line, check-in and check-out times, a street address, long confirmation numbers and points totals.
+  line, check-in and check-out times, a street address, long confirmation numbers and points totals,
+  with the program named nearest the amount as BAM's id (`programIn`; Wyndham Rewards added to BAM's
+  programs for it).
 - A short Google Apps Script in their Gmail, deployed as a web app, hands Kos the emails with that
   label. `public/kos/gmail.js` writes the script on the set-up page (`#/gmail`).
   - It runs as the person ("Execute as: Me") and is hosted by Google.

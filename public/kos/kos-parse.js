@@ -43,6 +43,21 @@ const isCode = (c) => /^(?=.*\d)[A-Z0-9]{5,16}$/.test(c) || /^[A-Z]{6}$/.test(c)
 const TOTAL = /\b(?:total|amount paid|grand total|total price)\b[^$€£¥\d]{0,20}([$€£¥])\s?([\d,]+(?:\.\d{2})?)|\b(?:total|amount paid)\b[^\d]{0,20}([\d,]+(?:\.\d{2})?)\s?(USD|EUR|GBP|JPY|CAD|AUD)\b/i;
 const SYMBOL = { "$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY" };
 
+/** BAM's program named in a text (src/points/programs.ts ids), or null: the program's own name first
+ * ("Wyndham Rewards", "MileagePlus"), then the brand alone. */
+const PROGRAM_NAMES = [
+  [/wyndham rewards/i, "wyndham"], [/marriott bonvoy|\bbonvoy\b/i, "marriott"], [/hilton honors/i, "hilton"], [/world of hyatt/i, "hyatt"],
+  [/ihg one rewards|ihg rewards/i, "ihg"], [/mileageplus/i, "united"], [/skymiles/i, "delta"], [/aadvantage/i, "american"],
+  [/rapid rewards/i, "southwest"], [/trueblue/i, "jetblue"], [/aeroplan/i, "aeroplan"], [/\bavios\b/i, "ba_avios"],
+  [/membership rewards/i, "amex_mr"], [/ultimate rewards/i, "chase_ur"], [/thankyou points/i, "citi_typ"], [/bilt rewards/i, "bilt"],
+  [/\bwyndham\b/i, "wyndham"], [/\bmarriott\b/i, "marriott"], [/\bhilton\b/i, "hilton"], [/\bhyatt\b/i, "hyatt"],
+  [/\bunited airlines\b/i, "united"], [/\bdelta air lines\b/i, "delta"], [/\bamerican airlines\b/i, "american"], [/\bsouthwest\b/i, "southwest"], [/\bjetblue\b/i, "jetblue"],
+];
+export function programIn(text) {
+  for (const [re, id] of PROGRAM_NAMES) if (re.test(text)) return id;
+  return null;
+}
+
 /** Bookings found in the text. `isAirport(code)` (optional) keeps airport pairs to real airports.
  * Returns { bookings: [...], quotes: { [i]: sentence } }: each booking with the words it came from. */
 /** @param {string} raw @param {{ year?: number, isAirport?: (code: string) => boolean }} [opts] */
@@ -98,9 +113,14 @@ export function parseBookings(raw, { year, isAirport = () => true } = {}) {
         ...(place ? { place } : {}), confirmation: conf, quote: text.slice(ci?.index ?? din.index, Math.min(text.length, (co?.index ?? dout.index) + 40)).trim() });
     }
   }
-  // a stay paid in points ("Total for Stay 90,000 Pts.")
-  const pts = /\btotal\b[^\n\d]{0,30}([\d,]{3,})\s*(?:pts|points)\b/i.exec(text);
-  if (bookings.length === 1 && pts && !price.price_cents) bookings[0].points = Number(pts[1].replace(/,/g, ""));
+  // paid in points or miles ("Total for Stay 90,000 Pts.", "Total: 35,000 miles"), and which program's
+  // (BAM's ids, src/points/programs.ts): the program named nearest the amount, else anywhere in the text
+  const pts = /\btotal\b[^\n\d]{0,30}([\d,]{3,})\s*(?:pts|points|miles|avios)\b/i.exec(text);
+  if (bookings.length === 1 && pts && !price.price_cents) {
+    bookings[0].points = Number(pts[1].replace(/,/g, ""));
+    const near = text.slice(Math.max(0, pts.index - 400), pts.index + 400);
+    bookings[0].points_program = programIn(near) ?? programIn(text);
+  }
   // the total belongs to the booking when there's just one
   if (bookings.length === 1 && price.price_cents) Object.assign(bookings[0], price);
   return { bookings, price: price.price_cents ? price : null };

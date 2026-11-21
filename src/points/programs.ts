@@ -68,6 +68,9 @@ export const PROGRAMS: readonly Program[] = [
     earnedBy: [{ bank: CHASE, names: ["%Hyatt%"] }] },
   { id: "ihg", name: "IHG One Rewards", kind: "hotel", unit: "points", site: "ihg.com",
     earnedBy: [{ bank: CHASE, names: ["%IHG%"] }] },
+  // Kos reads Wyndham award stays (2026-11-20). No expiry rule: its inactivity terms have fine print.
+  { id: "wyndham", name: "Wyndham Rewards", kind: "hotel", unit: "points", site: "wyndhamrewards.com",
+    earnedBy: [{ bank: BARCLAYS, names: ["%Wyndham%"] }] },
 ];
 
 export const PROGRAM_BY_ID: ReadonlyMap<string, Program> = new Map(PROGRAMS.map((p) => [p.id, p]));

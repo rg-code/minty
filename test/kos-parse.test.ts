@@ -78,7 +78,15 @@ Cancel 72 Hours prior to 4pm day of arrival.`;
     const { bookings } = parseBookings(t, { year: 2025 });                     // the year written wins over the one given
     expect(bookings).toHaveLength(1);
     expect(bookings[0]).toMatchObject({ kind: "lodging", name: "Club Example Ka 'Ula Kai", start_at: "2026-11-26T16:00", end_at: "2026-11-29T10:00",
-      place: "100 Example Road, Example Town, HI 96700", confirmation: "12345EF000001", points: 90000 });
+      place: "100 Example Road, Example Town, HI 96700", confirmation: "12345EF000001", points: 90000, points_program: null });
+    // with its program named, as such emails do ("Wyndham Rewards Redemption Guarantee"): BAM's id
+    const named = parseBookings(t.replace("Cancellation Policy", "Deposit Policy\nWyndham Rewards Redemption Guarantee\nCancellation Policy"), { year: 2025 });
+    expect(named.bookings[0]).toMatchObject({ points: 90000, points_program: "wyndham" });
+  });
+
+  it("an award flight's miles and its program", () => {
+    const { bookings } = parseBookings("United Airlines UA 837 SFO → NRT Mar 10 2027 11:05 15:00. Paid with MileagePlus. Total: 35,000 miles. Confirmation QXRTAB");
+    expect(bookings[0]).toMatchObject({ points: 35000, points_program: "united" });
   });
 
   it("dates with the weekday before the year, or the year on the next line", () => {

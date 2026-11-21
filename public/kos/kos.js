@@ -793,7 +793,7 @@ const suggestTrip = (b) => { const id = b.tripId ?? (pageTrip() ? null : tripGue
 function asItem(b, tripId) {
   const out = { kind: b.kind, trip_id: tripId ?? null, name: b.name ?? null, confirmation: b.confirmation ?? null, guest: b.guest ?? null,
     start_at: b.start ?? b.start_at ?? null, end_at: b.end ?? b.end_at ?? null, place: b.place ?? null, lat: b.lat ?? null, lon: b.lon ?? null,
-    price_cents: b.price_cents ?? null, currency: b.currency ?? null, points: b.points ?? null };
+    price_cents: b.price_cents ?? null, currency: b.currency ?? null, points: b.points ?? null, points_program: b.points_program ?? null };
   const f = b.flight ?? b;
   if (b.kind === "flight") Object.assign(out, { airline: f.airline ?? null, flight_number: f.number ?? f.flight_number ?? null, dep_airport: f.from ?? f.dep_airport ?? null,
     arr_airport: f.to ?? f.arr_airport ?? null, dep_terminal: f.terminal ?? f.dep_terminal ?? null, dep_gate: f.gate ?? f.dep_gate ?? null, seat: f.seat ?? null });
