@@ -193,7 +193,9 @@ Design history and decisions: `docs/serverless-plan.md`.
   calls, and `src/kos/` free of runtime imports (the build strips its types for the browser). K2 (§25, `src/immich.ts`): a trip's Immich album, made only by a quiet
   catch-up cron run (one trip each; trips that ended over 7 days ago only when asked; never an empty
   album), Immich's search pages unpacked by SQLite; thumbnails only through
-  `GET /trips/{id}/photos/{asset}`, only for that trip's photos (security plan §9). Nothing runs without `IMMICH_URL`.
+  `GET /trips/{id}/photos/{asset}`, only for that trip's photos (security plan §9). Nothing runs without `IMMICH_URL`. A booking's charge (§28) is matched in SQL by the
+  card it was paid with (`trip_items.card_last4` against `accounts.mask`, network not a different one), else a word of
+  its name at the price; never a payment or transfer.
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with
   sources and a `CHECKED` date), never fetched at runtime. Credit patterns always name the
   credit. Never match a bare merchant word (a resort in Wisconsin Dells isn't Dell).

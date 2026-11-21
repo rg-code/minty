@@ -186,7 +186,9 @@ export async function listTrips(env: Env): Promise<Response> {
 // --- bookings -----------------------------------------------------------------------------------
 type ItemRow = Record<string, unknown> & { id: number };
 const ITEM_COLS = ["trip_id", "kind", "name", "confirmation", "guest", "start_at", "end_at", "place", "lat", "lon", "price_cents", "currency", "points",
-  "points_program", "airline", "flight_number", "dep_airport", "arr_airport", "dep_terminal", "dep_gate", "arr_terminal", "seat", "source", "source_sha256", "notes"] as const;
+  "points_program", "airline", "flight_number", "dep_airport", "arr_airport", "dep_terminal", "dep_gate", "arr_terminal", "seat", "source", "source_sha256", "notes",
+  "card_last4", "card_network", "booked_on"] as const;
+export const CARD_NETWORKS = ["visa", "mastercard", "amex", "discover"] as const;
 
 async function itemFields(env: Env, b: Body, old: ItemRow | null) {
   const f = {
@@ -215,6 +217,9 @@ async function itemFields(env: Env, b: Body, old: ItemRow | null) {
     source: field(b, "source", old?.source, oneOf("source", SOURCES)) ?? "typed",
     source_sha256: field(b, "source_sha256", old?.source_sha256, codeF("source_sha256", /^[0-9A-F]{64}$/, "a SHA-256 in hex")),
     notes: field(b, "notes", old?.notes, text(2000, "notes")),
+    card_last4: field(b, "card_last4", old?.card_last4, codeF("card_last4", /^\d{4}$/, "the card's last 4 digits")),
+    card_network: field(b, "card_network", old?.card_network, oneOf("card_network", CARD_NETWORKS)),
+    booked_on: field(b, "booked_on", old?.booked_on, dateF("booked_on")),
   };
   if (!f.kind) throw unprocessable(`kind must be one of ${KINDS.join(", ")}`);
   if (f.source_sha256) f.source_sha256 = f.source_sha256.toLowerCase();
@@ -279,36 +284,94 @@ const day = (d: string, n: number) => { const t = new Date(`${d}T00:00:00Z`); t.
 const ROW = `t.id, t.date, t.amount_cents, t.currency, coalesce(t.merchant_name, t.name) AS name, t.category, t.pending, t.owner,
              ${ACCOUNT_NAME("a")} AS account_name, a.mask AS account_mask`;
 
+// Booked before (docs/trips.md §28): a booking's charge, matched in SQL.
+//  - Paid with a card Kos knows (card_last4): only that card's account (its mask ends in the same 4 digits;
+//    its network, when the bank or the card's name tells it, not a different one), by idx_txn_account_date.
+//  - Otherwise, or when no account has those digits (an additional card has its own number): a charge
+//    from the same company (a word of the booking's name, or its airline's) at the price, by idx_txn_pair.
+//  - Never a card payment, a transfer, income or a fee. From 3 days before the day it was booked (a year
+//    before the trip when that isn't known) to a week after the trip (a stay or a car is often charged at
+//    the end). The price within 2%, a stay's or a car's within 10% (taxes, fuel, extras).
+const NOT_MONEY_MOVES = `t.amount_cents > 0 AND coalesce(t.category, '') NOT IN ('LOAN_PAYMENTS', 'TRANSFER_IN', 'TRANSFER_OUT', 'INCOME', 'BANK_FEES')`;
+const BANK = "lower(coalesce(i.institution_name, a.institution, '') || ' ' || coalesce(a.name, ''))";
+export const ACCOUNT_NETWORK = `CASE WHEN ${BANK} LIKE '%american express%' OR ${BANK} LIKE '%amex%' THEN 'amex'
+  WHEN ${BANK} LIKE '%discover%' THEN 'discover' WHEN lower(coalesce(a.name, '')) LIKE '%visa%' THEN 'visa'
+  WHEN lower(coalesce(a.name, '')) LIKE '%mastercard%' OR lower(coalesce(a.name, '')) LIKE '%world elite%' THEN 'mastercard' END`;
+const AIRLINE_WORD: Record<string, string> = { UA: "united", DL: "delta", AA: "american air", AS: "alaska air", WN: "southwest", B6: "jetblue", HA: "hawaiian",
+  F9: "frontier", NK: "spirit", AC: "air canada", BA: "british a", AF: "air france", LH: "lufthansa", KL: "klm", VS: "virgin atl", NH: "ana ", JL: "japan air",
+  EK: "emirates", QR: "qatar", SQ: "singapore", CX: "cathay", QF: "qantas", IB: "iberia", AM: "aeromexico", WS: "westjet", SY: "sun country", G4: "allegiant" };
+const COMMON_WORDS = new Set(["hotel", "hotels", "resort", "resorts", "suites", "inn", "the", "and", "spa", "airlines", "airline", "airways", "lines", "air", "rental",
+  "rent", "car", "cars", "restaurant", "international", "collection", "club", "travel", "tours", "tour", "booking", "reservation", "flight", "stay", "trip",
+  "beach", "city", "golf", "lodge", "villa", "villas", "house", "grand", "royal", "park", "plaza", "center", "centre", "tickets", "ticket", "train", "bus"]);
+/** The words a charge from the same company would carry: the airline's, and the name's own (not "hotel"). */
+export function companyWords(item: { name: string | null; airline: string | null }): string[] {
+  const words = new Set<string>();
+  if (item.airline && AIRLINE_WORD[item.airline]) words.add(AIRLINE_WORD[item.airline]);
+  for (const w of String(item.name ?? "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z0-9]+/)) {
+    if (w.length >= 4 && !COMMON_WORDS.has(w) && !/^\d+$/.test(w)) words.add(w);
+  }
+  return [...words].slice(0, 3).map((w) => w.slice(0, 30));         // D1: a LIKE pattern is at most 50 bytes
+}
+const KIND_WORD: Record<string, string> = { lodging: "the stay", car: "the car", train: "the train", bus: "the bus", restaurant: "the table", event: "the tickets", other: "the booking" };
+type Priced = { id: number; name: string | null; kind: string; price_cents: number; currency: string | null; airline: string | null; flight_number: string | null;
+  dep_airport: string | null; arr_airport: string | null; start_at: string | null; card_last4: string | null; card_network: string | null; booked_on: string | null };
+const label = (p: Priced) => p.kind === "flight"
+  ? `${[p.airline, p.flight_number].filter(Boolean).join(" ") || p.name || "the flight"}${p.dep_airport && p.arr_airport ? ` ${p.dep_airport}→${p.arr_airport}` : ""}`
+  : `${KIND_WORD[p.kind] ?? "the booking"}${p.name ? `: ${p.name}` : ""}`;
+
 /** GET /trips/{id}/suggestions: transactions that look like this trip's, for a person to confirm.
  * During: the day before it starts to the day after it ends, by the date index (bounded at both
- * ends). Booked before: a charge for a booking's price (within 3%, same currency) in the year before
- * the trip, by idx_txn_pair (amount first). Already confirmed or dismissed ones aren't suggested. */
+ * ends). Booked before: each priced booking's charge (above). Already confirmed or dismissed ones
+ * aren't suggested, and a charge is suggested for one booking only. */
 export async function suggestions(env: Env, id: number): Promise<Response> {
   const trip = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(id).first<TripRow>();
   if (!trip) throw new HttpError(404, "trip not found");
-  const from = day(trip.start_date, -1), to = day(trip.end_date, 1);
-  const priced = (await env.DB.prepare("SELECT id, name, kind, price_cents, currency FROM trip_items WHERE trip_id = ? AND price_cents > 0").bind(id)
-    .all<{ id: number; name: string | null; kind: string; price_cents: number; currency: string | null }>()).results.slice(0, 20);
+  const from = day(trip.start_date, -1), to = day(trip.end_date, 1), late = day(trip.end_date, 7);
+  const priced = (await env.DB.prepare(`SELECT id, name, kind, price_cents, currency, airline, flight_number, dep_airport, arr_airport, start_at, card_last4, card_network, booked_on
+                                        FROM trip_items WHERE trip_id = ? AND price_cents > 0 ORDER BY start_at, id`).bind(id).all<Priced>()).results.slice(0, 20);
   const notLinked = "NOT EXISTS (SELECT 1 FROM trip_transactions x WHERE x.trip_id = ?1 AND x.transaction_id = t.id)";
-  const [during, ...booked] = await env.DB.batch([
+  const plans = priced.map((p) => {
+    const loose = p.kind === "lodging" || p.kind === "car" ? 0.1 : 0.02;
+    const since = p.booked_on && isDate(p.booked_on) ? day(p.booked_on, -3) : day(trip.start_date, -365);
+    const common = [id, Math.floor(p.price_cents * (1 - loose)), Math.ceil(p.price_cents * (1 + loose)), since, late, (p.currency ?? "USD").toUpperCase(), p.price_cents];
+    const words = companyWords(p);
+    const card = p.card_last4 ? env.DB.prepare(
+      `SELECT ${ROW}, 'card' AS how FROM accounts a JOIN items i ON i.id = a.item_id CROSS JOIN transactions t
+       WHERE t.account_id = a.id AND substr(a.mask, -4) = ?8 AND (?9 IS NULL OR (${ACCOUNT_NETWORK}) IS NULL OR (${ACCOUNT_NETWORK}) = ?9)
+         AND t.date >= ?4 AND t.date <= ?5 AND t.amount_cents >= ?2 AND t.amount_cents <= ?3 AND upper(coalesce(t.currency, 'USD')) = ?6
+         AND ${NOT_MONEY_MOVES} AND ${notLinked}
+       ORDER BY abs(t.amount_cents - ?7), t.date LIMIT 3`).bind(...common, p.card_last4, p.card_network) : null;
+    // INDEXED BY: by the price, not the dates (the planner otherwise picks the date index and reads the year)
+    const named = words.length ? env.DB.prepare(
+      `SELECT ${ROW}, 'name' AS how FROM transactions t INDEXED BY idx_txn_pair JOIN accounts a ON a.id = t.account_id
+       WHERE t.amount_cents >= ?2 AND t.amount_cents <= ?3 AND t.date >= ?4 AND t.date <= ?5 AND upper(coalesce(t.currency, 'USD')) = ?6
+         AND ${NOT_MONEY_MOVES} AND ${notLinked}
+         AND (${words.map((_, k) => `lower(coalesce(t.merchant_name, '') || ' ' || coalesce(t.name, '')) LIKE ?${k + 9}`).join(" OR ")})
+         AND (?8 IS NULL OR NOT EXISTS (SELECT 1 FROM accounts x WHERE substr(x.mask, -4) = ?8))
+       ORDER BY abs(t.amount_cents - ?7), t.date LIMIT 3`).bind(...common, p.card_last4, ...words.map((w) => `%${w}%`)) : null;
+    return { p, stmts: [card, named].filter((x): x is D1PreparedStatement => x !== null) };
+  });
+  const [during, ...rest] = await env.DB.batch([
     env.DB.prepare(`SELECT ${ROW} FROM transactions t JOIN accounts a ON a.id = t.account_id
                     WHERE t.date >= ?2 AND t.date <= ?3 AND t.amount_cents > 0 AND ${notLinked}
                       AND coalesce(t.category, '') NOT IN ('LOAN_PAYMENTS', 'TRANSFER_IN', 'TRANSFER_OUT', 'INCOME')
                     ORDER BY t.date, t.id LIMIT 300`).bind(id, from, to),
-    // INDEXED BY: by the price, not the year's dates (the planner otherwise picks the date index and reads the year)
-    ...priced.map((p) => env.DB.prepare(`SELECT ${ROW} FROM transactions t INDEXED BY idx_txn_pair JOIN accounts a ON a.id = t.account_id
-                    WHERE t.amount_cents >= ?2 AND t.amount_cents <= ?3 AND t.date >= ?4 AND t.date <= ?5 AND ${notLinked}
-                      AND upper(coalesce(t.currency, 'USD')) = ?6
-                    ORDER BY abs(t.amount_cents - ?7) LIMIT 3`)
-      .bind(id, Math.floor(p.price_cents * 0.97), Math.ceil(p.price_cents * 1.03), day(trip.start_date, -365), to, (p.currency ?? "USD").toUpperCase(), p.price_cents)),
+    ...plans.flatMap((x) => x.stmts),
   ]);
-  const D = during.results as { category: string | null }[];
+  const taken = new Set<number>();
+  let k = 0;
+  const booked = plans.map(({ p, stmts }) => {
+    const rows = stmts.flatMap(() => rest[k++].results as { id: number; how: string }[]);
+    const best = rows.find((r) => r.how === "card" && !taken.has(r.id)) ?? rows.find((r) => !taken.has(r.id));
+    if (best) taken.add(best.id);
+    return { item_id: p.id, item: label(p), price_cents: p.price_cents, how: best?.how ?? null, card: best?.how === "card" ? p.card_last4 : null, matches: best ? [best] : [] };
+  }).filter((b) => b.matches.length);
+  const D = (during.results as { id: number; category: string | null }[]).filter((t) => !taken.has(t.id));
   return json({
     from, to,
     during: D.filter((t) => SPEND_FIRST.includes(t.category ?? "")),
     also: D.filter((t) => !SPEND_FIRST.includes(t.category ?? "")),
-    booked: priced.map((p, i) => ({ item_id: p.id, item: p.name ?? p.kind, price_cents: p.price_cents, matches: booked[i].results }))
-      .filter((b) => b.matches.length),
+    booked,
   });
 }
 

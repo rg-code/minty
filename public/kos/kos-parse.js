@@ -159,6 +159,38 @@ const PROGRAM_NAMES = [
   [/\bwyndham\b/i, "wyndham"], [/\bmarriott\b/i, "marriott"], [/\bhilton\b/i, "hilton"], [/\bhyatt\b/i, "hyatt"],
   [/\bunited airlines\b/i, "united"], [/\bdelta air lines\b/i, "delta"], [/\bamerican airlines\b/i, "american"], [/\bsouthwest\b/i, "southwest"], [/\bjetblue\b/i, "jetblue"],
 ];
+// --- the card it was paid with (docs/trips.md §28) ---------------------------------------------------
+const NETWORK_WORDS = [[/\b(?:american express|amex)\b/i, "amex"], [/\bmaster\s?card\b/i, "mastercard"], [/\bvisa\b/i, "visa"], [/\bdiscover\b/i, "discover"]];
+const NETWORK_CODES = [[/\bAX\b/, "amex"], [/\bMC\b/, "mastercard"], [/\bVI\b/, "visa"], [/\bDS\b/, "discover"]];   // a booking system's "VI ****1234"
+const networkOf = (s, codes) => (codes ? [...NETWORK_WORDS, ...NETWORK_CODES] : NETWORK_WORDS).find(([re]) => re.test(s))?.[1] ?? null;
+const CARD_WORDS = /\b(card|visa|master\s?card|amex|american express|discover|paid|payment|charged|billed|guaranteed|account ending)\b/i;
+const NOT_CARD = /\b(member(?:ship)?|mileage|loyalty|frequent|rewards?|honors|bonvoy|skymiles|aadvantage|mileageplus|known traveler|passport|phone|tel|mobile|ticket|confirmation|record locator|reference|pin)\b[^\n]{0,20}$/i;
+/** The card a confirmation says it was charged to: "Visa ending in 1234", "Amex ••••3141", "Card: VI
+ * ************1234", "Account Ending: 1234", "Guaranteed with Mastercard (x1234)". { last4, network }
+ * (network null when it doesn't say), or null. Never a loyalty or membership number, nor a phone's. */
+export function cardIn(text) {
+  const t = String(text ?? "");
+  const re = /(?:\b(?:ending|ends)\s*(?:in|with)?\s*:?|\blast\s*(?:4|four)(?:\s*digits)?\s*:?|\bcard\s+(?:number|no\.?|#)\s*:?|(?:[x*•·]\s?){2,}|\(\s*x)\s*[-:#]?\s*(?:[x*•·-]\s?)*(\d{4,5})\b(?!\s*(?:points|miles|pts|nights?))/gi;
+  for (const m of t.matchAll(re)) {
+    const a = t.lastIndexOf("\n", m.index - 1) + 1, e = t.indexOf("\n", m.index + m[0].length), b = e < 0 ? t.length : e;
+    const line = t.slice(a, b), before = t.slice(a, m.index), around = t.slice(Math.max(0, a - 160), Math.min(t.length, b + 80));
+    if (NOT_CARD.test(before)) continue;                                           // "MileagePlus ****1234", "Phone ending 1234"
+    if (!CARD_WORDS.test(line) && !/\b(card|visa|master\s?card|amex|american express|discover)\b/i.test(around)) continue;
+    return { last4: m[1].slice(-4), network: networkOf(line, true) ?? networkOf(around, false) };
+  }
+  return null;
+}
+/** The day a confirmation was sent: a forward's "Date:" line when it carries one, else the email's. */
+export function bookedOn(text, emailDate) {
+  const fwd = /-{3,}\s*Forwarded message\s*-{3,}[\s\S]{0,400}?^[>\s]*Date:\s*([^\n]+)/im.exec(String(text ?? ""))?.[1]
+    ?? /^[>\s]*(?:Sent|Date):\s*([^\n]+)/m.exec(String(text ?? "").slice(0, 1500))?.[1];
+  for (const s of [fwd, emailDate]) {
+    const ms = s ? Date.parse(String(s).replace(/\s+at\s+/i, " ").replace(/\s+\([^)]*\)\s*$/, "")) : NaN;
+    if (Number.isFinite(ms)) return new Date(ms).toISOString().slice(0, 10);
+  }
+  return null;
+}
+
 export function programIn(text) {
   for (const [re, id] of PROGRAM_NAMES) if (re.test(text)) return id;
   return null;
@@ -521,6 +553,8 @@ export function parseBookings(raw, opts = {}) {
     if (!anchored.length) return { bookings: [], price: null, cancelled: false, promotional: true };
     bookings.splice(0, bookings.length, ...anchored);
   }
+  const card = cardIn(text);
+  if (card) for (const x of bookings) Object.assign(x, { card_last4: card.last4, card_network: card.network });
   return { bookings, price: total ? { price_cents: total.price_cents, currency: total.currency } : null, cancelled, promotional: false };
 }
 
@@ -591,11 +625,15 @@ export function readEmailBookings(email, { airports } = {}) {
     // markup that leaves out the price (microdata often does): the text's total, when it's one booking's
     const total = email.text && markup.length === 1 && markup[0].price_cents == null && !pts?.points ? totalIn(tidy(email.text)) : null;
     if (total) Object.assign(markup[0], { price_cents: total.price_cents, currency: total.currency });
+    const card = email.text ? cardIn(email.text) : null, on = bookedOn(email.text, email.date);
+    for (const x of markup) Object.assign(x, { ...(card && !x.card_last4 ? { card_last4: card.last4, card_network: card.network } : {}), ...(on ? { booked_on: on } : {}) });
     return { how: "markup", bookings: markup, cancelled: false, promotional: false };
   }
   if (!email.text) return { how: "nothing", bookings: [], cancelled: false, promotional: false };
   const sent = Date.parse(email.date ?? "");
   const r = parseBookings(email.text, { ref: Number.isFinite(sent) ? sent : Date.now(), airports, subject: email.subject ?? undefined });
+  const on = bookedOn(email.text, email.date);
+  if (on) for (const x of r.bookings) x.booked_on = on;
   return { how: "text", bookings: r.bookings, cancelled: r.cancelled, promotional: r.promotional };
 }
 

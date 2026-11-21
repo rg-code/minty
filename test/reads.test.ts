@@ -102,6 +102,9 @@ beforeAll(async () => {
   // Kos: a ten-day trip a month ago, with three priced bookings and 30 of its transactions linked.
   await db.prepare(`INSERT INTO trips (id, name, start_date, end_date) VALUES (1, 'Trip', date('now', '-40 days'), date('now', '-30 days'))`).run();
   await db.prepare(`INSERT INTO trip_items (trip_id, kind, name, price_cents, currency) SELECT 1, 'lodging', 'Stay ' || value, 10000 * value, 'USD' FROM json_each('[1,2,3]')`).run();
+  // paid with a card (docs/trips.md §28): that account's charges in the window, by account and date
+  await db.prepare(`INSERT INTO trip_items (trip_id, kind, name, price_cents, currency, card_last4, card_network, booked_on)
+    SELECT 1, 'flight', 'Example Air', 50000 * value, 'USD', (SELECT substr(mask, -4) FROM accounts WHERE mask IS NOT NULL LIMIT 1), NULL, date('now', '-90 days') FROM json_each('[1,2]')`).run();
   await db.prepare(`INSERT INTO trip_transactions (trip_id, transaction_id, state)
     SELECT 1, id, 'confirmed' FROM transactions WHERE date >= date('now', '-40 days') AND date <= date('now', '-30 days') LIMIT 30`).run();
   // K2: 300 photos over the ten days, the cron's picks 6 a day.

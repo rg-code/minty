@@ -1176,3 +1176,34 @@ Still missed in the held-out travellers: a corporate travel agency's itinerary, 
 PDF, an HTML-only car rental, a screenshot of a car-sharing trip, an airline receipt laid out by date
 codes, and a concert in Czech.
 
+
+## 28. A booking's charge, by its card (owner, 2026-11-21)
+
+The trip's spending used to suggest, under "Booked before", any charge within 3% of a booking's price in
+the year before the trip, on any account: card payments, store orders and other banks' charges came up
+ticked. The owner: match by the card's last 4 and network, in SQL.
+
+**What Kos keeps** (`0030_trip_item_card.sql`): each booking's `card_last4`, `card_network` (visa,
+mastercard, amex, discover) and `booked_on` (the confirmation's date; a typed forward's "Date:" line when it
+has one). The reader takes the card from "Visa ending in 1234", "Account Ending: 1234", "Amex ••••• 53141"
+(the last 4), "Card: VI ****1234", "Guaranteed with Mastercard (x1234)" (`cardIn`), never from a loyalty,
+ticket or phone number; inside Minty the booking form has "Paid with card ending" and the network.
+
+**The match** (`suggestions` in `src/routes/kos.ts`, one statement per priced booking, at most 20):
+- **Its card:** only the account whose mask ends in those 4 digits, and whose network (from the bank's name
+  for Amex and Discover, the card's name for Visa and Mastercard) isn't a different one, by
+  `idx_txn_account_date`.
+- **No card, or no account with those digits** (an additional card has its own number): a charge whose
+  merchant carries a word of the booking's name ("hotel", "resort", "rental" and the like don't count) or its
+  airline's, at the price, by `idx_txn_pair`.
+- **Never** a card payment, a transfer, income or a fee. From 3 days before it was booked (a year before
+  the trip when that isn't known) to a week after the trip: a stay or a car is often charged at the end. The
+  price within 2%, a stay's or a car's within 10%.
+- A charge is offered for one booking only, and not again among the trip's days. Nothing is offered when
+  nothing matches.
+
+**On the page:** "Paid for a booking", each with "For the car: …" and "paid with ••1234" or "same company
+and price", ticked; adding links each one to its booking (`trip_transactions.item_id`).
+
+**Not yet:** a booking charged in pieces (an airline's ticket per passenger), a booking in another currency
+than the charge, and linking without a click.
