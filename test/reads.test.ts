@@ -104,7 +104,8 @@ beforeAll(async () => {
   await db.prepare(`INSERT INTO trip_items (trip_id, kind, name, price_cents, currency) SELECT 1, 'lodging', 'Stay ' || value, 10000 * value, 'USD' FROM json_each('[1,2,3]')`).run();
   // paid with a card (docs/trips.md §28): that account's charges in the window, by account and date
   await db.prepare(`INSERT INTO trip_items (trip_id, kind, name, price_cents, currency, card_last4, card_network, booked_on)
-    SELECT 1, 'flight', 'Example Air', 50000 * value, 'USD', (SELECT substr(mask, -4) FROM accounts WHERE mask IS NOT NULL LIMIT 1), NULL, date('now', '-90 days') FROM json_each('[1,2]')`).run();
+    SELECT 1, 'flight', 'Example Air', 2500 * value, 'USD', (SELECT substr(mask, -4) FROM accounts WHERE mask IS NOT NULL LIMIT 1), NULL, date('now', '-90 days') FROM json_each('[1,2]')`).run();
+  expect((await db.prepare("SELECT count(*) AS n FROM trip_items WHERE card_last4 IS NOT NULL").first<{ n: number }>())!.n).toBe(2);   // the card query runs
   await db.prepare(`INSERT INTO trip_transactions (trip_id, transaction_id, state)
     SELECT 1, id, 'confirmed' FROM transactions WHERE date >= date('now', '-40 days') AND date <= date('now', '-30 days') LIMIT 30`).run();
   // K2: 300 photos over the ten days, the cron's picks 6 a day.
@@ -128,7 +129,7 @@ describe("D1 rows read per request (budgets)", () => {
     ["/statements", 100],                // one row per bank
     ["/sub", 350],
     ["/trips", 150],                     // 66 when written. Kos: the trips, their bookings once each, and each trip's links by index
-    ["/trips/1/suggestions", 300],
+    ["/trips/1/suggestions", 450],       // 375 when written (§28): the trip's days by the date index, the household's card digits, and each priced booking's price band (here a charge at every cent from $10 to $80: a $50 booking's 2% is 200 rows)
     ["/trips/1/photos", 80],              // K2: the trip by key and the cron's picks by (trip, pick): 60 of its 300 photos
     ["/trips/1/journal", 20],             // the trip by key, and its notes by the primary key's prefix       // about 110 when written: the trip's window by the date index (bounded), and each priced booking by idx_txn_pair (INDEXED BY: the date index read a year)
     ["/transactions?trip_id=1", 350],    // 175 when written: starts from the trip's links (CROSS JOIN), not the date index                       // 218 when written. SUB: 4 offers, each requirement's window by account and date (bounded at both ends), and one payout look-up

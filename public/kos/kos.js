@@ -797,7 +797,7 @@ function sourceBox(source) {
 }
 /** A found booking against Kos's own: new, already there, a change to one there, or a cancellation. */
 const allItems = () => (data ? [...data.trips.flatMap((t) => t.items), ...data.unassigned] : []);
-const CHANGE_WORD = { start_at: "time", end_at: "time", dep_airport: "airport", arr_airport: "airport", place: "place", price_cents: "price", points: "points", flight_number: "flight", confirmation: "confirmation" };
+const CHANGE_WORD = { start_at: "time", end_at: "time", dep_airport: "airport", arr_airport: "airport", place: "place", price_cents: "price", points: "points", flight_number: "flight", confirmation: "confirmation", card_last4: "card", card_network: "card" };
 function standing(b) {
   const m = matchBooking(asItem(b, null), allItems());
   if (b.status === "cancelled") return { kind: m.item ? "cancel" : "cancelled-gone", item: m.item };
@@ -1531,6 +1531,7 @@ app.addEventListener("click", async (ev) => {
         if (s.kind === "change") {
           const fresh = asItem(b, s.item.trip_id);
           const patch = Object.fromEntries(s.changes.map((k) => [k, fresh[k]]));
+          if (fresh.booked_on && !s.item.booked_on) patch.booked_on = fresh.booked_on;      // the day it was booked, when Kos didn't know it
           const { id, created_at, updated_at, ...keep } = s.item;
           await store.saveItem(s.item.id, { ...keep, ...patch });
           continue;

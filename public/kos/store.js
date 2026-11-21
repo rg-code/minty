@@ -685,6 +685,8 @@ export function matchBooking(b, items) {
     if (k === "confirmation" || k === "flight_number") return norm(v) !== norm(item[k]);
     return v !== item[k];
   });
+  // the card it was paid with (docs/trips.md §28): filled in when Kos doesn't have it yet, never replaced
+  if (b.card_last4 && !item.card_last4) changes.push("card_last4", ...(b.card_network && !item.card_network ? ["card_network"] : []));
   return { item, same: !changes.length, changes };
 }
 

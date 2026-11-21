@@ -1191,11 +1191,12 @@ ticket or phone number; inside Minty the booking form has "Paid with card ending
 
 **The match** (`suggestions` in `src/routes/kos.ts`, one statement per priced booking, at most 20):
 - **Its card:** only the account whose mask ends in those 4 digits, and whose network (from the bank's name
-  for Amex and Discover, the card's name for Visa and Mastercard) isn't a different one, by
-  `idx_txn_account_date`.
+  for Amex and Discover, the card's name for Visa and Mastercard) isn't a different one.
 - **No card, or no account with those digits** (an additional card has its own number): a charge whose
   merchant carries a word of the booking's name ("hotel", "resort", "rental" and the like don't count) or its
-  airline's, at the price, by `idx_txn_pair`.
+  airline's, at the price.
+- **Both by the price** (`idx_txn_pair`, amount first): measured on a card with 3,000 charges a year, its
+  account and dates read 3,000 rows for each booking, the price band 2 to 700.
 - **Never** a card payment, a transfer, income or a fee. From 3 days before it was booked (a year before
   the trip when that isn't known) to a week after the trip: a stay or a car is often charged at the end. The
   price within 2%, a stay's or a car's within 10%.

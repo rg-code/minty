@@ -286,9 +286,10 @@ const ROW = `t.id, t.date, t.amount_cents, t.currency, coalesce(t.merchant_name,
 
 // Booked before (docs/trips.md §28): a booking's charge, matched in SQL.
 //  - Paid with a card Kos knows (card_last4): only that card's account (its mask ends in the same 4 digits;
-//    its network, when the bank or the card's name tells it, not a different one), by idx_txn_account_date.
+//    its network, when the bank or the card's name tells it, not a different one).
 //  - Otherwise, or when no account has those digits (an additional card has its own number): a charge
-//    from the same company (a word of the booking's name, or its airline's) at the price, by idx_txn_pair.
+//    from the same company (a word of the booking's name, or its airline's) at the price.
+//  - Both by idx_txn_pair: the price band, whatever the card's volume.
 //  - Never a card payment, a transfer, income or a fee. From 3 days before the day it was booked (a year
 //    before the trip when that isn't known) to a week after the trip (a stay or a car is often charged at
 //    the end). The price within 2%, a stay's or a car's within 10% (taxes, fuel, extras).
@@ -327,28 +328,36 @@ export async function suggestions(env: Env, id: number): Promise<Response> {
   const trip = await env.DB.prepare("SELECT * FROM trips WHERE id = ?").bind(id).first<TripRow>();
   if (!trip) throw new HttpError(404, "trip not found");
   const from = day(trip.start_date, -1), to = day(trip.end_date, 1), late = day(trip.end_date, 7);
-  const priced = (await env.DB.prepare(`SELECT id, name, kind, price_cents, currency, airline, flight_number, dep_airport, arr_airport, start_at, card_last4, card_network, booked_on
-                                        FROM trip_items WHERE trip_id = ? AND price_cents > 0 ORDER BY start_at, id`).bind(id).all<Priced>()).results.slice(0, 20);
+  const [items, masks] = await env.DB.batch([
+    env.DB.prepare(`SELECT id, name, kind, price_cents, currency, airline, flight_number, dep_airport, arr_airport, start_at, card_last4, card_network, booked_on
+                    FROM trip_items WHERE trip_id = ? AND price_cents > 0 ORDER BY start_at, id`).bind(id),
+    env.DB.prepare("SELECT DISTINCT substr(mask, -4) AS last4 FROM accounts WHERE mask IS NOT NULL"),      // one row per account
+  ]);
+  const priced = (items.results as Priced[]).slice(0, 20);
+  const cards = new Set((masks.results as { last4: string }[]).map((m) => m.last4));
   const notLinked = "NOT EXISTS (SELECT 1 FROM trip_transactions x WHERE x.trip_id = ?1 AND x.transaction_id = t.id)";
   const plans = priced.map((p) => {
     const loose = p.kind === "lodging" || p.kind === "car" ? 0.1 : 0.02;
-    const since = p.booked_on && isDate(p.booked_on) ? day(p.booked_on, -3) : day(trip.start_date, -365);
+    const booked = p.booked_on && isDate(p.booked_on) && (!p.start_at || p.booked_on <= p.start_at.slice(0, 10)) ? p.booked_on : null;   // a date after it starts isn't when it was booked
+    const since = booked ? day(booked, -3) : day(trip.start_date, -365);
     const common = [id, Math.floor(p.price_cents * (1 - loose)), Math.ceil(p.price_cents * (1 + loose)), since, late, (p.currency ?? "USD").toUpperCase(), p.price_cents];
     const words = companyWords(p);
-    const card = p.card_last4 ? env.DB.prepare(
-      `SELECT ${ROW}, 'card' AS how FROM accounts a JOIN items i ON i.id = a.item_id CROSS JOIN transactions t
-       WHERE t.account_id = a.id AND substr(a.mask, -4) = ?8 AND (?9 IS NULL OR (${ACCOUNT_NETWORK}) IS NULL OR (${ACCOUNT_NETWORK}) = ?9)
-         AND t.date >= ?4 AND t.date <= ?5 AND t.amount_cents >= ?2 AND t.amount_cents <= ?3 AND upper(coalesce(t.currency, 'USD')) = ?6
+    // INDEXED BY: by the price, not the dates or the card's account (measured: a busy card's year read 3,000
+    // rows per booking that way; the price band, 2 to 700)
+    const onCard = !!p.card_last4 && cards.has(p.card_last4);        // an additional card's own number isn't any account's
+    const card = onCard ? env.DB.prepare(
+      `SELECT ${ROW}, 'card' AS how FROM transactions t INDEXED BY idx_txn_pair JOIN accounts a ON a.id = t.account_id
+       WHERE t.amount_cents >= ?2 AND t.amount_cents <= ?3 AND t.date >= ?4 AND t.date <= ?5 AND upper(coalesce(t.currency, 'USD')) = ?6
+         AND t.account_id IN (SELECT a.id FROM accounts a JOIN items i ON i.id = a.item_id
+                              WHERE substr(a.mask, -4) = ?8 AND (?9 IS NULL OR (${ACCOUNT_NETWORK}) IS NULL OR (${ACCOUNT_NETWORK}) = ?9))
          AND ${NOT_MONEY_MOVES} AND ${notLinked}
        ORDER BY abs(t.amount_cents - ?7), t.date LIMIT 3`).bind(...common, p.card_last4, p.card_network) : null;
-    // INDEXED BY: by the price, not the dates (the planner otherwise picks the date index and reads the year)
-    const named = words.length ? env.DB.prepare(
+    const named = !onCard && words.length ? env.DB.prepare(
       `SELECT ${ROW}, 'name' AS how FROM transactions t INDEXED BY idx_txn_pair JOIN accounts a ON a.id = t.account_id
        WHERE t.amount_cents >= ?2 AND t.amount_cents <= ?3 AND t.date >= ?4 AND t.date <= ?5 AND upper(coalesce(t.currency, 'USD')) = ?6
          AND ${NOT_MONEY_MOVES} AND ${notLinked}
-         AND (${words.map((_, k) => `lower(coalesce(t.merchant_name, '') || ' ' || coalesce(t.name, '')) LIKE ?${k + 9}`).join(" OR ")})
-         AND (?8 IS NULL OR NOT EXISTS (SELECT 1 FROM accounts x WHERE substr(x.mask, -4) = ?8))
-       ORDER BY abs(t.amount_cents - ?7), t.date LIMIT 3`).bind(...common, p.card_last4, ...words.map((w) => `%${w}%`)) : null;
+         AND (${words.map((_, k) => `lower(coalesce(t.merchant_name, '') || ' ' || coalesce(t.name, '')) LIKE ?${k + 8}`).join(" OR ")})
+       ORDER BY abs(t.amount_cents - ?7), t.date LIMIT 3`).bind(...common, ...words.map((w) => `%${w}%`)) : null;
     return { p, stmts: [card, named].filter((x): x is D1PreparedStatement => x !== null) };
   });
   const [during, ...rest] = await env.DB.batch([

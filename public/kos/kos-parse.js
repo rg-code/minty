@@ -175,20 +175,23 @@ export function cardIn(text) {
     const a = t.lastIndexOf("\n", m.index - 1) + 1, e = t.indexOf("\n", m.index + m[0].length), b = e < 0 ? t.length : e;
     const line = t.slice(a, b), before = t.slice(a, m.index), around = t.slice(Math.max(0, a - 160), Math.min(t.length, b + 80));
     if (NOT_CARD.test(before)) continue;                                           // "MileagePlus ****1234", "Phone ending 1234"
+    if (/\b(?:ending|ends)\b/i.test(m[0]) && !/[x*•·]/i.test(m[0]) && (!CARD_WORDS.test(line) || /\b(offer|sale|promo(?:tion)?|expires?|valid|deal)\b/i.test(line))) continue;   // "offer ends 2027"
     if (!CARD_WORDS.test(line) && !/\b(card|visa|master\s?card|amex|american express|discover)\b/i.test(around)) continue;
     return { last4: m[1].slice(-4), network: networkOf(line, true) ?? networkOf(around, false) };
   }
   return null;
 }
-/** The day a confirmation was sent: a forward's "Date:" line when it carries one, else the email's. */
+/** The day a confirmation was sent: a forward's header date (the "Date:" or "Sent:" line in a block that
+ * starts with "Forwarded message" or "Original Message", or comes right after a "From:" line), else the
+ * email's. Never a date after the email's own (an event's "Date:" line is the event, not the booking). */
 export function bookedOn(text, emailDate) {
-  const fwd = /-{3,}\s*Forwarded message\s*-{3,}[\s\S]{0,400}?^[>\s]*Date:\s*([^\n]+)/im.exec(String(text ?? ""))?.[1]
-    ?? /^[>\s]*(?:Sent|Date):\s*([^\n]+)/m.exec(String(text ?? "").slice(0, 1500))?.[1];
-  for (const s of [fwd, emailDate]) {
-    const ms = s ? Date.parse(String(s).replace(/\s+at\s+/i, " ").replace(/\s+\([^)]*\)\s*$/, "")) : NaN;
-    if (Number.isFinite(ms)) return new Date(ms).toISOString().slice(0, 10);
-  }
-  return null;
+  const t = String(text ?? "").slice(0, 4000);
+  const fwd = /-{2,}\s*(?:Forwarded message|Original Message)\s*-{2,}[^\n]*\n(?:[>\s]*[A-Z][\w-]*:[^\n]*\n){0,4}?[>\s]*(?:Date|Sent):\s*([^\n]+)/i.exec(t)?.[1]
+    ?? /^[>\s]*From:[^\n]*\n(?:[>\s]*(?:To|Cc|Subject):[^\n]*\n){0,3}[>\s]*(?:Date|Sent):\s*([^\n]+)/im.exec(t)?.[1];
+  const parse = (s) => { const ms = s ? Date.parse(String(s).replace(/\s+at\s+/i, " ").replace(/\s+\([^)]*\)\s*$/, "")) : NaN; return Number.isFinite(ms) ? ms : null; };
+  const sent = parse(emailDate), header = parse(fwd);
+  const ms = header !== null && (sent === null || header <= sent + 864e5) ? header : sent;
+  return ms === null ? null : new Date(ms).toISOString().slice(0, 10);
 }
 
 export function programIn(text) {
