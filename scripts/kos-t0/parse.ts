@@ -36,7 +36,8 @@ const mask = (c: string | null | undefined) => (!c ? "" : showCodes ? c : `${c.s
 const asItem = (b: any) => {
   const f = b.flight ?? b;
   const out: any = { kind: b.kind, name: b.name ?? null, confirmation: b.confirmation ?? null, start_at: b.start ?? b.start_at ?? null, end_at: b.end ?? b.end_at ?? null,
-    place: b.place ?? null, price_cents: b.price_cents ?? null, currency: b.currency ?? null, points: b.points ?? null, points_program: b.points_program ?? null, status: b.status ?? null };
+    place: b.place ?? null, price_cents: b.price_cents ?? null, currency: b.currency ?? null, points: b.points ?? null, points_program: b.points_program ?? null, status: b.status ?? null,
+    card_last4: b.card_last4 ?? null, card_network: b.card_network ?? null, booked_on: b.booked_on ?? null };
   if (b.kind === "flight") Object.assign(out, { airline: f.airline ?? null, flight_number: f.number ?? f.flight_number ?? null, dep_airport: f.from ?? f.dep_airport ?? null, arr_airport: f.to ?? f.arr_airport ?? null });
   if (out.airline && !/^[A-Z0-9]{2,3}$/i.test(out.airline)) { out.name ??= out.airline; out.airline = null; }
   return out;
@@ -72,7 +73,9 @@ for (const file of files) {
     kinds[b.kind] = (kinds[b.kind] ?? 0) + 1;
     const what = b.kind === "flight" ? `${[b.airline, b.flight_number].filter(Boolean).join(" ") || "flight ?"}  ${b.dep_airport ?? "?"}→${b.arr_airport ?? "?"}` : (b.name ?? "(no name)");
     const extras = [b.place && b.kind !== "flight" ? `at ${b.place}` : "", b.confirmation ? `conf ${mask(b.confirmation)}` : "no conf", money(b),
-      b.points ? `${b.points.toLocaleString()} pts${b.points_program ? ` (${b.points_program})` : ""}` : "", b.status === "cancelled" ? "CANCELLED" : ""].filter(Boolean).join(" · ");
+      b.points ? `${b.points.toLocaleString()} pts${b.points_program ? ` (${b.points_program})` : ""}` : "",
+      b.card_last4 ? `card ${b.card_network ?? ""}${b.card_network ? " " : ""}••${showCodes ? b.card_last4 : `•${b.card_last4.slice(-2)}`}` : "",
+      b.booked_on ? `booked ${b.booked_on}` : "", b.status === "cancelled" ? "CANCELLED" : ""].filter(Boolean).join(" · ");
     console.log(`  ${b.kind.padEnd(10)} ${what}  ${when(b.start_at)} → ${when(b.end_at)}  ${extras}`);
     if (b.status !== "cancelled") all.push({ ...b, id: ++id, file: basename(file) });
   }

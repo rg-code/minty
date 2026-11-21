@@ -106,17 +106,26 @@ function moneyAt(line) {
 }
 const TOTAL_LABEL = /\b(grand total|total (?:price|cost|charged|paid|amount|due|for stay|trip cost)|estimated total|amount (?:paid|charged)|you paid|total|totale|gesamt(?:betrag|preis)?|importe total|prix total|preço total|celkem)\b/gi;
 /** The booking's total: the money on a total's line (or the next), not a subtotal, a balance or points. */
+// "an average total value of $600", "Total savings", "total of benefits": a total, but not the booking's
+const NOT_PAID = /^[^\n\d$€£¥]{0,30}\b(value|savings?|saved|worth|benefits?|credits?|earn(?:ed)?|discount|rewards?)\b/i;
 function totalIn(text) {
+  let best = null;
   for (const m of text.matchAll(TOTAL_LABEL)) {
     const before = text.slice(Math.max(0, m.index - 4), m.index).toLowerCase();
     if (before.endsWith("sub")) continue;
+    const lineStart = text.lastIndexOf("\n", m.index - 1) + 1;
     const rest = text.slice(m.index + m[0].length, m.index + m[0].length + 90);
     const line = rest.split("\n").slice(0, 3).join("\n");
     if (/^[^\n\d]*\b(points?|pts|miles|avios)\b/i.test(line.split("\n")[0]) && !/[$€£¥]/.test(line.split("\n")[0])) continue;
+    if (NOT_PAID.test(line) || /\b(value|savings?|worth|benefits?)\b/i.test(text.slice(lineStart, m.index))) continue;
     const mo = moneyAt(line);
-    if (mo && mo.price_cents > 0) return mo;
+    if (!(mo && mo.price_cents > 0)) continue;
+    // a named total ("Total Cost", "Grand total", "Amount charged") over a bare "Total"; the first of the best
+    const rank = /^total$/i.test(m[1]) ? 1 : 0;
+    if (!best || rank < best.rank) best = { ...mo, rank };
+    if (rank === 0) break;
   }
-  return null;
+  return best ? { price_cents: best.price_cents, currency: best.currency } : null;
 }
 const UNIT = "(?:miles|points|pts|avios|meilen|virgin points|flying blue miles|skymiles|award miles)";
 /** Points or miles paid (not earned, not a balance): "70,000 miles + $5.60", "Total: 45,000 Points",
@@ -567,7 +576,8 @@ const W = "['ʻ‘’]?[A-ZÀ-Ý][\\wÀ-ÿ'ʻ’&.-]*";
  * line naming a hotel, an inn, a resort… */
 function stayName(text, subject) {
   const lab = valueAfter(text, /\b(?:hotel|property|accommodation|listing|hotel name|your hotel|place to stay)\b\s*:|\b(?:your stay at|staying at|you're staying at|your reservation at|your booking at)\b\s*:?/i);
-  if (lab && lab.length <= 80 && !dates(lab).length) return lab;
+  // "Due at Property: $0.00" is money, not the hotel's name
+  if (lab && lab.length <= 80 && !dates(lab).length && /[A-Za-zÀ-ÿ]{3}/.test(lab) && !/[$€£¥]|\b(?:USD|EUR|GBP|JPY)\b|^\W*\d[\d.,\s]*$/.test(lab)) return lab;
   const s = /\b(?:at|for|to|:)\s+([^|·:]{3,80}?)(?:\s+(?:is|has been)\s+confirmed|\s+[-–|·]|\s+on\s|\s+from\s|\s+for\s|\s*\(|$)/i.exec(String(subject).replace(/^(?:fwd?|fw|re):\s*/i, ""));
   if (s && /[A-Z]/.test(s[1]) && !/\b(reservation|booking|trip|confirmation|stay|order)\b/i.test(s[1]) && !dates(s[1]).length && !/\d{4,}/.test(s[1])) return s[1].trim();
   for (const m of text.matchAll(new RegExp(`(${W}(?: ${W}){0,5} (?:Hotel|Inn|Resort|Suites|Hostel|Ostello|Ryokan|Lodge|Villas|Apartments?|Residences?|B&B|Guesthouse|Penzion|Pension)(?: ${W}){0,4}|(?:Hotel|The|Club|Casa|Ostello|Penzion|Hostal|Albergo|Hyatt|Hilton|Marriott|Sheraton|Westin|Andaz|Park Hyatt|Crowne Plaza|Holiday Inn|Hampton Inn|Best Western|Courtyard|Fairfield|Residence Inn|InterContinental|Kimpton) ${W}(?: ${W}){0,5})`, "g"))) {

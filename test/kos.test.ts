@@ -117,16 +117,16 @@ describe("a trip's transactions", () => {
     const other = await acct(await bank("Other Bank"), "p-other", "Other Card", "7777");
     const t = db.prepare(`INSERT INTO transactions (owner, account_id, plaid_txn_id, amount_cents, currency, date, name, merchant_name, category, pending) VALUES ('me', ?, ?, ?, 'USD', ?, ?, ?, ?, 0)`);
     await db.batch([
-      t.bind(amex, "stay", 123050, "2026-10-31", "EXAMPLE TRAVEL 800-555-0100", null, "TRAVEL"),          // the stay, on the Amex, booked Oct 31
-      t.bind(visa, "visa-same", 123050, "2026-11-02", "BIG STORE", "Big Store", "GENERAL_MERCHANDISE"),  // same digits, a Visa: not it
-      t.bind(other, "pymt", 123050, "2026-11-01", "CARDMEMBER SERV WEB PYMT", null, "LOAN_PAYMENTS"),     // a card payment: never
+      t.bind(amex, "stay", 123050, "2027-01-15", "EXAMPLE TRAVEL 800-555-0100", null, "TRAVEL"),          // the stay, on the Amex, booked Jan 15
+      t.bind(visa, "visa-same", 123050, "2027-01-17", "BIG STORE", "Big Store", "GENERAL_MERCHANDISE"),  // same digits, a Visa: not it
+      t.bind(other, "pymt", 123050, "2027-01-16", "CARDMEMBER SERV WEB PYMT", null, "LOAN_PAYMENTS"),     // a card payment: never
       t.bind(other, "market", 45000, "2027-01-05", "ONLINE MARKET", "Online Market", "GENERAL_MERCHANDISE"), // the car's price, another merchant: not it
       t.bind(other, "car", 45900, "2027-03-21", "EXAMPLE CAR RENTAL", "Example Car Rental", "TRAVEL"),  // the car, charged at return (2% more)
       t.bind(amex, "old", 123050, "2026-09-01", "EXAMPLE TRAVEL", null, "TRAVEL"),                      // before it was booked
     ]);
     const ids = Object.fromEntries((await rows("SELECT id, plaid_txn_id FROM transactions")).map((r: any) => [r.plaid_txn_id, r.id]));
     const item = async (b: Record<string, unknown>) => (await send("POST", "/trips/items", { trip_id: id, currency: "USD", ...b })).body.id;
-    const stay = await item({ kind: "lodging", name: "Seaside Resort Kalani", price_cents: 123050, card_last4: "2718", card_network: "amex", booked_on: "2026-10-31", start_at: "2027-03-11", end_at: "2027-03-15" });
+    const stay = await item({ kind: "lodging", name: "Seaside Resort Kalani", price_cents: 123050, card_last4: "2718", card_network: "amex", booked_on: "2027-01-15", start_at: "2027-03-11", end_at: "2027-03-15" });
     const car = await item({ kind: "car", name: "Example Car Rental", price_cents: 45000, start_at: "2027-03-12", end_at: "2027-03-20" });
     await item({ kind: "restaurant", name: "The Table", price_cents: 12000, start_at: "2027-03-13T19:00" });   // nothing from it: nothing suggested
     const s = (await send("GET", `/trips/${id}/suggestions`)).body;
@@ -138,7 +138,7 @@ describe("a trip's transactions", () => {
     await send("PUT", `/trips/items/${stay}`, { kind: "lodging", trip_id: id, name: "Seaside Resort Kalani", price_cents: 123050, currency: "USD", card_last4: "4242", start_at: "2027-03-11", end_at: "2027-03-15" });
     expect((await send("GET", `/trips/${id}/suggestions`)).body.booked.map((b: any) => b.item_id)).toEqual([car]);   // "EXAMPLE TRAVEL" isn't the resort's name
     // its network unknown: any card with those digits, the nearest price first
-    await send("PUT", `/trips/items/${stay}`, { kind: "lodging", trip_id: id, name: "Seaside Resort Kalani", price_cents: 123050, currency: "USD", card_last4: "2718", card_network: null, booked_on: "2026-10-31", start_at: "2027-03-11", end_at: "2027-03-15" });
+    await send("PUT", `/trips/items/${stay}`, { kind: "lodging", trip_id: id, name: "Seaside Resort Kalani", price_cents: 123050, currency: "USD", card_last4: "2718", card_network: null, booked_on: "2027-01-15", start_at: "2027-03-11", end_at: "2027-03-15" });
     expect((await send("GET", `/trips/${id}/suggestions`)).body.booked[0].matches[0].id).toBe(ids.stay);
     expect((await send("POST", "/trips/items", { trip_id: id, kind: "other", card_last4: "12a4" })).status).toBe(422);
     expect((await send("POST", "/trips/items", { trip_id: id, kind: "other", card_network: "diners" })).status).toBe(422);
