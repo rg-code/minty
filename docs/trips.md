@@ -1157,7 +1157,8 @@ or for a cancellation "Cancelled" with **Delete from Kos**.
 turnaround, not home; a destination, not a connection).
 
 **After:** on the four travellers the rules were tuned with, 79 of 81 bookings found, none invented; on the
-two held out and never looked at while tuning, 43 of 58 (from 27), 6 invented (4 of them bookings found
+two held out (their baseline failures were seen before the rewrite, but they weren't run while iterating),
+43 of 58 (from 27), 6 invented (4 of them bookings found
 under another kind than the answer's: a tour as an event rather than "other"). All six: 122 of 139 (from 64).
 Still missed in the held-out travellers: a corporate travel agency's itinerary, a multi-leg airline e-ticket
 PDF, an HTML-only car rental, a screenshot of a car-sharing trip, an airline receipt laid out by date

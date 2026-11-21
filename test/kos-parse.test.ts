@@ -211,6 +211,11 @@ Total: € 39,90`;
     expect(times("08h00 Paris · Duration 1h56 · 4:35 h").map((t) => t.time)).toEqual(["08:00"]);      // durations aren't times
     expect(times("12:25 Amsterdam (AMS)").map((t) => t.time)).toEqual(["12:25"]);                      // "Am…" isn't AM
   });
+  it("a screenshot's misreads are fixed in numbers only: an email's code or a name keeps its letters", async () => {
+    const { tidy } = await import("../public/kos/kos-parse.js");
+    expect(tidy("16:3O · 2O27 · ¥28,34O · l8:16")).toBe("16:30 · 2027 · ¥28,340 · 18:16");
+    expect(tidy("Confirmation K2OXYZ at the O2 Arena, seat I2")).toBe("Confirmation K2OXYZ at the O2 Arena, seat I2");
+  });
   it("a date without a year is the next one after the email (or today, for a paste)", () => {
     expect(dates("Sat, Jul 17", { ref: Date.parse("2027-06-28") }).map((d) => d.date)).toEqual(["2027-07-17"]);
     expect(dates("Tue, Jan 12", { ref: Date.parse("2026-11-21") }).map((d) => d.date)).toEqual(["2027-01-12"]);

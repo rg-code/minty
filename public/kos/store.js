@@ -659,14 +659,20 @@ export function matchBooking(b, items) {
   const norm = (s) => String(s ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const same = items.filter((i) => i.kind === b.kind);
   let item = null;
+  const near = (i, days) => !day(b.start_at) || !day(i.start_at) || Math.abs(Date.parse(day(b.start_at)) - Date.parse(day(i.start_at))) <= 864e5 * days;
   if (b.kind === "flight") {
-    item = same.find((i) => b.flight_number && norm(i.flight_number) === norm(b.flight_number) && (!b.airline || !i.airline || i.airline === b.airline)
-      && b.dep_airport === i.dep_airport && (!day(b.start_at) || !day(i.start_at) || Math.abs(Date.parse(day(b.start_at)) - Date.parse(day(i.start_at))) <= 864e5 * 2))
-      ?? same.find((i) => b.dep_airport && i.dep_airport === b.dep_airport && i.arr_airport === b.arr_airport && day(i.start_at) && day(i.start_at) === day(b.start_at))
-      ?? same.find((i) => norm(b.confirmation) && norm(i.confirmation) === norm(b.confirmation) && i.dep_airport === b.dep_airport && i.arr_airport === b.arr_airport);
+    // two different confirmations are two bookings, whatever else they share
+    const cand = same.filter((i) => !(norm(b.confirmation) && norm(i.confirmation) && norm(i.confirmation) !== norm(b.confirmation)));
+    item = cand.find((i) => b.flight_number && norm(i.flight_number) === norm(b.flight_number) && (!b.airline || !i.airline || i.airline === b.airline) && b.dep_airport === i.dep_airport && near(i, 2))
+      ?? cand.find((i) => b.dep_airport && i.dep_airport === b.dep_airport && i.arr_airport === b.arr_airport && day(i.start_at) && day(i.start_at) === day(b.start_at))
+      ?? cand.find((i) => norm(b.confirmation) && norm(i.confirmation) === norm(b.confirmation) && i.dep_airport === b.dep_airport && i.arr_airport === b.arr_airport && near(i, 7));
   } else {
-    item = same.find((i) => norm(b.confirmation) && norm(i.confirmation) === norm(b.confirmation))
-      ?? same.find((i) => b.name && norm(i.name) === norm(b.name) && day(i.start_at) && day(i.start_at) === day(b.start_at));
+    // one code can cover several bookings (a train out and back, two tickets on one order): then the day
+    // tells them apart; a train, bus, event or meal must match its day, a stay or a car may have moved
+    const byCode = norm(b.confirmation) ? same.filter((i) => norm(i.confirmation) === norm(b.confirmation)) : [];
+    const sameDay = (i) => day(i.start_at) && day(i.start_at) === day(b.start_at);
+    if (byCode.length) item = byCode.find(sameDay) ?? (byCode.length === 1 && (b.kind === "lodging" || b.kind === "car") && near(byCode[0], 14) ? byCode[0] : null);
+    item ??= same.find((i) => b.name && norm(i.name) === norm(b.name) && sameDay(i));
   }
   if (!item) return { item: null, same: false, changes: [] };
   const fields = ["start_at", "end_at", "airline", "flight_number", "dep_airport", "arr_airport", "place", "confirmation", "price_cents", "currency", "points", "points_program"];

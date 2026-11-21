@@ -181,6 +181,12 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
       .toMatchObject({ item: { id: 1 }, same: false, changes: ["start_at", "end_at"] });
     expect(matchBooking({ kind: "lodging", confirmation: "4127 583 906", start_at: "2027-04-05T15:00" }, items)).toMatchObject({ item: { id: 2 }, changes: ["start_at"] });
     expect(matchBooking({ kind: "flight", flight_number: "99", dep_airport: "ORD", arr_airport: "DEN", start_at: "2027-04-09T10:00" }, items)).toEqual({ item: null, same: false, changes: [] });
+    // a train out and back on one booking code, read again: each its own, never the return over the outbound
+    const out = { id: 7, kind: "train", name: "Example 21", confirmation: "TR7Q2X", start_at: "2027-04-07T09:00" };
+    expect(matchBooking({ kind: "train", name: "Example 220", confirmation: "TR7Q2X", start_at: "2027-04-10T10:13" }, [out]).item).toBeNull();
+    expect(matchBooking({ kind: "train", name: "Example 21", confirmation: "TR7Q2X", start_at: "2027-04-07T09:00" }, [out]).same).toBe(true);
+    // two flights on different confirmations aren't one, even on the same route and day
+    expect(matchBooking({ kind: "flight", flight_number: "1234", airline: "UA", dep_airport: "DEN", arr_airport: "ORD", start_at: "2027-04-05T06:00", confirmation: "OTHER1" }, items).item).toBeNull();
   });
   it("a trip's name: the longest stay's city from its address, else where the flights stop longest (cityOf, planTrips)", async () => {
     const { cityOf, planTrips } = await import("../public/kos/store.js");

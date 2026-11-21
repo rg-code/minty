@@ -19,8 +19,9 @@ const pad = (n) => String(n).padStart(2, "0");
 export function tidy(text) {
   return String(text ?? "").normalize("NFKC")
     .replace(/\b(f[fil]{1,2}) (?=[a-z]{2})/g, "$1").replace(/[‒-―]/g, "-").replace(/[ \t ]+/g, " ")
-    .replace(/(?<=\d)[Oo](?=[\d:.,]|\b)|(?<=[\s:(]|^)[Oo](?=\d)/gm, "0")
-    .replace(/(?<=\d)[lI](?=\d)|(?<=[\s:(]|^)[lI](?=\d)/gm, "1")
+    // inside number-like tokens only ("16:3O", "2O27", "¥28,34O", "l8:16"), never in a code with letters
+    // ("K2OXYZ") or a name ("O2 Arena")
+    .replace(/(?<![A-Za-z])[0-9OlI][0-9OlI,.:]*[0-9OlI](?![A-Za-z])/g, (t) => ((t.match(/\d/g) ?? []).length >= 2 && /[OlI]/.test(t) ? t.replace(/O/g, "0").replace(/[lI]/g, "1") : t))
     .replace(/\b0(?=[a-z]{2,})/g, "O")
     .replace(/\r/g, "").replace(/ *\n */g, "\n").trim();
 }
@@ -510,7 +511,8 @@ export function parseBookings(raw, opts = {}) {
   // a marketing email ("Sale: Berlin → Bergamo from €19.99"): nothing, unless something in it is anchored
   // like a real booking (a flight's number, a train's, a stay's dates)
   if (promotional) {
-    const anchored = bookings.filter((b) => (b.kind === "flight" && b.flight_number && b.start_at?.length > 10) || ((b.kind === "train" || b.kind === "bus") && b.start_at?.length > 10));
+    const anchored = bookings.filter((b) => (b.kind === "flight" && b.flight_number && b.start_at?.length > 10) || ((b.kind === "train" || b.kind === "bus") && b.start_at?.length > 10)
+      || ((b.kind === "lodging" || b.kind === "car") && b.start_at && b.end_at));
     if (!anchored.length) return { bookings: [], price: null, cancelled: false, promotional: true };
     bookings.splice(0, bookings.length, ...anchored);
   }
