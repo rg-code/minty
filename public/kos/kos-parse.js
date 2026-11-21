@@ -167,7 +167,7 @@ export function programIn(text) {
 const OTHER_PROGRAMS = /\b(Mileage Plan|Flying Blue|Flying Club|Virgin Points|Miles & More|Miles&Go|KrisFlyer|Asia Miles|Qantas Points|Executive Club|Avianca LifeMiles|LifeMiles|Turkish Miles&Smiles)\b/i;
 
 // --- confirmation codes -------------------------------------------------------------------------------
-const CONF_LABEL = /\b(airline (?:confirmation|booking reference|reference|record locator)|record locator|confirmation(?: number| code| no\.?| #)?|booking (?:number|code|reference|ref\.?|id|no\.?)|reservation (?:number|code|no\.?|id)|reservation|itinerary(?: number| no\.?| #)?|trip (?:number|id)|order (?:number|no\.?|#)|pnr|booking|reference(?: number)?|ticket (?:number|no\.?)|voucher (?:number|code)|pin code)\b\s*(?:is)?\s*[:#]?\s*/gi;
+const CONF_LABEL = /\b(airline (?:confirmation|booking reference|reference|record locator)|record locator|confirmation(?: number| code| no\.?| #)?|booking (?:number|code|reference|ref\.?|id|no\.?)|reservation (?:number|code|no\.?|id)|reservation|itinerary(?: number| no\.?| #)?|trip (?:number|id)|order (?:number|no\.?|#)|pnr|booking|reference(?: number)?|ticket (?:number|no\.?)|voucher (?:number|code)|pin code)\b\s*(?:is)?\s*(?:#\s*)?:?\s*/gi;
 // a code has a digit, or is six capitals (an airline's record locator): "reference" isn't one
 const isCode = (c) => (/^(?=.*\d)[A-Z0-9][A-Z0-9/-]{3,22}[A-Z0-9]$/.test(c) && !/^\d{1,4}$/.test(c)) || /^[A-Z]{6}$/.test(c);
 /** The booking's confirmation: the airline's own when labelled so, else the first labelled code. Grouped
@@ -271,7 +271,7 @@ export function parseBookings(raw, opts = {}) {
   const subject = opts.subject ?? /^\s*subject:\s*(.+)$/im.exec(text)?.[1] ?? "";
   // dates that aren't the trip's: a forwarded email's header line, and when it was booked, issued,
   // purchased or printed, or until when it can be cancelled or paid
-  const notTrip = [...text.matchAll(/^[>\s]*(?:date\s*:|sent\s*:|issued?(?: on| date)?\b|date (?:of issue|issued|booked)\b|printed\b|(?:free )?cancell?ation[^\n]{0,40}(?:until|by|before)\b|cancel (?:by|before|until)\b|(?:pay|due|payable)[^\n]{0,20}(?:by|on|before)\b)[^\n]*|^[^\n]{0,32}?\b(?:purchase date|booking date|booked on|date booked|order date|transaction date|payment date|issue date|date of issue|ticket issue date|purchased on|booked:|purchased:)[^\n]*|^\d{1,2}\/\d{1,2}\/\d{2},\s+\d{1,2}:\d{2}\s?[AP]M\b[^\n]*/gim)]
+  const notTrip = [...text.matchAll(/^[>\s]*(?:date\s*:|sent\s*:|booked\b|purchased\b|ordered\b|issued?(?: on| date)?\b|date (?:of issue|issued|booked)\b|printed\b|(?:free )?cancell?ation[^\n]{0,40}(?:until|by|before)\b|cancel (?:by|before|until)\b|(?:pay|due|payable)[^\n]{0,20}(?:by|on|before)\b)[^\n]*|^[^\n]{0,32}?\b(?:purchase date|booking date|booked on|date booked|order date|transaction date|payment date|issue date|date of issue|ticket issue date|purchased on|booked:|purchased:)[^\n]*|^\d{1,2}\/\d{1,2}\/\d{2},\s+\d{1,2}:\d{2}\s?[AP]M\b[^\n]*/gim)]
     .map((m) => [m.index, m.index + m[0].length]);
   // a schedule change's old times ("Was 11:25", "Original flight (no longer valid)", struck through):
   // the line, and a block it heads up to the next blank line
@@ -442,8 +442,13 @@ export function parseBookings(raw, opts = {}) {
       const pair = all.dates.map((x, i) => [x, all.dates[i + 1]]).find(([x, y]) => y && (nights ? gap(x, y) === nights : gap(x, y) >= 1 && gap(x, y) <= 60));
       if (pair) [din, dout] = pair;
     }
-    const tin = ci ? nearest(all.times, ci.index, { max: 80, lo: ci.index, hi: Math.min(coAt, ci.index + 120) }) : null;
-    const tout = co ? nearest(all.times, co.index, { max: 80, lo: co.index, hi: co.index + 120 }) : null;
+    let tin = ci ? nearest(all.times, ci.index, { max: 80, lo: ci.index, hi: Math.min(coAt, ci.index + 120) }) : null;
+    let tout = co ? nearest(all.times, co.index, { max: 80, lo: co.index, hi: co.index + 120 }) : null;
+    // "Check-in:  Check-out:" side by side (a table's two columns): the times below come in that order
+    if (ci && co && co.index > ci.index && lineOf(text, ci.index) === lineOf(text, co.index)) {
+      const below = all.times.filter((x) => x.index > co.index && x.index < co.index + 200);
+      if (below.length >= 2) [tin, tout] = below;
+    }
     if (din && dout && dout.date > din.date) {
       bookings.push({ kind: "lodging", name: stayName(text, subject), start_at: at(din, tin), end_at: at(dout, tout), ...(addressIn(text) ? { place: addressIn(text) } : {}),
         confirmation: conf, quote: text.slice(ci?.index ?? din.index, Math.min(text.length, (co?.index ?? dout.index) + 40)).trim() });
@@ -543,6 +548,11 @@ function addressIn(text) {
   if (lab && /\d/.test(lab) && !dates(lab).length && !/@|https?:/.test(lab)) return lab;
   const us = /^(\d{1,6}[A-Za-z]? [^\n]{3,90}?\b[A-Z]{2} \d{5}(?:-\d{4})?)\b/m.exec(text)?.[1];
   if (us) return us;
+  // over lines, as an email's table puts it: "12 Harbor Road / Example City / HI, United States, 96700"
+  for (const m of text.matchAll(/^(\d{1,6}[A-Za-z]? [A-Za-zÀ-ÿ][^\n]{2,60})\n((?:[^\n\d]{2,40}\n){0,2}[^\n]{2,60}?(?:\b\d{5}(?:-\d{4})?|\b\d{4}|[A-Z]\d[A-Z] ?\d[A-Z]\d)\b[^\n]{0,30})$/gm)) {
+    const a = `${m[1].trim()}, ${m[2].split("\n").map((x) => x.trim()).join(", ")}`;
+    if (!dates(a).length && !times(a).length && !/\b(tel|phone|fax|www\.|http|@|total|price|points?|nights?|guests?|rooms?)\b|[$€£¥]/i.test(a) && a.length <= 160) return a;
+  }
   for (const m of text.matchAll(/^([^\n]{3,60}?\d[^\n]{0,40}?,\s*(?:[^\n,]{2,40},\s*){0,2}(?:\d{4,5}|\d{3}-\d{4}|[A-Z]\d[A-Z] ?\d[A-Z]\d|[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2})[^\n]{0,50})$/gm)) {
     const a = m[1].trim();
     if (!dates(a).length && !times(a).length && !/\b(tel|phone|fax|www\.|http|@|total|price|points?)\b/i.test(a) && a.length <= 140) return a;
@@ -567,3 +577,25 @@ function eventName(text, subject, kind) {
   }
   return null;
 }
+
+/** An email's bookings, as Kos reads them (docs/trips.md §27), shared by Kos and the real-data check
+ * (scripts/kos-t0/parse.ts): its schema.org markup when it has some, with the points or miles from its text
+ * (markup gives the cash part only); else its text, read with the email's date and subject.
+ * `email`: { markup: [bookings from reservations()], text, date, subject }. Returns { how, bookings, cancelled, promotional }. */
+export function readEmailBookings(email, { airports } = {}) {
+  const markup = email.markup ?? [];
+  if (markup.length) {
+    const pts = email.text ? pointsIn(tidy(email.text)) : null;
+    const target = markup.find((b) => b.kind === "flight") ?? markup.find((b) => b.kind === "lodging");
+    if (pts?.points && target && !target.points) Object.assign(target, { points: pts.points, points_program: programIn(email.text) });
+    // markup that leaves out the price (microdata often does): the text's total, when it's one booking's
+    const total = email.text && markup.length === 1 && markup[0].price_cents == null && !pts?.points ? totalIn(tidy(email.text)) : null;
+    if (total) Object.assign(markup[0], { price_cents: total.price_cents, currency: total.currency });
+    return { how: "markup", bookings: markup, cancelled: false, promotional: false };
+  }
+  if (!email.text) return { how: "nothing", bookings: [], cancelled: false, promotional: false };
+  const sent = Date.parse(email.date ?? "");
+  const r = parseBookings(email.text, { ref: Number.isFinite(sent) ? sent : Date.now(), airports, subject: email.subject ?? undefined });
+  return { how: "text", bookings: r.bookings, cancelled: r.cancelled, promotional: r.promotional };
+}
+

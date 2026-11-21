@@ -6,15 +6,24 @@ email's content, never a photo's location. **Keys go in your terminal's environm
 Script editor, never in a file in this repo.** Run the Node ones in your own terminal, not through
 Claude (a `!` command would put the keys in the conversation).
 
-## 1. Your booking emails (no keys)
+## 1. Your booking emails, through Kos's whole reader (no keys)
 
-1. In Gmail, open ~20 travel confirmations of different kinds (flights, hotels, a car, a restaurant,
-   an event), and for each: ⋮ → **Download message**. Put the `.eml` files in a folder **outside
-   this repo**, e.g. `~/kos-emails`.
-2. `node scripts/kos-t0/parse.ts ~/kos-emails`
-3. Paste the **summary** lines. They tell us how many senders use schema.org markup (the exact,
-   easy path), which fields they leave out, and whether reading fits the Worker's 10 ms.
-4. Delete the folder afterwards if you like; nothing was copied.
+The real-data check (docs/trips.md §27): your own emails, read on your machine exactly as Kos reads
+them, with the trips Kos would make.
+
+1. In Gmail, open travel confirmations of different kinds (flights, hotels, a car, a restaurant, an
+   event, a train), and for each: ⋮ → **Download message**. Put the `.eml` files in a folder **outside
+   this repo**, e.g. `~/kos-emails`. Text you'd paste into Kos can go in `.txt` files there too.
+   - **To test "Forward as attachment":** download the forward you received (the email with the
+     original attached), not the original. The check says "attached original" when it read the
+     attachment.
+2. `node scripts/kos-t0/parse.ts ~/kos-emails` (or name files: `node scripts/kos-t0/parse.ts a.eml b.eml`)
+3. For each file it prints how Kos read it (an attached original's markup, the email's own markup, or
+   its text) and every booking: kind, flight and route or name, dates and times, place, confirmation
+   (masked; `--codes` shows them in full), total and points. Then a summary and the trips Kos would make.
+4. Paste back what you're happy to share: the summary, and the lines of any file that came out wrong
+   (it names places and dates, never an email's text). Nothing is saved or sent anywhere; delete the
+   folder afterwards if you like.
 
 ## 2. Cloudflare Access with a service token (for the Gmail script)
 

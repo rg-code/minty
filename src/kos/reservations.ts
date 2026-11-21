@@ -1,6 +1,6 @@
 /** Bookings from a confirmation email's schema.org markup (Kos, docs/trips.md §3, step 1). Airlines,
  * hotels and booking sites put JSON-LD in their emails for Gmail's own trip cards; this reads those
- * blocks into one shape per booking. Microdata and known-sender layouts come later (T2). Pure, with
+ * blocks, and the same markup written as microdata (itemscope / itemprop), into one shape per booking. Pure, with
  * no imports, so the T0 scripts run it in Node too. Nothing is guessed: a field that isn't there
  * stays null. */
 
@@ -37,6 +37,46 @@ export function jsonLd(html: string): unknown[] {
   return out;
 }
 
+/** The schema.org microdata in an HTML document (itemscope / itemtype / itemprop), as the same objects
+ * JSON-LD gives: {"@type": "http://schema.org/LodgingReservation", reservationFor: {...}, ...}. Gmail reads
+ * both; hotels and travel agencies often send this one. A property's value is its content, datetime, href
+ * or src attribute, else its text; a property given twice keeps the first. */
+const VOID = new Set(["meta", "link", "img", "br", "hr", "input", "source", "area", "base", "col", "wbr"]);
+const decode = (s: string) => s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (m, e: string) =>
+  e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1)))
+    : ({ amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " } as Record<string, string>)[e.toLowerCase()] ?? m);
+export function microdata(html: string): Record<string, unknown>[] {
+  if (!/\bitemscope\b/i.test(html)) return [];
+  type Frame = { tag: string; scope?: Record<string, unknown>; text?: { into: Record<string, unknown>; name: string; buf: string } };
+  const top: Record<string, unknown>[] = [], stack: Frame[] = [];
+  const scope = (): Record<string, unknown> | null => { for (let i = stack.length - 1; i >= 0; i--) if (stack[i].scope) return stack[i].scope ?? null; return null; };
+  const put = (o: Record<string, unknown> | null, name: string, v: unknown) => { if (o) for (const n of name.split(/\s+/)) if (n && !(n in o)) o[n] = v; };
+  const body = html.replace(/<(script|style|head)\b[\s\S]*?<\/\1\s*>|<!--[\s\S]*?-->/gi, " ");
+  for (const m of body.matchAll(/<(\/?)([a-zA-Z][\w:-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>|([^<]+)/g)) {
+    if (m[4] !== undefined) { const t = decode(m[4]); for (const f of stack) if (f.text) f.text.buf += t; continue; }
+    const tag = m[2].toLowerCase();
+    if (m[1]) {                                                  // a closing tag: close back to its opening
+      const i = stack.map((f) => f.tag).lastIndexOf(tag);
+      if (i < 0) continue;
+      for (const f of stack.splice(i).reverse()) if (f.text) put(f.text.into, f.text.name, f.text.buf.replace(/\s+/g, " ").trim() || null);
+      continue;
+    }
+    const attrs: Record<string, string> = {};
+    for (const a of m[3].matchAll(/([a-zA-Z][\w:-]*)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s"'>]+))?/g)) attrs[a[1].toLowerCase()] = decode((a[2] ?? "").replace(/^["']|["']$/g, ""));
+    const prop = attrs.itemprop, closed = VOID.has(tag) || /\/\s*$/.test(m[3]);
+    if ("itemscope" in attrs) {
+      const o: Record<string, unknown> = attrs.itemtype ? { "@type": attrs.itemtype.trim().split(/\s+/)[0] } : {};
+      if (prop && scope()) put(scope(), prop, o); else top.push(o);
+      if (!closed) stack.push({ tag, scope: o });
+    } else if (prop) {
+      const v = attrs.content ?? attrs.datetime ?? (tag === "a" || tag === "link" ? attrs.href : undefined) ?? (tag === "img" ? attrs.src : undefined);
+      if (v !== undefined || closed) put(scope(), prop, v?.trim() || null);
+      else stack.push({ tag, text: { into: scope() ?? {}, name: prop, buf: "" } });
+    } else if (!closed) stack.push({ tag });
+  }
+  return top;
+}
+
 /** Every object in a JSON-LD value: arrays, @graph and nested reservations (a package) flattened. */
 function nodes(v: unknown, out: Record<string, unknown>[] = [], depth = 0): Record<string, unknown>[] {
   if (depth > 6 || v === null || typeof v !== "object") return out;
@@ -65,7 +105,8 @@ const num = (v: unknown): number | null => { const n = typeof v === "number" ? v
 function address(v: unknown): string | null {
   if (typeof v === "string") return v.trim() || null;
   const a = obj(v);
-  const parts = [a.streetAddress, a.addressLocality, a.addressRegion, a.postalCode, str(a.addressCountry)].map(str).filter(Boolean);
+  // "12 Harbor Road, Example City, HI 96700, US": the region and postcode together, as an address is written
+  const parts = [str(a.streetAddress), str(a.addressLocality), [str(a.addressRegion), str(a.postalCode)].filter(Boolean).join(" ") || null, str(a.addressCountry)].filter(Boolean);
   return parts.length ? parts.join(", ") : null;
 }
 function geo(...places: unknown[]): { lat: number | null; lon: number | null } {
@@ -90,7 +131,7 @@ function price(o: Record<string, unknown>): { price_cents: number | null; curren
 export function reservations(html: string | null): Booking[] {
   if (!html) return [];
   const out: Booking[] = [];
-  for (const o of nodes(jsonLd(html))) {
+  for (const o of nodes([...jsonLd(html), ...microdata(html)])) {
     const t = typeOf(o).find((x) => x in TYPES);
     if (!t) continue;
     const f = obj(o.reservationFor), kind = TYPES[t];
