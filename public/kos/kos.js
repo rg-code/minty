@@ -37,9 +37,13 @@ let data = null, users = [], airports = {}, programs = null, map = null, mapKey 
 // Trips and bookings come from the store (store.js): Minty's API at /kos/ on a Minty, this
 // browser's IndexedDB when Kos runs on its own.
 async function load() {
-  const [t, u, a] = await Promise.all([store.list(), store.users(), loadAirports()]);
+  // with BAM's programs on a Minty (once), for an award booking's name: "90,000 Wyndham Rewards points"
+  const [t, u, a, p] = await Promise.all([store.list(), store.users(), loadAirports(), !programs && MODE === "minty" ? store.programs() : null]);
   data = t; users = Array.isArray(u) ? u : []; airports = a;
+  if (p) programs = p;
 }
+/** An award booking's points with its program: "90,000 Wyndham Rewards points" (docs/trips.md §7). */
+const ptsText = (i) => { const p = programs?.find((x) => x.id === i.points_program); return `${Number(i.points).toLocaleString()} ${p ? `${p.name} ${p.unit}` : "pts"}`; };
 const label = (k) => users.find((u) => u.key === k)?.label ?? k;
 const airport = (code) => (code && airports[code] ? { name: airports[code][0], city: airports[code][1], country: airports[code][2], lat: airports[code][3], lon: airports[code][4] } : null);
 const tripById = (id) => data.trips.find((t) => t.id === id);
@@ -81,7 +85,7 @@ function flightCard(f, { compact = false, countdown = false } = {}) {
     </div>
     <div class="facts"><div><span>Terminal</span><b>${esc(f.dep_terminal ?? "—")}</b></div><div><span>Gate</span><b>${esc(f.dep_gate ?? "—")}</b></div>
       <div><span>Seat</span><b>${esc(f.seat ?? "—")}</b></div><div><span>Confirmation</span><b>${esc(f.confirmation ?? "—")}</b></div></div>
-    <div class="flight-foot">${cd || `<span>${esc(fmtDay(dateOf(f.start_at)))}</span>`}<span>${f.points ? `${f.points.toLocaleString()} pts` : f.price_cents ? money(f.price_cents, f.currency) : ""}
+    <div class="flight-foot">${cd || `<span>${esc(fmtDay(dateOf(f.start_at)))}</span>`}<span>${f.points ? `${ptsText(f)}` : f.price_cents ? money(f.price_cents, f.currency) : ""}
       ${compact ? "" : ` · <button type="button" class="btn small ghost" data-ics="${f.id}">Add to calendar</button>`}</span></div>
   </article>`;
 }
@@ -245,7 +249,7 @@ function entryHtml(e) {
   const where = [i.place, i.confirmation ? `Conf. ${i.confirmation}` : ""].filter(Boolean).join(" · ");
   return `<div class="stop"><span class="marker">${e.n ?? "·"}</span><button type="button" class="item" data-item="${i.id}">
     <div class="row1"><span class="what"><span class="kind">${esc(e.role || KIND[i.kind])}</span> ${esc(i.name || KIND[i.kind])}</span><span class="at">${esc(e.at)}</span></div>
-    ${where ? `<div class="sub">${esc(where)}</div>` : ""}${!e.repeat && (i.price_cents || i.points) ? `<div class="sub">${i.points ? `${i.points.toLocaleString()} pts` : money(i.price_cents, i.currency)}</div>` : ""}</button></div>`;
+    ${where ? `<div class="sub">${esc(where)}</div>` : ""}${!e.repeat && (i.price_cents || i.points) ? `<div class="sub">${i.points ? `${ptsText(i)}` : money(i.price_cents, i.currency)}</div>` : ""}</button></div>`;
 }
 // --- the trip's summary strip (Wanderlog's "Reservations" and "Budgeting"): a count per kind of
 // booking, each a way to add one, and what the trip cost. Icons: Material Icons (Apache 2.0).
@@ -318,7 +322,7 @@ function stayCard(i) {
     <div class="row1"><span class="what">${esc(i.name || "A stay")}</span>${nights !== null ? `<span class="pill dim">${nights} night${nights === 1 ? "" : "s"}</span>` : ""}</div>
     ${i.place ? `<div class="sub">${esc(i.place)}</div>` : ""}
     <div class="stay-dates">${when(a, timeOf(i.start_at), "Check in")}${when(b, timeOf(i.end_at), "Check out")}</div>
-    ${i.confirmation || i.price_cents || i.points ? `<div class="sub">${[i.confirmation ? `Conf. ${esc(i.confirmation)}` : "", i.points ? `${i.points.toLocaleString()} pts` : i.price_cents ? money(i.price_cents, i.currency) : ""].filter(Boolean).join(" · ")}</div>` : ""}
+    ${i.confirmation || i.price_cents || i.points ? `<div class="sub">${[i.confirmation ? `Conf. ${esc(i.confirmation)}` : "", i.points ? `${ptsText(i)}` : i.price_cents ? money(i.price_cents, i.currency) : ""].filter(Boolean).join(" · ")}</div>` : ""}
     ${Number.isFinite(i.lat) && Number.isFinite(i.lon) ? "" : `<div class="sub muted">No address on the map yet: edit the stay to add one.</div>`}</button>`;
 }
 function dayHtml({ label: l, sub, entries, color, add }) {
@@ -744,6 +748,7 @@ function itemForm(i, tripId) {
     <label>Currency<input name="currency" maxlength="3" value="${esc(i?.currency ?? "USD")}" /></label>
     <label>Or points<input name="points" inputmode="numeric" value="${v("points")}" /></label>
     <label>Program<select name="points_program" data-programs><option value="">—</option>${(programs ?? (i?.points_program ? [{ id: i.points_program, name: i.points_program }] : [])).map((p) => `<option value="${esc(p.id)}"${i?.points_program === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
+    ${MODE === "minty" && i?.points && i?.points_program ? `<p class="wide muted" style="margin:0;font-size:13px">These points show in <a href="/?bam">BAM</a> as a pending change, until you add a ${esc(programs?.find((x) => x.id === i.points_program)?.name ?? "balance")} reading dated on or after the day it was added.</p>` : ""}
     <label class="wide">Notes<textarea name="notes" rows="2" maxlength="2000">${v("notes")}</textarea></label>
   </div><div class="actions"><button class="btn primary" type="submit">${i?.id ? "Save" : "Add booking"}</button>
     <a class="btn ghost" href="${tripId || i?.trip_id ? `#/trip/${i?.trip_id ?? tripId}` : "#/"}">Cancel</a>

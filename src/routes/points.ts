@@ -34,6 +34,35 @@ const CARDS_SQL = `SELECT a.id, a.owner, a.name, ${ACCOUNT_NAME("a")} AS shown, 
 
 interface Card { id: number; owner: string; name: string | null; shown: string | null; mask: string | null; bank: string | null }
 
+// Kos's award bookings (docs/trips.md §7, T4): a booking's points and program. trip_items is small (a
+// household's bookings), so this reads it once; only rows with points and a program are kept.
+const AWARDS_SQL = `SELECT i.id, i.points, i.points_program, i.name, i.kind, i.created_at, i.start_at, t.id AS trip_id, t.name AS trip, t.travellers
+                    FROM trip_items i LEFT JOIN trips t ON t.id = i.trip_id WHERE i.points_program IS NOT NULL AND i.points > 0`;
+
+export interface Award { id: number; points: number; points_program: string; name: string | null; kind: string; created_at: string; start_at: string | null;
+                         trip_id: number | null; trip: string | null; travellers: string | null }
+export interface Pending { item_id: number; trip_id: number | null; trip: string | null; name: string | null; kind: string; points: number;
+                           program: string; owner: string | null; booked: string; start_at: string | null }
+
+/** BAM's pending changes (docs/trips.md §7): each award booking in Kos whose points aren't in a balance
+ * reading yet. Whose balance: the trip's one traveller, or the only person in the household; else
+ * the household's (null). A reading of that program (that person's, when known) dated on or after the
+ * day the booking was added to Kos is taken to include it, and the pending change goes. Readings stay
+ * readings: nothing is ever written to point_balances. Pure, so it's tested on its own. */
+export function pendingChanges(awards: Award[], readings: Pick<Reading, "owner" | "program" | "as_of">[], people: string[]): Pending[] {
+  const out: Pending[] = [];
+  for (const a of awards) {
+    let travellers: unknown = [];
+    try { travellers = JSON.parse(a.travellers ?? "[]"); } catch { /* none */ }
+    const list = Array.isArray(travellers) ? travellers.filter((x): x is string => typeof x === "string" && people.includes(x)) : [];
+    const owner = list.length === 1 ? list[0] : people.length === 1 ? people[0] : null;
+    const booked = a.created_at.slice(0, 10);
+    if (readings.some((r) => r.program === a.points_program && (owner === null || r.owner === owner) && r.as_of >= booked)) continue;
+    out.push({ item_id: a.id, trip_id: a.trip_id, trip: a.trip, name: a.name, kind: a.kind, points: a.points, program: a.points_program, owner, booked, start_at: a.start_at });
+  }
+  return out.sort((x, y) => (x.booked < y.booked ? 1 : x.booked > y.booked ? -1 : y.item_id - x.item_id));
+}
+
 /** The program a card likely earns (its bank, then its name), or null. */
 export function programForCard(card: Pick<Card, "name" | "bank">): Program | null {
   const bank = (card.bank ?? "").toLowerCase(), name = (card.name ?? "").toLowerCase();
@@ -48,11 +77,12 @@ export function programForCard(card: Pick<Card, "name" | "bank">): Program | nul
   return null;
 }
 
-/** GET /points: the programs Minty knows, each balance's newest reading with its history, and the
- * cards that likely earn each currency. */
-export async function listPoints(env: Env): Promise<Response> {
-  const [{ results }, { results: cardRows }] = await env.DB.batch([env.DB.prepare(LIST_SQL), env.DB.prepare(CARDS_SQL)]) as
-    [D1Result<Reading>, D1Result<Card>];
+/** GET /points: the programs Minty knows, each balance's newest reading with its history, the cards
+ * that likely earn each currency, and Kos's award bookings not in a reading yet (`pending`). */
+export async function listPoints(env: Env, config: Config): Promise<Response> {
+  const [{ results }, { results: cardRows }, { results: awards }] = await env.DB.batch([env.DB.prepare(LIST_SQL), env.DB.prepare(CARDS_SQL), env.DB.prepare(AWARDS_SQL)]) as
+    [D1Result<Reading>, D1Result<Card>, D1Result<Award>];
+  const pending = pendingChanges(awards, results, [...config.users.keys()]);
   const groups = new Map<string, Reading[]>();
   for (const r of results) {
     const key = `${r.owner}\u0000${r.program}\u0000${r.account_hint ?? ""}`;
@@ -70,7 +100,7 @@ export async function listPoints(env: Env): Promise<Response> {
     const p = programForCard(c);
     return p ? [{ account_id: c.id, owner: c.owner, name: c.shown, mask: c.mask, program: p.id }] : [];   // matched on Plaid's name, shown as the household's
   });
-  return json({ today: today(), checked: CHECKED, balances, cards,
+  return json({ today: today(), checked: CHECKED, balances, cards, pending,
                 programs: PROGRAMS.map(({ id, name, kind, unit, expiry }) => ({ id, name, kind, unit, expiry: expiry ?? null })) });
 }
 

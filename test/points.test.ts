@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:workers";
 import { PROGRAMS } from "../src/points/programs";
+import { pendingChanges } from "../src/routes/points";
 import { call, getJson } from "./helpers";
 
 // BAM, part 1 (docs/bam.md): miles and points balances typed in, each update a new reading.
@@ -189,3 +190,43 @@ describe("expiry rules and the cards that earn each currency (part 3)", () => {
     await env.DB.batch(["accounts", "items"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
   });
 });
+
+describe("Kos's award bookings as pending changes (docs/trips.md §7, T4)", () => {
+  const award = (o: Record<string, unknown> = {}) => ({ id: 1, points: 90000, points_program: "wyndham", name: "Club Example", kind: "lodging",
+    created_at: "2026-11-20T18:00:00.000Z", start_at: "2026-12-10T16:00", trip_id: 7, trip: "Hawaii", travellers: '["me"]', ...o });
+
+  it("is pending until a reading of that program, dated on or after it was added, includes it", () => {
+    expect(pendingChanges([award()], [], ["me"])).toEqual([{ item_id: 1, trip_id: 7, trip: "Hawaii", name: "Club Example", kind: "lodging", points: 90000,
+      program: "wyndham", owner: "me", booked: "2026-11-20", start_at: "2026-12-10T16:00" }]);
+    expect(pendingChanges([award()], [{ owner: "me", program: "wyndham", as_of: "2026-11-19" }], ["me"])).toHaveLength(1);      // older: still pending
+    expect(pendingChanges([award()], [{ owner: "me", program: "hilton", as_of: "2026-11-25" }], ["me"])).toHaveLength(1);       // another program
+    expect(pendingChanges([award()], [{ owner: "me", program: "wyndham", as_of: "2026-11-20" }], ["me"])).toEqual([]);          // that day on: counted
+  });
+
+  it("whose balance: the trip's one traveller, the only person, else the household's", () => {
+    const people = ["me", "sam"];
+    expect(pendingChanges([award({ travellers: '["sam"]' })], [], people)[0].owner).toBe("sam");
+    expect(pendingChanges([award({ travellers: '["me","sam"]' })], [], people)[0].owner).toBeNull();
+    expect(pendingChanges([award({ travellers: "[]" })], [], ["me"])[0].owner).toBe("me");
+    expect(pendingChanges([award({ travellers: '["nobody"]', trip_id: null, trip: null })], [], people)[0].owner).toBeNull();
+    // Sam's reading doesn't cover mine; for the household, anyone's does
+    expect(pendingChanges([award({ travellers: '["me"]' })], [{ owner: "sam", program: "wyndham", as_of: "2026-11-21" }], people)).toHaveLength(1);
+    expect(pendingChanges([award({ travellers: '["me","sam"]' })], [{ owner: "sam", program: "wyndham", as_of: "2026-11-21" }], people)).toEqual([]);
+  });
+
+  it("GET /points sends them, from Kos's bookings, and never writes a reading", async () => {
+    await env.DB.batch(["trip_transactions", "trip_items", "trips"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
+    const trip = (await env.DB.prepare(`INSERT INTO trips (name, start_date, end_date, travellers, code) VALUES ('Hawaii', ?, ?, '["me"]', 'k7f3x9p2ad') RETURNING id`)
+      .bind(day(20), day(23)).first<{ id: number }>())!.id;
+    await env.DB.prepare(`INSERT INTO trip_items (trip_id, kind, name, start_at, points, points_program) VALUES (?, 'lodging', 'Club Example', ?, 90000, 'wyndham'),
+      (?, 'flight', 'United', ?, NULL, NULL)`).bind(trip, `${day(20)}T16:00`, trip, `${day(20)}T08:00`).run();
+    const body = await list();
+    expect(body.pending).toEqual([expect.objectContaining({ trip: "Hawaii", name: "Club Example", points: 90000, program: "wyndham", owner: "me", booked: day(0) })]);
+    expect(body.programs.find((p: any) => p.id === "wyndham")).toMatchObject({ name: "Wyndham Rewards", kind: "hotel" });
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM point_balances").first("n")).toBe(0);
+    await send("POST", "/points", { program: "wyndham", balance: 12000, as_of: day(0) });           // a new reading: it's counted
+    expect((await list()).pending).toEqual([]);
+    await env.DB.batch(["trip_items", "trips"].map((t) => env.DB.prepare(`DELETE FROM ${t}`)));
+  });
+});
+
