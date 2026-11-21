@@ -27,6 +27,9 @@
 //                                                  hostname); with the secret IMMICH_API_KEY. Unset = off
 //       IMMICH_LINK_URL     IMMICH_URL             where you open Immich in a browser (e.g. its tailnet
 //                                                  address), for the album links
+//       FLIGHT_STATUS_PROVIDER "aeroapi"           Kos's live flight status and flight look-up (docs/trips.md
+//                                                  §32), with the secret FLIGHT_STATUS_KEY. Unset key = off
+//       FLIGHT_STATUS_CALLS_PER_DAY "50"           calls to it a UTC day at most (status and look-ups)
 //   * rate limits (the "ratelimits" bindings below) are the same for everyone: 120 API requests a
 //     minute per login, 30 searches / ABC loads, 10 bank-linking calls. Their namespace ids are
 //     fixed numbers, unusual so they don't share counters with another Worker on your account.

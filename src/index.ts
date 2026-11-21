@@ -26,6 +26,7 @@ import { CATCH_UP_CRON, checkConnections, runSyncAll } from "./sync";
 import { runStatementSync } from "./statements";
 import { requestAlbum, runImmichSync, thumb, tripPhotos } from "./immich";
 import { locateSome } from "./geocode";
+import { pollFlights } from "./flights";
 import { rekeyTokens } from "./token-key";
 import { refreshTotals, snapshotBalances } from "./audit/totals";
 import { isPending, markSwept, syncState } from "./routes/syncrequest";
@@ -105,6 +106,7 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["PUT", /^\/trips\/items\/(\d+)$/, ({ env, request, params }) => kos.saveItem(env, request, Number(params[0]))],
   ["DELETE", /^\/trips\/items\/(\d+)$/, ({ env, params }) => kos.deleteItem(env, Number(params[0]))],
   ["POST", /^\/trips\/read-email$/, ({ env, request }) => kos.readEmail(env, request)],
+  ["POST", /^\/trips\/flight-lookup$/, ({ env, request }) => kos.flightLookup(env, request)],
   ["GET", /^\/trips\/(\d+)\/suggestions$/, ({ env, params }) => kos.suggestions(env, Number(params[0]))],
   ["POST", /^\/trips\/(\d+)\/transactions$/, ({ env, request, params }) => kos.linkTransactions(env, request, Number(params[0]))],
   ["GET", /^\/trips\/(\d+)\/journal$/, ({ env, params }) => kos.journal(env, Number(params[0]))],
@@ -232,6 +234,9 @@ export default {
         return null;
       });
       if (totals?.from) console.log("monthly totals", JSON.stringify(totals));
+      // Kos: live status for the flight legs that are due, when FLIGHT_STATUS_KEY is set (docs/trips.md §32)
+      const flights = await pollFlights(env).catch((e) => ({ failed: e instanceof Error ? e.message : String(e) }));
+      if (Object.keys(flights).length) console.log("flight status", JSON.stringify(flights));   // leg id -> state; no times or gates
       // Kos: a few bookings' exact places from LocationIQ, when its key is set (docs/trips.md §31)
       const places = await locateSome(env).catch((e) => ({ failed: e instanceof Error ? e.message : String(e) }));
       if (Object.keys(places).length) console.log("places", JSON.stringify(places));   // booking id -> found / not found / unavailable

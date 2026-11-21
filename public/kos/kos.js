@@ -52,7 +52,25 @@ const tripGuess = (b) => tripFor(dateOf(b.start_at ?? b.start), data.trips)?.id 
 const itemById = (id) => [...data.trips.flatMap((t) => t.items), ...data.unassigned].find((i) => i.id === id);
 
 // --- Flighty: the flight card -----------------------------------------------------------------
+/** A leg's live status from FlightAware (docs/trips.md §32), when the cron has asked: parsed, or null. */
+function live(f) {
+  if (!f?.flight_status) return null;
+  try { return typeof f.flight_status === "string" ? JSON.parse(f.flight_status) : f.flight_status; } catch { return null; }
+}
+/** A UTC time in an airport's zone, "09:45" (the browser knows the zones). */
+const zoneTime = (iso, tz) => { const t = Date.parse(iso ?? ""); if (!Number.isFinite(t) || !tz) return null; try { return new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(t); } catch { return null; } };
 function status(f) {
+  const ls = live(f);
+  if (ls) {
+    const out = Date.parse(ls.dep.act ?? ls.dep.est ?? ls.dep.sched ?? ""), inn = Date.parse(ls.arr.act ?? ls.arr.est ?? ls.arr.sched ?? ""), now = Date.now();
+    const flying = Number.isFinite(out) && Number.isFinite(inn) && inn > out ? Math.max(0, Math.min(1, (now - out) / (inn - out))) : 0.5;
+    if (ls.state === "cancelled") return { label: "Cancelled", cls: "warn", progress: 0 };
+    if (ls.state === "diverted") return { label: "Diverted", cls: "warn", progress: flying };
+    if (ls.state === "landed") return { label: "Landed", cls: "dim", progress: 1 };
+    if (ls.state === "departed") return { label: "In the air", cls: "info", progress: flying };
+    if (ls.state === "delayed") return { label: `Delayed ${ls.delay_min} min`, cls: "warn", progress: 0 };
+    return { label: "On time", cls: "good", progress: 0 };
+  }
   const dep = instant(f.start_at), arr = instant(f.end_at), now = Date.now();
   if (dep && arr && now >= arr) return { label: "Landed", cls: "dim", progress: 1 };
   if (dep && arr && now >= dep) return { label: "In the air", cls: "info", progress: (now - dep) / (arr - dep) };
@@ -61,6 +79,7 @@ function status(f) {
   if (d && d < localDay()) return { label: "Flown", cls: "dim", progress: 1 };
   return { label: "Scheduled", cls: "good", progress: 0 };
 }
+const agoText = (iso) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 6e4)); return !Number.isFinite(m) ? "" : m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
 const until = (ms) => { const m = Math.round(ms / 6e4); if (m < 60) return `${m} min`; const h = Math.floor(m / 60); return h < 48 ? `${h} h ${m % 60} min` : `${Math.floor(h / 24)} days`; };
 function duration(f) {
   const a = instant(f.start_at), b = instant(f.end_at);
@@ -83,7 +102,12 @@ function flightCard(f, { compact = false, countdown = false } = {}) {
       <div class="track"><span class="done" style="width:${Math.round(st.progress * 100)}%"></span><span style="position:absolute;left:${Math.round(Math.max(0, Math.min(1, st.progress)) * 100)}%;top:50%">${PLANE}</span>${dur ? `<span class="dur">${dur}</span>` : ""}</div>
       <div class="end arr"><div class="code">${esc(f.arr_airport ?? "—")}</div><div class="city">${esc(arr?.city || arr?.name || "")}</div><div class="time">${esc(timeOf(f.end_at) || "—")}${plusDays ? `<small>+${plusDays}</small>` : ""}</div></div>
     </div>
-    <div class="facts"><div><span>Terminal</span><b>${esc(f.dep_terminal ?? "—")}</b></div><div><span>Gate</span><b>${esc(f.dep_gate ?? "—")}</b></div>
+    ${(() => { const ls = live(f); if (!ls) return "";
+      const was = zoneTime(ls.dep.sched, ls.dep.tz), now = zoneTime(ls.dep.act ?? ls.dep.est, ls.dep.tz), lands = zoneTime(ls.arr.act ?? ls.arr.est, ls.arr.tz);
+      const bits = [now && was && now !== was ? `${ls.dep.act ? "Left" : "Leaves"} ${now} (was ${was})` : "", ls.state === "departed" || ls.state === "landed" ? (lands ? `${ls.arr.act ? "Landed" : "Lands"} ${lands}` : "") : "",
+        ls.arr.gate ? `Arrival gate ${ls.arr.gate}` : "", ls.baggage ? `Belt ${ls.baggage}` : "", f.status_checked_at ? `as of ${agoText(f.status_checked_at)}` : "", "FlightAware"].filter(Boolean);
+      return `<div class="live-line">${esc(bits.join(" · "))}</div>`; })()}
+    <div class="facts"><div><span>Terminal</span><b>${esc(live(f)?.dep.terminal ?? f.dep_terminal ?? "—")}</b></div><div><span>Gate</span><b>${esc(live(f)?.dep.gate ?? f.dep_gate ?? "—")}</b></div>
       <div><span>Seat</span><b>${esc(f.seat ?? "—")}</b></div><div><span>Confirmation</span><b>${esc(f.confirmation ?? "—")}</b></div></div>
     <div class="flight-foot">${cd || `<span>${esc(fmtDay(dateOf(f.start_at)))}</span>`}<span>${f.points ? `${ptsText(f)}` : f.price_cents ? money(f.price_cents, f.currency) : ""}
       ${compact ? "" : ` · <button type="button" class="btn small ghost" data-ics="${f.id}">Add to calendar</button>`}</span></div>
@@ -808,6 +832,7 @@ function itemForm(i, tripId) {
     <div class="wide form" data-flight ${kind === "flight" ? "" : "hidden"}>
       <label>Airline code<input name="airline" maxlength="3" value="${v("airline")}" placeholder="UA" /></label>
       <label>Flight number<input name="flight_number" maxlength="5" inputmode="numeric" value="${v("flight_number")}" placeholder="837" /></label>
+      ${store.flightLookup && data?.flights_live ? `<div class="lookup-cell"><button type="button" class="btn small" data-flight-lookup title="Fill in the airports and times from FlightAware: give the airline, the number and the date">Look up</button><span class="muted" id="lookupNote"></span></div>` : ""}
       <label>From<input name="dep_airport" maxlength="3" value="${v("dep_airport")}" placeholder="SFO" /></label>
       <label>To<input name="arr_airport" maxlength="3" value="${v("arr_airport")}" placeholder="NRT" /></label>
       <label>Terminal<input name="dep_terminal" maxlength="10" value="${v("dep_terminal")}" /></label>
@@ -1668,6 +1693,27 @@ app.addEventListener("click", async (ev) => {
       data = null; await load(); spending(tripById(id)); return;
     }
   } catch (e) { err(e.message); }
+});
+// "Look up" on a flight's form (docs/trips.md §32): its airports and local times from FlightAware
+app.addEventListener("click", async (ev) => {
+  const btn = ev.target.closest?.("[data-flight-lookup]");
+  if (!btn) return;
+  const f = btn.closest("form"), e = f.elements, note = document.getElementById("lookupNote");
+  const say = (t) => { if (note) note.textContent = t; };
+  const airline = e.airline.value.trim().toUpperCase(), number = e.flight_number.value.trim().toUpperCase(), date = e.start_date.value;
+  if (!airline || !number || !date) { say("Give the airline code, the flight number and the date first."); return; }
+  btn.disabled = true; say("Asking FlightAware…");
+  try {
+    const r = await store.flightLookup({ airline, flight_number: number, date, ...(e.dep_airport.value.trim() ? { dep_airport: e.dep_airport.value.trim().toUpperCase() } : {}) });
+    const put = (iso, d, t, offKey) => { if (!iso) return; const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(.*)$/.exec(iso); if (!m) return; e[d].value = m[1]; e[t].value = m[2]; f.dataset[offKey] = m[3]; };
+    if (r.dep_airport) e.dep_airport.value = r.dep_airport;
+    if (r.arr_airport) e.arr_airport.value = r.arr_airport;
+    if (r.dep_terminal) e.dep_terminal.value = r.dep_terminal;
+    put(r.start_at, "start_date", "start_time", "startOff");
+    put(r.end_at, "end_date", "end_time", "endOff");
+    say(`Filled from FlightAware: ${r.dep_airport ?? "?"} → ${r.arr_airport ?? "?"}. Check it, then save.`);
+  } catch (err) { say(err.message); }
+  finally { btn.disabled = false; }
 });
 // a booking card's swipe (swipe.js): Edit opens it, Maps opens it in Google Maps
 app.addEventListener("kosaction", (e) => {

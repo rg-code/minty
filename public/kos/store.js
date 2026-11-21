@@ -317,6 +317,7 @@ const mintyStore = {
   suggestions: (id) => api("GET", `/trips/${id}/suggestions`),
   transactions: (id) => api("GET", `/transactions?trip_id=${id}&limit=1000`),
   link: (id, b) => api("POST", `/trips/${id}/transactions`, b),
+  flightLookup: (b) => api("POST", "/trips/flight-lookup", b),   // FlightAware, through the Worker (docs/trips.md §32)
   journal: (id) => api("GET", `/trips/${id}/journal`),
   saveJournal: (id, b) => api("PUT", `/trips/${id}/journal`, b),
   allNotes: async () => [],                              // on a Minty, the journal's notes stay in its database
@@ -412,6 +413,7 @@ const now = () => new Date().toISOString();
 const byStart = (a, b) => ((a.start_at ?? "9999") < (b.start_at ?? "9999") ? -1 : (a.start_at ?? "9999") > (b.start_at ?? "9999") ? 1 : a.id - b.id);
 
 const deviceStore = {
+  flightLookup: null,                                          // Kos on its own has no server to ask FlightAware
   async list() {
     let [trips, items] = await tx(["trips", "items"], "readonly", async (t) => [await req(t.objectStore("trips").getAll()), await req(t.objectStore("items").getAll())]);
     if (trips.some((t) => !isTripCode(t.code))) {                 // trips made before codes get theirs now, once

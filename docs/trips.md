@@ -461,7 +461,7 @@ but has only aircraft positions, with no schedules, gates or delays.
 Minty takes one adapter per provider (`FLIGHT_STATUS_PROVIDER` = `aeroapi` or `airlabs`), so a
 household can switch.
 
-**Still to decide:** ✋ the daily cap (default 50). Push notifications come later (decided).
+**Decided (owner, 2026-11-21):** the daily cap is 50, shared with Look up; built as §32. Push notifications come later (decided).
 
 ## 15. The trip's timeline (owner, 2026-11-19)
 
@@ -1259,3 +1259,32 @@ are exact on the map; a change to the name or address looks again, and coordinat
 never replaced. "Search by LocationIQ.com" (its free plan's wording) links under the map and on the booking. Set-up: a LocationIQ access
 token as the `LOCATIONIQ_KEY` secret (security plan §10). Without it, and in Kos on its own, places stay
 approximate (§29).
+
+## 32. Live flight status and Look up (T6c, owner, 2026-11-21)
+
+Built from §14 (owner: live status and a look-up when adding a flight, 50 calls a day, built against a fake
+FlightAware and checked with the household's key afterwards, T0 check 5). `src/flights.ts`, FlightAware AeroAPI
+Personal, the household's key as the `FLIGHT_STATUS_KEY` secret (`FLIGHT_STATUS_PROVIDER` "aeroapi" is the
+default and the only one yet). Off without the key, and in Kos on its own.
+
+- **Status, from the cron only** (quiet catch-up runs, at most 5 legs a run): a leg with an airline and a flight
+  number is first asked once its date is today or tomorrow, by number and a three-day window
+  (`/flights/{UA1234}?ident_type=designator`), and picked by its airports and the departure nearest its day.
+  Then by FlightAware's own id, when FlightAware's times say: 6 and 3 hours before, every 10 minutes from 2
+  hours before until it leaves, every 30 minutes in the air, once after it lands; never again once cancelled or
+  long gone. One FlightAware doesn't list yet is asked again in 6 hours while its day is near.
+- **Kept on the leg** (`0033_flight_status.sql`): the latest answer as JSON (state: scheduled, delayed, departed,
+  landed, cancelled, diverted; scheduled, estimated and actual times in UTC with each airport's time zone;
+  gates, terminals, belt, delay, aircraft, FlightAware's id), when it was asked, and when it's due next. A change
+  to the leg's number, day or airports starts it afresh. Sync never writes them.
+- **On the flight card:** the pill says On time, Delayed 45 min, In the air, Landed, Cancelled or Diverted, with
+  the plane along its track by FlightAware's times; a line under the route: "Leaves 09:45 (was 09:00) · Belt 5 ·
+  as of 3 min ago · FlightAware"; Terminal and Gate from FlightAware when it has them.
+- **Look up** (`POST /trips/flight-lookup`, Kos inside Minty): on a flight's form, the airline, the number and the
+  date fill in the airports, the local times with their offsets and the terminal. A flight within FlightAware's
+  window (the last 9 days to 2 days ahead) from its flights; one further ahead from its schedules, with each
+  airport's time zone asked once and kept (`app_state`). One call a tap (two more, once per airport, months
+  ahead).
+- **The cap:** `FLIGHT_STATUS_CALLS_PER_DAY` (default 50) for the cron and Look up together, per UTC day in
+  `app_state`; past it the cron stops for the day and Look up says so. Setup checks show today's count.
+- **Not yet:** Minty's status strip for a flight within 24 hours (§14), push notifications (later), AirLabs.
