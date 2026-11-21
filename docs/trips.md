@@ -1216,8 +1216,8 @@ picked up at) is drawn there. One read from an email has an address but no spot,
 to no lookup service (§22), so it used to have no dot. Now (`placeOf` in `kos.js`) it goes near its town's
 airport (the town from its address, `cityOf`, matched against `airports.json` on the device; of two towns
 with one name, the one near the trip's flights), else near the airport the trip had flown into by then.
-Those dots are paler, and a line on the map says which are approximate and how to give one its spot (edit
-the booking: a map link, a plus code or coordinates). The Lodging tab's stay cards say so too. Pins on one
+Those dots are paler. The Lodging tab's stay cards say a stay is approximate and how to give it its spot (edit
+the booking: a map link, a plus code or coordinates); the map's own line saying so went (owner, 2026-11-21). Pins on one
 spot become one, numbered "2·3", so none hides another at any zoom. The journal's map does the same. On the
 trip's map only airports are named (the numbers match the plan), and the flights are its only lines: the solid
 line joining the places in order ran beside them once every booking had a dot, so it went (owner, 2026-11-21).

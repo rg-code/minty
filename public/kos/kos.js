@@ -323,7 +323,7 @@ function tripView(t, tab) {
       <div class="tabs"><div class="seg" role="group">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${(tab || "") === k}">${l}</button>`).join("")}</div></div>
       ${body}
       <p class="report-line muted">A trip worth featuring, or something Kos got wrong? <button type="button" class="linklike" data-report-trip data-goatcounter-click="kos-report-trip">Share it with the Kos team</button></p></div>
-      <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div><p class="map-approx muted" id="mapApprox" hidden></p>
+      <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div>
         ${t.items.some((i) => i.geo_source === "lookup") ? `<span class="map-credit"><a href="https://locationiq.com/" target="_blank" rel="noopener">Search by LocationIQ.com</a></span>` : ""}</div></div>
     <a class="fab" href="#/add?trip=${t.id}" aria-label="Add a booking" title="Add a booking">+</a>`;
 }
@@ -541,7 +541,7 @@ function mapData(t) {
     if (i.kind === "flight" && a && b) arcs.push({ from: [a.lon, a.lat], to: [b.lon, b.lat], id: String(i.id) });
   }
   if (!arcs.length && !pins.length && Number.isFinite(t.lat) && Number.isFinite(t.lon)) pins.push({ lon: t.lon, lat: t.lat, kind: "other", label: t.place ?? t.name });
-  return { arcs, pins: spread(pins), approx: pins.filter((p) => p.approx) };
+  return { arcs, pins: spread(pins) };
 }
 async function showMap(t, tab = "") {
   const el = document.getElementById("map"), note = document.getElementById("mapNote");
@@ -554,11 +554,6 @@ async function showMap(t, tab = "") {
   mapKey = key;
   if (!map) { note.hidden = false; note.textContent = "The map couldn't load here (it needs WebGL and OpenFreeMap's tiles). The plan is all here."; return; }
   const d = mapData(t);
-  const approx = d.approx, cap = document.getElementById("mapApprox"), nApprox = approx.length;
-  if (cap) {
-    cap.hidden = !approx.length;
-    cap.textContent = approx.length ? `${nApprox === 1 ? "One place is" : `${nApprox} places are`} shown near ${[...new Set(approx.map((p) => p.near))].join(", ")} (a paler dot): Kos has its address but not its spot. Edit the booking and paste a map link, a plus code or coordinates for the exact place.` : "";
-  }
   // pins take their day's colour (Wanderlog), flights the accent (Flighty)
   drawTrip(map, d, (id) => {
     const card = app.querySelector(`[data-item="${CSS.escape(id)}"]`);
