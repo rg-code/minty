@@ -108,6 +108,42 @@ describe("a trip's transactions", () => {
     expect(s.booked[0]).toMatchObject({ item: "United", matches: [{ name: "United", amount_cents: 124060 }] });
   });
 
+  it("a booking's charge: on the card it was paid with (last 4, network), else the same company; never a payment or another merchant (docs/trips.md §28)", async () => {
+    const id = await trip();
+    const bank = async (name: string) => (await db.prepare(`INSERT INTO items (owner, plaid_account, plaid_item_id, access_token_enc, institution_name) VALUES ('me', 'me_primary', ?, 'x', ?) RETURNING id`).bind(`i-${name}`, name).first<{ id: number }>())!.id;
+    const acct = async (item: number, pid: string, name: string, mask: string) => (await db.prepare(`INSERT INTO accounts (owner, item_id, plaid_account_id, name, type, subtype, mask) VALUES ('me', ?, ?, ?, 'credit', 'credit card', ?) RETURNING id`).bind(item, pid, name, mask).first<{ id: number }>())!.id;
+    const amex = await acct(await bank("American Express"), "p-amex", "Example Card", "52718");    // Amex: 5 digits
+    const visa = await acct(await bank("Example Bank"), "p-visa", "Example Visa Signature", "2718");  // the same last 4, another network
+    const other = await acct(await bank("Other Bank"), "p-other", "Other Card", "7777");
+    const t = db.prepare(`INSERT INTO transactions (owner, account_id, plaid_txn_id, amount_cents, currency, date, name, merchant_name, category, pending) VALUES ('me', ?, ?, ?, 'USD', ?, ?, ?, ?, 0)`);
+    await db.batch([
+      t.bind(amex, "stay", 123050, "2026-10-31", "EXAMPLE TRAVEL 800-555-0100", null, "TRAVEL"),          // the stay, on the Amex, booked Oct 31
+      t.bind(visa, "visa-same", 123050, "2026-11-02", "BIG STORE", "Big Store", "GENERAL_MERCHANDISE"),  // same digits, a Visa: not it
+      t.bind(other, "pymt", 123050, "2026-11-01", "CARDMEMBER SERV WEB PYMT", null, "LOAN_PAYMENTS"),     // a card payment: never
+      t.bind(other, "market", 45000, "2027-01-05", "ONLINE MARKET", "Online Market", "GENERAL_MERCHANDISE"), // the car's price, another merchant: not it
+      t.bind(other, "car", 45900, "2027-03-21", "EXAMPLE CAR RENTAL", "Example Car Rental", "TRAVEL"),  // the car, charged at return (2% more)
+      t.bind(amex, "old", 123050, "2026-09-01", "EXAMPLE TRAVEL", null, "TRAVEL"),                      // before it was booked
+    ]);
+    const ids = Object.fromEntries((await rows("SELECT id, plaid_txn_id FROM transactions")).map((r: any) => [r.plaid_txn_id, r.id]));
+    const item = async (b: Record<string, unknown>) => (await send("POST", "/trips/items", { trip_id: id, currency: "USD", ...b })).body.id;
+    const stay = await item({ kind: "lodging", name: "Seaside Resort Kalani", price_cents: 123050, card_last4: "2718", card_network: "amex", booked_on: "2026-10-31", start_at: "2027-03-11", end_at: "2027-03-15" });
+    const car = await item({ kind: "car", name: "Example Car Rental", price_cents: 45000, start_at: "2027-03-12", end_at: "2027-03-20" });
+    await item({ kind: "restaurant", name: "The Table", price_cents: 12000, start_at: "2027-03-13T19:00" });   // nothing from it: nothing suggested
+    const s = (await send("GET", `/trips/${id}/suggestions`)).body;
+    expect(s.booked.map((b: any) => [b.item_id, b.item, b.how, b.card, b.matches.map((m: any) => m.id)])).toEqual([
+      [stay, "the stay: Seaside Resort Kalani", "card", "2718", [ids.stay]],
+      [car, "the car: Example Car Rental", "name", null, [ids.car]],
+    ]);
+    // a card no account has (an additional card's own number): the same company instead
+    await send("PUT", `/trips/items/${stay}`, { kind: "lodging", trip_id: id, name: "Seaside Resort Kalani", price_cents: 123050, currency: "USD", card_last4: "4242", start_at: "2027-03-11", end_at: "2027-03-15" });
+    expect((await send("GET", `/trips/${id}/suggestions`)).body.booked.map((b: any) => b.item_id)).toEqual([car]);   // "EXAMPLE TRAVEL" isn't the resort's name
+    // its network unknown: any card with those digits, the nearest price first
+    await send("PUT", `/trips/items/${stay}`, { kind: "lodging", trip_id: id, name: "Seaside Resort Kalani", price_cents: 123050, currency: "USD", card_last4: "2718", card_network: null, booked_on: "2026-10-31", start_at: "2027-03-11", end_at: "2027-03-15" });
+    expect((await send("GET", `/trips/${id}/suggestions`)).body.booked[0].matches[0].id).toBe(ids.stay);
+    expect((await send("POST", "/trips/items", { trip_id: id, kind: "other", card_last4: "12a4" })).status).toBe(422);
+    expect((await send("POST", "/trips/items", { trip_id: id, kind: "other", card_network: "diners" })).status).toBe(422);
+  });
+
   it("confirm, dismiss and remove; confirmed ones are in the dashboard's ?trip_id=, and aren't suggested again", async () => {
     const id = await trip();
     const ids = Object.fromEntries((await rows("SELECT id, plaid_txn_id FROM transactions")).map((r: any) => [r.plaid_txn_id, r.id]));

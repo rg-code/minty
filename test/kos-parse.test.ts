@@ -218,6 +218,20 @@ Hotel Confirmation #: 5550001112223\nCheck-in: Check-out:\nWednesday, December 2
     expect(b).toMatchObject({ kind: "lodging", name: "Seaside Resort Example", confirmation: "5550001112223", start_at: "2026-12-02T15:00", end_at: "2026-12-03T12:00",
       place: "12 Harbor Road, Example City, HI, United States, 96700", price_cents: 123050 });
   });
+  it("the card it was paid with, and the day it was booked (cardIn, bookedOn, docs/trips.md §28)", async () => {
+    const { cardIn, bookedOn } = await import("../public/kos/kos-parse.js");
+    expect(["Payment: Visa ending in 1234", "ALEX SAMPLE\nAccount Ending: 4321", "Card: VI ************5678", "Paid with Mastercard (x9012)", "American Express ••••• 53141\nTotal $40",
+            "Reservation guaranteed with Visa ending in 3456", "Form of payment\nAMEX XXXXXXXXXXX6060", "Charged to card ending 7788"].map(cardIn)).toEqual([
+      { last4: "1234", network: "visa" }, { last4: "4321", network: null }, { last4: "5678", network: "visa" }, { last4: "9012", network: "mastercard" },
+      { last4: "3141", network: "amex" }, { last4: "3456", network: "visa" }, { last4: "6060", network: "amex" }, { last4: "7788", network: null }]);
+    expect(["MileagePlus number: XXXXX1234\nTotal $10", "Phone ending 4455", "Earned 1,234 miles", "Room 1 · 2 nights", "Use your card: offer ends 2027"].map(cardIn)).toEqual([null, null, null, null, null]);
+    expect(bookedOn("---------- Forwarded message ---------\nFrom: X <x@example.com>\nDate: Sat, Oct 31, 2026 at 10:06 AM\nSubject: y", "Fri, 20 Nov 2026 09:00:00 -0800")).toBe("2026-10-31");
+    expect(bookedOn("hello", "Fri, 20 Nov 2026 09:00:00 -0800")).toBe("2026-11-20");
+    expect(bookedOn("Your tickets\nDate: Sat, Mar 13, 2027 8:00 PM\nVenue: Example Hall", "Mon, 4 Jan 2027 10:00:00 +0000")).toBe("2027-01-04");   // the event's date isn't the booking's
+    expect(bookedOn("-----Original Message-----\nFrom: X\nSent: Monday, January 4, 2027 9:00 AM\nTo: Y", "Fri, 20 Nov 2027 09:00:00 -0800")).toBe("2027-01-04");
+    const [b] = parseBookings("Example Car Rental\nPick-up: Mon, Apr 5, 2027 10:00 AM\nReturn: Thu, Apr 8, 2027 10:00 AM\nConfirmation: 12345678US1\nCharged to Visa ending in 2468\nTotal: $300.00", { ref: Date.parse("2027-01-01") }).bookings;
+    expect(b).toMatchObject({ kind: "car", card_last4: "2468", card_network: "visa" });
+  });
   it("an email as Kos reads it: markup with the points from its text, else the text with its date and subject (readEmailBookings)", async () => {
     const { readEmailBookings } = await import("../public/kos/kos-parse.js");
     const markup = [{ kind: "lodging", name: "Example Lodge", start: "2027-05-10T15:00:00-06:00", end: "2027-05-13T11:00:00-06:00", confirmation: "EX12345", points: null }];

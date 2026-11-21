@@ -512,15 +512,16 @@ async function spending(t) {
     const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]), top = cats[0]?.[1] ?? 1;
     const days = Math.max(1, Math.round((asDay(t.end_date) - asDay(t.start_date)) / 864e5) + 1);
     const sug = (list, title, why) => list.length ? `<div class="section-title"><h2>${title}</h2><span class="muted">${why}</span></div>
-      <div class="list">${list.map((r) => `<label class="row"><input type="checkbox" data-sug="${r.id}" checked /><span class="grow"><b>${esc(r.name)}</b><span class="muted">${esc(fmtDay(r.date))} · ${esc(r.account_name ?? "")}${r.account_mask ? ` ••${esc(r.account_mask)}` : ""}</span></span><span class="amt">${money(r.amount_cents, r.currency)}</span></label>`).join("")}</div>` : "";
-    const booked = s.booked.flatMap((b) => b.matches.map((m) => ({ ...m, name: `${m.name} (for ${b.item})` })));
+      <div class="list">${list.map((r) => `<label class="row"><input type="checkbox" data-sug="${r.id}"${r.item_id ? ` data-sug-item="${r.item_id}"` : ""} checked /><span class="grow"><b>${esc(r.name)}</b>${r.note ? `<span class="muted" style="display:block">${esc(r.note)}</span>` : ""}<span class="muted">${esc(fmtDay(r.date))} · ${esc(r.account_name ?? "")}${r.account_mask ? ` ••${esc(r.account_mask)}` : ""}</span></span><span class="amt">${money(r.amount_cents, r.currency)}</span></label>`).join("")}</div>` : "";
+    // each booking's charge: on the card it was paid with, or from the same company (docs/trips.md §28)
+    const booked = s.booked.flatMap((b) => b.matches.map((m) => ({ ...m, item_id: b.item_id, note: `For ${b.item}${b.how === "card" ? ` · paid with ••${b.card}` : " · same company and price"}` })));
     const any = s.during.length + s.also.length + booked.length;
     box.innerHTML = `<div class="card"><div class="muted">Spent on this trip</div><div class="total num">${money(total)}</div>
         <div class="muted">${out.length} transactions · ${money(Math.round(total / days))} a day</div>
         ${(() => { const off = tripTags(t).filter(leftOutTag); return off.length ? `<p class="pill warn" style="white-space:normal;display:inline-block;margin:10px 0 0">Tagged ${off.map((g) => `“${esc(g)}”`).join(", ")}: these are left out of CFA and the dashboard's totals.</p>` : ""; })()}
         ${cats.length ? `<div class="bars" style="margin-top:14px">${cats.map(([c, v]) => `<div class="b"><span>${esc(CAT[c] ?? c.replace(/_/g, " ").toLowerCase())}</span><i style="width:${Math.max(4, Math.round((v / top) * 100))}%"></i><span class="num">${money(v)}</span></div>`).join("")}</div>` : ""}
         <div class="actions"><a class="btn small" href="/?trip=${t.id}">Open in Minty</a></div></div>
-      ${any ? `${sug(s.during, "Suggested", "travel, food, transport and activities during the trip")}${sug(booked, "Booked before", "charges matching a booking's price")}${sug(s.also, "Also during the trip", "everything else on those days")}
+      ${any ? `${sug(s.during, "Suggested", "travel, food, transport and activities during the trip")}${sug(booked, "Paid for a booking", "on the card it was paid with, or from the same company")}${sug(s.also, "Also during the trip", "everything else on those days")}
         <div class="actions"><button type="button" class="btn primary" data-sug-add>Add the ticked ones</button><button type="button" class="btn" data-sug-dismiss>Not this trip</button><span class="err" id="sugErr"></span></div>` : `<p class="muted">Nothing more to suggest from ${esc(fmtShort(s.from))} to ${esc(fmtShort(s.to))}.</p>`}
       ${out.length ? `<div class="section-title"><h2>In this trip</h2></div><div class="list">${rows.map((r) => `<div class="row"><span class="grow"><b>${esc(r.merchant_name || r.name)}</b><span class="muted">${esc(fmtDay(r.date))} · ${esc(CAT[r.category] ?? "")}</span></span><span class="amt">${money(Math.round(r.amount * 100), r.currency)}</span><button type="button" class="btn small ghost" data-unlink="${r.id}">Remove</button></div>`).join("")}</div>` : ""}`;
   } catch (e) { box.innerHTML = `<p class="err">Couldn't load the spending: ${esc(e.message)}</p>`; }
@@ -758,6 +759,9 @@ function itemForm(i, tripId) {
     <label>Or points<input name="points" inputmode="numeric" value="${v("points")}" /></label>
     <label>Program<select name="points_program" data-programs><option value="">—</option>${(programs ?? (i?.points_program ? [{ id: i.points_program, name: i.points_program }] : [])).map((p) => `<option value="${esc(p.id)}"${i?.points_program === p.id ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label>
     ${MODE === "minty" && i?.points && i?.points_program ? `<p class="wide muted" style="margin:0;font-size:13px">These points show in <a href="/?bam">BAM</a> as a pending change, until you add a ${esc(programs?.find((x) => x.id === i.points_program)?.name ?? "balance")} reading dated on or after the day it was added.</p>` : ""}
+    ${MODE === "minty" ? `<label>Paid with card ending<input name="card_last4" inputmode="numeric" maxlength="4" pattern="\\d{4}" placeholder="1234" value="${v("card_last4")}" /></label>
+    <label>Card<select name="card_network"><option value="">—</option>${[["visa", "Visa"], ["mastercard", "Mastercard"], ["amex", "American Express"], ["discover", "Discover"]].map(([k, n]) => `<option value="${k}"${i?.card_network === k ? " selected" : ""}>${n}</option>`).join("")}</select></label>
+    <p class="wide muted" style="margin:0;font-size:13px">The trip's spending finds this booking's charge on that card.</p>` : ""}
     <label class="wide">Notes<textarea name="notes" rows="2" maxlength="2000">${v("notes")}</textarea></label>
   </div><div class="actions"><button class="btn primary" type="submit">${i?.id ? "Save" : "Add booking"}</button>
     <a class="btn ghost" href="${tripId || i?.trip_id ? `#/trip/${i?.trip_id ?? tripId}` : "#/"}">Cancel</a>
@@ -793,7 +797,7 @@ function sourceBox(source) {
 }
 /** A found booking against Kos's own: new, already there, a change to one there, or a cancellation. */
 const allItems = () => (data ? [...data.trips.flatMap((t) => t.items), ...data.unassigned] : []);
-const CHANGE_WORD = { start_at: "time", end_at: "time", dep_airport: "airport", arr_airport: "airport", place: "place", price_cents: "price", points: "points", flight_number: "flight", confirmation: "confirmation" };
+const CHANGE_WORD = { start_at: "time", end_at: "time", dep_airport: "airport", arr_airport: "airport", place: "place", price_cents: "price", points: "points", flight_number: "flight", confirmation: "confirmation", card_last4: "card", card_network: "card" };
 function standing(b) {
   const m = matchBooking(asItem(b, null), allItems());
   if (b.status === "cancelled") return { kind: m.item ? "cancel" : "cancelled-gone", item: m.item };
@@ -825,7 +829,8 @@ const suggestTrip = (b) => { const id = b.tripId ?? (pageTrip() ? null : tripGue
 function asItem(b, tripId) {
   const out = { kind: b.kind, trip_id: tripId ?? null, name: b.name ?? null, confirmation: b.confirmation ?? null, guest: b.guest ?? null,
     start_at: b.start ?? b.start_at ?? null, end_at: b.end ?? b.end_at ?? null, place: b.place ?? null, lat: b.lat ?? null, lon: b.lon ?? null,
-    price_cents: b.price_cents ?? null, currency: b.currency ?? null, points: b.points ?? null, points_program: b.points_program ?? null };
+    price_cents: b.price_cents ?? null, currency: b.currency ?? null, points: b.points ?? null, points_program: b.points_program ?? null,
+    card_last4: b.card_last4 ?? null, card_network: b.card_network ?? null, booked_on: b.booked_on ?? null };
   // a car picked up at an airport ("DENVER INTL ARPT (DEN)"): on the map at that airport
   const ap = !Number.isFinite(out.lat) && b.kind === "car" ? airport(/\(([A-Z]{3})\)/.exec(out.place ?? "")?.[1]) : null;
   if (ap) Object.assign(out, { lat: ap.lat, lon: ap.lon });
@@ -861,6 +866,7 @@ async function itemBody(f) {
     airline: flight ? e.airline.value : null, flight_number: flight ? e.flight_number.value : null, dep_airport: flight ? e.dep_airport.value : null, arr_airport: flight ? e.arr_airport.value : null,
     dep_terminal: flight ? e.dep_terminal.value : null, dep_gate: flight ? e.dep_gate.value : null, seat: flight ? e.seat.value : null,
     source: f.dataset.source || "typed", ...(f.dataset.sha ? { source_sha256: f.dataset.sha } : {}),
+    ...(e.card_last4 ? { card_last4: /^\d{4}$/.test(e.card_last4.value.trim()) ? e.card_last4.value.trim() : null, card_network: e.card_network.value || null } : {}),
   };
 }
 
@@ -1525,6 +1531,7 @@ app.addEventListener("click", async (ev) => {
         if (s.kind === "change") {
           const fresh = asItem(b, s.item.trip_id);
           const patch = Object.fromEntries(s.changes.map((k) => [k, fresh[k]]));
+          if (fresh.booked_on && !s.item.booked_on) patch.booked_on = fresh.booked_on;      // the day it was booked, when Kos didn't know it
           const { id, created_at, updated_at, ...keep } = s.item;
           await store.saveItem(s.item.id, { ...keep, ...patch });
           continue;
@@ -1557,7 +1564,12 @@ app.addEventListener("click", async (ev) => {
     if (at("[data-sug-add]") || at("[data-sug-dismiss]")) {
       const id = Number(route().parts[1]), ids = sugIds();
       if (!ids.length) return;
-      await store.link(id, at("[data-sug-add]") ? { confirm: ids } : { dismiss: ids });
+      if (at("[data-sug-add]")) {
+        // a booking's charge is linked to that booking; the rest to the trip
+        const byItem = new Map();
+        for (const el of app.querySelectorAll("[data-sug]:checked")) { const k = el.dataset.sugItem ?? ""; byItem.set(k, [...(byItem.get(k) ?? []), Number(el.dataset.sug)]); }
+        for (const [k, list] of byItem) await store.link(id, { confirm: list, ...(k ? { item_id: Number(k) } : {}) });
+      } else await store.link(id, { dismiss: ids });
       data = null; await load(); spending(tripById(id)); return;
     }
     if (at("[data-unlink]")) {
