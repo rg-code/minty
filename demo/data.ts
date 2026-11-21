@@ -455,7 +455,8 @@ export function generate(now = new Date(), owners: DemoOwners = { alex: "alex", 
                            price_cents: 248120, currency: "USD", dep_terminal: "I" });
   booking({ trip_id: tokyo, kind: "flight", name: "United", airline: "UA", flight_number: "838", dep_airport: "NRT", arr_airport: "SFO",
             start_at: at(tyo1, "16:55", "+09:00"), end_at: at(tyo1, "09:40", "-08:00"), confirmation: "H8TQWN", seat: "34K" });
-  booking({ trip_id: tokyo, kind: "lodging", name: "Hotel Kinokuni Shinjuku", place: "Nishi-Shinjuku, Tokyo", lat: 35.6909, lon: 139.6929, start_at: tyo0, end_at: addDays(tyo0, 4), confirmation: "KN-20931" });
+  booking({ trip_id: tokyo, kind: "lodging", name: "Hotel Kinokuni Shinjuku", place: "Nishi-Shinjuku, Tokyo", lat: 35.6909, lon: 139.6929, start_at: tyo0, end_at: addDays(tyo0, 4), confirmation: "KN-20931",
+    points: 20000, points_program: "hyatt" });                 // an award stay: BAM shows it pending (T4)
   booking({ trip_id: tokyo, kind: "lodging", name: "Ryokan Hanare", place: "Hakone, Kanagawa", lat: 35.2324, lon: 139.1069, start_at: addDays(tyo0, 4), end_at: tyo1 });
   booking({ trip_id: tokyo, kind: "restaurant", name: "Sushi Mitsuba", place: "Ginza, Tokyo", lat: 35.6717, lon: 139.7650, start_at: at(addDays(tyo0, 1), "19:30", "+09:00"), confirmation: "R-5512" });
   booking({ trip_id: tokyo, kind: "train", name: "Odakyu Romancecar", place: "Shinjuku to Hakone-Yumoto", lat: 35.6896, lon: 139.7006, start_at: at(addDays(tyo0, 4), "10:20", "+09:00") });

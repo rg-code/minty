@@ -146,7 +146,7 @@ Design history and decisions: `docs/serverless-plan.md`.
   (`src/points/programs.ts`, `CHECKED`); an expiry rule only where the program's terms are simple.
   `public/pdf-read.js` is the PDF reader and remembered folder shared by Bills and BAM: each view
   has its own "already added" and skipped lists for the same folder. `GET /points` reads each reading once, with no `ORDER BY` (D1 counts a sort as a second
-  read).
+  read). It also sends Kos's award bookings not in a reading yet (`pending`, T4): shown, never written.
 - EGG, retirement accounts (`docs/cfa.md` §3, §5.4): Plaid Investments, through a new
   Investments-only login (`items.products = 'investments'`, which the transaction sync skips) or
   update-mode consent on a bank already linked (like statement details). It's fetched only by a

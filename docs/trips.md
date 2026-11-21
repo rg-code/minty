@@ -242,6 +242,10 @@ person, and the cost per day. "Open in dashboard" sets `/?trip=<id>`.
 - **Spent:** an award booking's points and program (from the booking, or typed) show in BAM as a
   **pending change**, e.g. "−35,000 United MileagePlus (Tokyo trip)", against the latest reading,
   until a newer reading replaces it. Readings stay readings: nothing is written to `point_balances`.
+  **Built (T4, 2026-11-20):** a reading dated on or after the day the booking was added to Kos ends it;
+  the balance is the trip's one traveller's, or the only person's, else the household's. Kos names the
+  program on the booking ("90,000 Wyndham Rewards points") and its edit page says it's pending in BAM.
+  An email's points and program are read by `kos-parse.js` (`programIn`).
 - **Earned:** only when the booking says so ("you'll earn 2,140 miles"). Miles earned depend on
   fare and status, so they're never estimated.
 - **Transfers** between programs (e.g. card points to an airline) are out of scope for now.
@@ -343,7 +347,7 @@ well inside the 50 subrequests, and a big trip spreads over several runs.
 | **T2c Bills by email** | `+mintybills` messages read with `bill-parse.js` into suggested bills; PDF attachments kept until Bills reads them, then deleted (§2.3, option a); CLAUDE.md's Bills rule gets the exception | |
 | **T2b Forward to Minty** | The `email()` handler in Minty's Worker for a domain on Cloudflare, the allowed-login check, a Setup check | The owner's forwarding address |
 | **T3 Transactions** | Suggestions, confirm, totals, `/?trip=` in the dashboard | |
-| **T4 BAM** | Pending changes from award bookings | |
+| **T4 BAM** | Pending changes from award bookings (built 2026-11-20: docs/bam.md §3) | |
 | **T5 Immich** | Albums from the cron, the link on the trip | Secrets |
 | **T6a Map** | Minty's own SVG map: the world outline, airports, flight arcs and places with coordinates; "Open in Maps" links (§13) | |
 | **T6b Street map** | MapLibre (vendored) with OpenFreeMap's tiles, the trip page's policy gaining its host (§13, option 2) | |

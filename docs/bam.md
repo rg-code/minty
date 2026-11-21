@@ -107,6 +107,15 @@ A header button **BAM**, next to ABC (and EGG later), opens a popup like ABC and
     reading).
   - No Plaid, no cron, no new secret.
 - **Demo:** made-up balances across a few currencies, so the demo shows BAM.
+- **Kos's award bookings (T4, trips.md §7, built 2026-11-20):** `GET /points` also sends `pending`, each
+  Kos booking with points and a program (`trip_items.points`, `points_program`) that no reading
+  includes yet (`pendingChanges` in `src/routes/points.ts`, pure and tested). BAM shows them under the
+  currency, "Pending from Kos: 60,000 points after", with each booking.
+  - **Whose balance:** the trip's one traveller, or the only person in the household; otherwise the
+    household's, under the currency.
+  - **When it goes:** a reading of that program (that person's, when known) dated on or after the day the
+    booking was added to Kos. Readings stay readings: nothing is written to `point_balances`.
+  - **Reads:** `trip_items` once (a household's bookings), beside the readings.
 
 ## 4. Phases
 

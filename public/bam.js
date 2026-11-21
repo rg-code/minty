@@ -71,7 +71,8 @@
     for (const [kind, label] of KINDS) {
       // Currencies with a balance, and ones a linked card likely earns that have none yet.
       const programs = [...new Set([...list.filter(b => (b.kind ?? "other") === kind).map(b => b.program),
-                                    ...data.cards.map(c => c.program).filter(p => (prog(p)?.kind ?? "other") === kind)])]
+                                    ...data.cards.map(c => c.program).filter(p => (prog(p)?.kind ?? "other") === kind),
+                                    ...(data.pending ?? []).map(x => x.program).filter(p => (prog(p)?.kind ?? "other") === kind)])]
         .sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
       if (!programs.length) continue;
       html += `<h3>${label}</h3>`;
@@ -83,12 +84,31 @@
           <div class="bam-cur-head"><span class="bam-name">${esc(nameOf(p))}</span>${rows.length > 1 ? `<span class="bam-total">${num(total)} <small>${esc(unit)} in all</small></span>` : ""}</div>
           ${curNotes(p, unit)}` +
           (rows.length ? rows.map(rowHtml).join("") : `<div class="bam-row bam-none">No balance yet. <button type="button" class="bam-link" data-add-program="${esc(p)}">Add it</button></div>`) +
+          pendingHtml(p, rows, unit) +
           `</section>`;
       }
     }
     html += `<p class="bam-fine">BAM never signs in to a loyalty program and stores no logins: these are the balances you added, with the date each was correct. Statement PDFs are read on this device and never uploaded. Programs, expiry rules and which cards earn what are as on the programs' own sites, checked ${esc(data.checked)}; "likely earned by" is a guess from each card's name.</p>`;
     html += `<input type="file" id="bamPdfs" accept="application/pdf,.pdf" multiple hidden><input type="file" id="bamFolder" webkitdirectory multiple hidden>`;
     main.innerHTML = html;
+  }
+
+  /** Kos's award bookings in this currency not in a reading yet (docs/trips.md §7): each one, and what the
+   * balance would be after them. A person's go with their balance; the household's under the currency. */
+  function pendingHtml(p, rows, unit) {
+    const list = (data.pending ?? []).filter(x => x.program === p);
+    if (!list.length) return "";
+    const line = x => `<li><b>−${num(x.points)}</b> ${esc(unit)} · ${x.trip ? `${esc(x.trip)}: ` : ""}${esc(x.name || "a booking")}${x.start_at ? `, ${dayYear(x.start_at.slice(0, 10))}` : ""} <span class="bam-tip">(added in Kos ${dayYear(x.booked)})</span></li>`;
+    const owners = [...new Set(list.map(x => x.owner))];
+    return owners.map(o => {
+      const mine = list.filter(x => x.owner === o), spent = mine.reduce((s, x) => s + x.points, 0);
+      const bal = o === null ? (rows.length === 1 ? rows[0] : null) : rows.find(b => b.owner === o && !b.account_hint) ?? rows.find(b => b.owner === o);
+      const after = bal ? bal.balance - spent : null;
+      const label = users.length > 1 ? (o === null ? "the household" : esc(users.find(u => u.key === o)?.label ?? o)) : "";
+      return `<div class="bam-pending"><div class="bam-pending-head">Pending from Kos${label ? ` (${label})` : ""}${after !== null ? `: <b>${num(Math.max(0, after))}</b> ${esc(unit)} after${after < 0 ? " <span class=\"down\">(more than this balance)</span>" : ""}` : ""}</div>
+        <ul>${mine.map(line).join("")}</ul>
+        <div class="bam-tip">Award bookings in Kos. Each goes when you add a balance dated on or after it, since that balance already counts it.</div></div>`;
+    }).join("");
   }
 
   const prog = id => data.programs.find(p => p.id === id);
