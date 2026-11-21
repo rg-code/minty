@@ -8,6 +8,7 @@ import { MAX_TAGS_PER_TXN, MAX_TAG_LENGTH, normaliseTags } from "./data";
 import { markIfLeftOutTags } from "../audit/totals";
 import { reservations } from "../kos/reservations";
 import { locateItem } from "../geocode";
+import { flightsOn, lookUp } from "../flights";
 
 /** Kos, trips (docs/trips.md): trips, their bookings, and the transactions in them. The household
  * writes these; sync never does. The Kos app (public/kos/) is the page; the dashboard filters by a
@@ -181,6 +182,7 @@ export async function listTrips(env: Env): Promise<Response> {
       transactions: C.get(t.id)?.n ?? 0, spent_cents: C.get(t.id)?.cents ?? 0 })),
     unassigned: I.filter((i) => i.trip_id === null),
     left_out_tags: (off.results as { value: string }[]).map((r) => r.value),
+    flights_live: flightsOn(env),                       // live flight status and "Look up" are set up (src/flights.ts)
   });
 }
 
@@ -240,8 +242,12 @@ export async function saveItem(env: Env, request: Request, id?: number): Promise
   const keptLookup = old?.geo_source === "lookup" && f.lat === old.lat && f.lon === old.lon && f.lat !== null;
   if (keptLookup && moved) { f.lat = null; f.lon = null; }
   const geo = { geo_source: keptLookup && !moved ? "lookup" : null, geo_tried_at: old && !moved ? old.geo_tried_at ?? null : null };
-  const cols = [...ITEM_COLS, "geo_source", "geo_tried_at"] as const;
-  const v = [...ITEM_COLS.map((c) => f[c]), geo.geo_source, geo.geo_tried_at];
+  // a flight's live status (§32) belongs to its number, day and airports: a change to one starts it afresh
+  const sameLeg = old && ["airline", "flight_number", "dep_airport", "arr_airport"].every((k) => f[k as keyof typeof f] === old[k]) && String(f.start_at ?? "").slice(0, 10) === String(old.start_at ?? "").slice(0, 10);
+  const fs = sameLeg ? { flight_status: old.flight_status ?? null, status_checked_at: old.status_checked_at ?? null, status_next_at: old.status_next_at ?? null }
+                     : { flight_status: null, status_checked_at: null, status_next_at: null };
+  const cols = [...ITEM_COLS, "geo_source", "geo_tried_at", "flight_status", "status_checked_at", "status_next_at"] as const;
+  const v = [...ITEM_COLS.map((c) => f[c]), geo.geo_source, geo.geo_tried_at, fs.flight_status, fs.status_checked_at, fs.status_next_at];
   let saved: number;
   if (!old) {
     saved = (await env.DB.prepare(`INSERT INTO trip_items (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")}) RETURNING id`).bind(...v).first<{ id: number }>())!.id;
@@ -434,6 +440,29 @@ export async function linkTransactions(env: Env, request: Request, id: number): 
     if (changes(rs.slice(stmts.length))) await markIfLeftOutTags(env, tags);
   }
   return json({ id, confirmed: confirm.length, dismissed: dismiss.length, removed: remove.length });
+}
+
+// --- a flight by its number (docs/trips.md §32) -----------------------------------------------------------
+/** POST /trips/flight-lookup {airline, flight_number, date, dep_airport?}: its airports and local times from
+ * FlightAware, for the booking form. One call off the day's allowance (two more, once, for an airport's
+ * time zone months ahead). */
+export async function flightLookup(env: Env, request: Request): Promise<Response> {
+  if (!flightsOn(env)) throw new HttpError(404, "flight look-up isn't set up (FLIGHT_STATUS_KEY)");
+  const b = await body(request);
+  const airline = codeF("airline", /^[A-Z0-9]{2,3}$/, "an airline code, e.g. UA")(b.airline);
+  const number = codeF("flight_number", /^\d{1,4}[A-Z]?$/, "a flight number, e.g. 837")(b.flight_number);
+  const date = dateF("date")(b.date);
+  const dep = b.dep_airport ? codeF("dep_airport", /^[A-Z]{3}$/, "an airport code, e.g. SFO")(b.dep_airport) : null;
+  try {
+    const f = await lookUp(env, airline, number, date, dep);
+    if (!f) throw new HttpError(404, `FlightAware has no ${airline} ${number} on that day`);
+    return json(f);
+  } catch (e) {
+    if (e instanceof HttpError) throw e;
+    const why = e instanceof Error ? e.message : "";
+    throw new HttpError(503, why === "cap" ? "Today's flight look-ups are used up (FLIGHT_STATUS_CALLS_PER_DAY): try tomorrow, or type it in"
+      : "FlightAware didn't answer: try again in a minute, or type it in");
+  }
 }
 
 // --- the trip journal (docs/trips.md §20) ---------------------------------------------------------

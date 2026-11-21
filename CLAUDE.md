@@ -195,7 +195,9 @@ Design history and decisions: `docs/serverless-plan.md`.
   album), Immich's search pages unpacked by SQLite; thumbnails only through
   `GET /trips/{id}/photos/{asset}`, only for that trip's photos (security plan §9). Nothing runs without `IMMICH_URL`. Bookings' exact places (§31, `src/geocode.ts`):
   LocationIQ from the Worker only (`LOCATIONIQ_KEY`), on save and a quiet catch-up cron run; only a booking's name and
-  address go (security plan §10); typed coordinates are never replaced. Saving a booking without a place asks at once. Booking cards swipe (`public/kos/swipe.js`). A booking's charge (§28) is matched in SQL by the
+  address go (security plan §10); typed coordinates are never replaced. Saving a booking without a place asks at once. Live flight status and Look up (§32, `src/flights.ts`): FlightAware
+  AeroAPI from the Worker only (`FLIGHT_STATUS_KEY`), status from quiet cron runs on the plan's schedule, Look up when
+  tapped, `FLIGHT_STATUS_CALLS_PER_DAY` (50) for both; only a flight's number and date go (security plan §11). Booking cards swipe (`public/kos/swipe.js`). A booking's charge (§28) is matched in SQL by the
   card it was paid with (`trip_items.card_last4` against `accounts.mask`, network not a different one), else a word of
   its name at the price; never a payment or transfer.
 - ABC card credits (`docs/abc.md`): the benefit list is code (`src/benefits/catalog.ts`, with

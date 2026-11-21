@@ -22,5 +22,8 @@ TOKEN_ENC_KEY=
 # IMMICH_ACCESS_CLIENT_ID and IMMICH_ACCESS_CLIENT_SECRET. Not listed as lines, so the Deploy button
 # doesn't ask for them.
 
+# Optional, Kos's live flight status and flight look-up (docs/trips.md §32): FLIGHT_STATUS_KEY, a FlightAware
+# AeroAPI Personal key, used only by the Worker. Not listed as a line, so the Deploy button doesn't ask for it.
+
 # Optional, Kos bookings' exact places (docs/trips.md §31): LOCATIONIQ_KEY, a LocationIQ access token used
 # only by the Worker. Not listed as a line, so the Deploy button doesn't ask for it.

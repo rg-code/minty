@@ -425,3 +425,17 @@ first service it calls that the household runs itself, and the first photo it se
   or an IP, so the token stays a Worker secret only.
 - **Logs:** the request URL carries the key, so it's never logged: failed calls are caught without it, and the
   cron logs booking ids and outcomes only.
+
+## 11. Kos: live flight status and Look up from FlightAware (owner, 2026-11-21)
+
+- **What's sent:** a flight's airline and number with a date window, or FlightAware's own id for it, or an
+  airport's code (for its time zone). Never a person's name, a confirmation, a seat, a price or a card.
+- **From where:** Minty's Worker only (`src/flights.ts`) to `https://aeroapi.flightaware.com`, with the key in
+  the `x-apikey` header. No page calls FlightAware, so no Content-Security-Policy change; Kos on its own asks
+  nothing.
+- **The key:** `FLIGHT_STATUS_KEY`, a Worker secret (an AeroAPI Personal key: personal use, which a household
+  is). Never logged: the cron logs leg ids and states only.
+- **When:** the cron, for legs flying today or tomorrow and then on FlightAware's times; and Look up, when a person
+  taps it (rate-limited like every API call). At most `FLIGHT_STATUS_CALLS_PER_DAY` (default 50) a day in all, so
+  the key's free monthly use isn't overrun.
+- **Privacy:** FlightAware learns that the household's account looked up those flights. Nothing else.

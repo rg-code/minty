@@ -8,12 +8,13 @@ import { bankHealth, bankRows, syncHealth } from "../health";
 import { DEFAULT_READ_BUDGET, LIMITERS, readBudget, readsToday } from "../limits";
 import { tokenKeys } from "../token-key";
 import { IMMICH_PERMISSIONS, immichCheck } from "../immich";
+import { callsToday, flightsOn } from "../flights";
 
 /** GET /status: setup checks for the household, shown on the /add-user page. Behind Access like
  * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql", "0010_card_statements.sql", "0011_bills.sql", "0012_point_balances.sql", "0013_audit.sql", "0014_audit_views.sql", "0015_investments.sql", "0016_statement_marks.sql", "0017_account_names.sql", "0018_statement_estimated.sql", "0019_analytics_exclusions.sql", "0020_txn_category_index.sql", "0021_authorized_date.sql", "0022_benefit_credit_periods.sql", "0023_manual_accounts.sql", "0024_sub.sql", "0025_jet.sql", "0026_trip_tags.sql", "0027_trip_journal.sql", "0028_trip_codes.sql", "0029_trip_photos.sql", "0030_trip_item_card.sql", "0031_trip_item_geo.sql", "0032_trip_item_geo_redo.sql"];
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql", "0010_card_statements.sql", "0011_bills.sql", "0012_point_balances.sql", "0013_audit.sql", "0014_audit_views.sql", "0015_investments.sql", "0016_statement_marks.sql", "0017_account_names.sql", "0018_statement_estimated.sql", "0019_analytics_exclusions.sql", "0020_txn_category_index.sql", "0021_authorized_date.sql", "0022_benefit_credit_periods.sql", "0023_manual_accounts.sql", "0024_sub.sql", "0025_jet.sql", "0026_trip_tags.sql", "0027_trip_journal.sql", "0028_trip_codes.sql", "0029_trip_photos.sql", "0030_trip_item_card.sql", "0031_trip_item_geo.sql", "0032_trip_item_geo_redo.sql", "0033_flight_status.sql"];
 
 interface Check { id: string; ok: boolean; level: "error" | "warn"; message: string; fix?: string }
 
@@ -263,6 +264,12 @@ export async function status(env: Env, config: Config, email: string): Promise<R
   }
   if (sync) add({ id: "sync", level: "warn", ...sync });
 
+  // Kos: live flight status (docs/trips.md §32), only when the key is set; this page never calls FlightAware
+  if (env.FLIGHT_STATUS_KEY) {
+    const on = flightsOn(env), used = on ? await callsToday(env) : 0;
+    checks.push(on ? { id: "flights", ok: true, level: "warn", message: `Kos asks FlightAware for live flight status and look-ups: ${used} of today's ${env.FLIGHT_STATUS_CALLS_PER_DAY?.trim() || 50} calls used.` }
+      : { id: "flights", ok: false, level: "warn", message: `FLIGHT_STATUS_PROVIDER "${env.FLIGHT_STATUS_PROVIDER}" isn't one Kos knows, so flight status is off.`, fix: "Set FLIGHT_STATUS_PROVIDER to aeroapi, or delete it (aeroapi is the default)." });
+  }
   // Kos: exact places (docs/trips.md §31), only when the key is set; this page never calls LocationIQ
   if (env.LOCATIONIQ_KEY) checks.push({ id: "locationiq", ok: true, level: "warn", message: "Kos looks up bookings' exact places with LocationIQ (a few each quiet sync run, and each booking saved without one)." });
   // Kos K2 (docs/trips.md §25): only when Immich is set up. The cron checks the key once a day; this

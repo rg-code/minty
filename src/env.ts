@@ -46,6 +46,12 @@ export interface Env {
   IMMICH_ACCESS_CLIENT_SECRET?: string;
   /** Secret: a LocationIQ access token (src/geocode.ts), for Kos bookings' exact places. Unset: no lookups. */
   LOCATIONIQ_KEY?: string;
+  /** Kos live flight status and flight look-up (src/flights.ts): "aeroapi" (the default; the only one yet). */
+  FLIGHT_STATUS_PROVIDER?: string;
+  /** Secret: the provider's key (a FlightAware AeroAPI Personal key). Unset: no flight status or look-up. */
+  FLIGHT_STATUS_KEY?: string;
+  /** Calls to the provider a UTC day at most, the cron's and the look-ups' together. Default 50. */
+  FLIGHT_STATUS_CALLS_PER_DAY?: string;
 
   [key: string]: unknown;
 }
