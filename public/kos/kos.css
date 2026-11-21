@@ -420,8 +420,21 @@ a.photo-credit:hover { color: #fff; text-decoration: underline; }
 .auto-note { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; border-color: var(--accent); }
 .fit-note { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0; border-color: var(--accent); }
 
-/* the header's Check Gmail (a magnifier), in the accent colour; it turns while checking */
-.icon-btn.mail-check { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline)); }
-.icon-btn.mail-check.busy svg { animation: kos-spin 1s linear infinite; }
-@keyframes kos-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .icon-btn.mail-check.busy svg { animation: none; opacity: .5; } }
+/* the header's Check Gmail: a lighthouse (Kos's harbour light), in the accent colour; its beams flash
+   while it checks */
+.icon-btn.mail-check { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline)); width: auto; display: inline-flex; align-items: center;
+  gap: 6px; padding: 0 8px 0 12px; font-family: inherit; font-size: 13px; font-weight: 650; line-height: 1; white-space: nowrap; }
+@media (max-width: 480px) { .mail-check-more { display: none; } }              /* a phone: "Check Gmail" */
+/* a narrow phone on a Minty (four buttons): a tighter button, and the logo without the word */
+@media (max-width: 400px) {
+  .icon-btn.mail-check { gap: 4px; padding: 0 6px 0 10px; font-size: 12.5px; }
+  .icon-btn.mail-check svg { width: 22px; height: 22px; }
+  .bar:has(#mintyLink:not([hidden])) .brand span { display: none; }
+}
+@media (max-width: 340px) { .icon-btn.mail-check { width: 38px; padding: 0; justify-content: center; } .mail-check-text { display: none; } }
+.icon-btn.mail-check svg { flex: none; width: 24px; height: 24px; stroke-width: 1.6; }
+.icon-btn.mail-check .kos-beam { fill: currentColor; stroke: none; opacity: .28; }
+.icon-btn.mail-check .kos-lamp { fill: currentColor; stroke: none; opacity: .55; }
+.icon-btn.mail-check.busy .kos-beam, .icon-btn.mail-check.busy .kos-lamp { animation: kos-beam 1s ease-in-out infinite; }
+@keyframes kos-beam { 50% { opacity: .05; } }
+@media (prefers-reduced-motion: reduce) { .icon-btn.mail-check.busy .kos-beam { animation: none; opacity: .4; } }
