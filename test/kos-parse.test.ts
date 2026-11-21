@@ -101,6 +101,36 @@ Issue date: Jan 5, 2027`;
       ["SFO", "ORD", "2027-03-11T07:00", "2027-03-11T08:30", "QZ7XKM"], ["ORD", "BOS", "2027-03-11T10:00", "2027-03-11T13:15", "QZ7XKM"]]);
   });
 
+  it("an eTicket that lays each leg out as a block, with a receipt's repeats after it (made-up copy)", () => {
+    const t = `---------- Forwarded message ---------
+From: Example Airlines <receipts@example.com>
+Date: Mon, Feb 1, 2027 at 9:12 PM
+Subject: eTicket Itinerary and Receipt for Confirmation QZ7XKM
+To: <someone@example.com>
+
+
+Example Airlines    Tue, Feb 2, 2027
+Thank you for choosing Example.
+Confirmation Number:
+QZ7XKM
+Flight 1 of 2 UA1234        Class: Economy (N)
+Mon, Apr 5, 2027        Mon, Apr 5, 2027
+06:00 AM        08:15 AM
+Denver, CO, US (DEN)        Chicago, IL, US (ORD)
+Flight 2 of 2 UA567        Class: Economy (N)
+Mon, Apr 5, 2027        Mon, Apr 5, 2027
+09:30 AM        12:40 PM
+Chicago, IL, US (ORD)        Boston, MA, US (BOS)
+Traveler Details
+Fare breakdown
+DEN-ORD-BOS  Feb 2, 2027
+DEN-ORD
+ORD-BOS`;
+    expect(parseBookings(t, { year: 2027 }).bookings.map((b) => [b.airline, b.flight_number, b.dep_airport, b.arr_airport, b.start_at, b.end_at, b.confirmation])).toEqual([
+      ["UA", "1234", "DEN", "ORD", "2027-04-05T06:00", "2027-04-05T08:15", "QZ7XKM"],
+      ["UA", "567", "ORD", "BOS", "2027-04-05T09:30", "2027-04-05T12:40", "QZ7XKM"]]);
+  });
+
   it("an itinerary's 26NOV dates", () => {
     expect(dates("DEPART 11MAR SFO, RETURN 15MAR27 BOS", 2027).map((d) => d.date)).toEqual(["2027-03-11", "2027-03-15"]);
   });
