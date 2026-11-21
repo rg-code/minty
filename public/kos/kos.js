@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, shiftSample, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
+import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, planTrips, shiftSample, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 import { parseWhere } from "./where.js";
@@ -111,7 +111,7 @@ function home() {
   const ready = data.trips.filter((t) => t.end_date < today && t.end_date >= recent
     && (MODE === "device" ? !seenHere.includes(t.id) : t.journal_ready_at && !t.journal_seen_at)).slice(0, 2);
   const ownTrips = data.trips.filter((t) => !(sample?.trips ?? []).includes(t.id));
-  return `${billsBanner()}${backupReminder(ownTrips.length ? ownTrips : null)}${ready.map((t) => `<a class="card j-ready" href="#/trip/${t.id}/journal"><span class="grow"><b>Your ${esc(t.name)} journal is ready.</b> <span class="muted">Its days, its map and room for your notes.</span></span><span class="btn small primary">Open</span></a>`).join("")}
+  return `${autoBanner()}${billsBanner()}${backupReminder(ownTrips.length ? ownTrips : null)}${ready.map((t) => `<a class="card j-ready" href="#/trip/${t.id}/journal"><span class="grow"><b>Your ${esc(t.name)} journal is ready.</b> <span class="muted">Its days, its map and room for your notes.</span></span><span class="btn small primary">Open</span></a>`).join("")}
     ${sample ? `<div class="card sample-note"><span class="grow"><b>Sample trips.</b> Made up, to show what Kos does: open one, look at its flights and map, change anything. They're only in this browser.
       Start your own with <a href="#/new">New trip</a> or <a href="#/add">Add a booking</a>.</span><button type="button" class="btn small" data-sample-remove>Remove them</button></div>` : ""}
     ${flights.length ? `<div class="section-title"><h2>Next flight</h2><span class="muted">${flights.length > 1 ? `${flights.length - 1} more after it` : ""}</span></div>
@@ -695,16 +695,19 @@ async function tagPicker() {
   box.innerHTML = list.map((g) => `<button type="button" class="pill ${leftOutTag(g) ? "warn" : "dim"}" data-add-tag="${esc(g)}">+ ${esc(g)}${leftOutTag(g) ? " · left out" : ""}</button>`).join("");
 }
 const splitTags = (v) => [...new Map(String(v ?? "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => [x.toLowerCase(), x])).values()];
-function tripForm(t, picked = []) {
+function tripForm(t, picked = [], pre = null) {
+  const v = t ?? pre;                                   // a new trip from ticked bookings starts filled in
+  const going = pre ? picked.map((id) => data.unassigned.find((i) => i.id === Number(id))).filter(Boolean) : [];
   return `<div class="section-title"><h2>${t ? "Edit trip" : "New trip"}</h2></div>
-    ${t ? "" : `<div class="card shared-paste"><b>Someone shared a trip?</b> <span class="muted">Paste its Kos link and the whole trip comes in, bookings and all.</span>
+    ${going.length ? `<div class="card"><b>Going in this trip:</b> <span class="muted">${going.map((i) => `${esc(itemTitle(i))} (${esc(fmtDay(dateOf(i.start_at)) || "no date")})`).join(" · ")}</span></div>` : ""}
+    ${t || picked.length ? "" : `<div class="card shared-paste"><b>Someone shared a trip?</b> <span class="muted">Paste its Kos link and the whole trip comes in, bookings and all.</span>
       <div class="shared-row"><input id="sharedPaste" autocomplete="off" placeholder="https://minty.milesmaximizer.com/kos/#2.…" />
         <button type="button" class="btn" data-paste-shared data-goatcounter-click="kos-new-trip-paste-link">Look at it</button></div><span class="err"></span></div>`}
     <form class="card" id="tripForm" data-id="${t?.id ?? ""}" data-items="${picked.join(",")}"><div class="form">
-      <label class="wide">Name<input name="name" required maxlength="100" value="${esc(t?.name ?? "")}" placeholder="Tokyo, spring 2027" /></label>
-      <label>First day<input name="start_date" type="date" required value="${esc(t?.start_date ?? "")}" /></label>
-      <label>Last day<input name="end_date" type="date" required value="${esc(t?.end_date ?? "")}" /></label>
-      <label class="wide">Where<input name="place" maxlength="150" value="${esc(t?.place ?? "")}" placeholder="Tokyo, Japan" /></label>
+      <label class="wide">Name<input name="name" required maxlength="100" value="${esc(v?.name ?? "")}" placeholder="Tokyo, spring 2027" /></label>
+      <label>First day<input name="start_date" type="date" required value="${esc(v?.start_date ?? "")}" /></label>
+      <label>Last day<input name="end_date" type="date" required value="${esc(v?.end_date ?? "")}" /></label>
+      <label class="wide">Where<input name="place" maxlength="150" value="${esc(v?.place ?? "")}" placeholder="Tokyo, Japan" /></label>
       ${users.length ? `<div class="wide"><div class="muted" style="font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Who's going</div>${users.map((u) => `<label class="check"><input type="checkbox" name="trav" value="${esc(u.key)}"${(t?.travellers ?? users.map((x) => x.key)).includes(u.key) ? " checked" : ""} /> ${esc(u.label)}</label>`).join("")}</div>` : ""}
       ${store.spending ? `<div class="wide"><label>Tags<input name="tags" maxlength="400" value="${esc((t?.tags ?? []).join(", "))}" placeholder="reimbursed, work" autocomplete="off" /></label>
         <p class="muted" style="margin:6px 0 0;font-size:13px">The trip's transactions get these tags too, and new ones as you add them. A tag CFA leaves out of the numbers (like “reimbursed”) leaves the trip's spending out of CFA and the dashboard's totals. Taking a tag off takes it off what the trip tagged; a tag you added yourself stays.</p>
@@ -962,6 +965,48 @@ async function drawQr(el, text) {
   } catch { el.hidden = true; }
 }
 
+// --- waiting bookings pooled into trips by Kos (docs/trips.md §26): into a trip whose dates they fall in,
+// else into new trips grouped by date (planTrips). Kos says so, with Undo; undone bookings wait, and aren't
+// pooled again on this device. Undated bookings and the sample's wait too.
+const AUTO_SKIP = "kos-auto-skip";
+let lastAuto = null, autoRunning = false;
+const autoSkip = () => { try { return new Set(JSON.parse(localStorage.getItem(AUTO_SKIP) ?? "[]")); } catch { return new Set(); } };
+async function autoTrips() {
+  if (autoRunning || !data?.unassigned?.length) return;
+  const skip = autoSkip(), sample = new Set(sampleIds()?.items ?? []);
+  const waiting = data.unassigned.filter((i) => dateOf(i.start_at) && !skip.has(i.id) && !sample.has(i.id));
+  if (!waiting.length) return;
+  autoRunning = true;
+  const done = { made: [], moved: [] };
+  try {
+    const plan = planTrips(waiting, data.trips, airports);
+    for (const g of plan.into) {
+      for (const id of g.items) { const i = waiting.find((x) => x.id === id); await store.saveItem(id, { ...i, trip_id: g.trip_id }); done.moved.push({ id, trip_id: g.trip_id, item: i }); }
+    }
+    for (const g of plan.make) {
+      const { items, ...trip } = g;
+      const r = await store.saveTrip(null, { ...trip, notes: "", travellers: users.map((u) => u.key), items });
+      done.made.push({ id: r.id, name: trip.name, start_date: trip.start_date, end_date: trip.end_date, items });
+    }
+  } catch (e) { console.warn("Kos couldn't pool bookings into trips:", e.message); }
+  finally { autoRunning = false; }
+  if (!done.made.length && !done.moved.length) return;
+  lastAuto = done;
+  data = null;
+  if (!route().parts.length) await render();
+}
+function autoBanner() {
+  const a = lastAuto;
+  if (!a) return "";
+  const n = a.made.reduce((s, t) => s + t.items.length, 0) + a.moved.length;
+  const span = (t) => `${fmtDay(t.start_date)}${t.end_date !== t.start_date ? ` – ${fmtDay(t.end_date)}` : ""}`;
+  const made = a.made.map((t) => `<a href="#/trip/${t.id}">${esc(t.name)}</a> <span class="muted">(${esc(span(t))})</span>`);
+  const into = [...new Set(a.moved.map((m) => m.trip_id))].map((id) => tripById(id)).filter(Boolean).map((t) => `<a href="#/trip/${t.id}">${esc(t.name)}</a>`);
+  return `<div class="card auto-note" id="autoNote"><span class="grow"><b>Kos put ${n} waiting booking${n === 1 ? "" : "s"} in ${a.made.length ? `${a.made.length === 1 ? "a new trip" : `${a.made.length} new trips`}` : "your trips"}</b>:
+    ${[...made, ...(into.length ? [`${a.made.length ? "and " : ""}${into.join(", ")}`] : [])].join(", ")}. <span class="muted">Rename or change a trip with Edit.</span></span>
+    <button type="button" class="btn small" data-auto-undo>Undo</button><button type="button" class="btn small ghost" data-auto-ok>OK</button></div>`;
+}
+
 // --- Bills by email (docs/bills.md), on a Minty: Kos reads the bills forwarded to +bills (the Gmail
 // script's Bills view, label Bills) on this device, as Bills reads PDFs (pdf.js, bill-parse.js), and
 // adds the complete ones to Minty's Bills through its API; only their fields and a SHA-256 leave. Kos
@@ -1180,7 +1225,14 @@ async function render() {
     if (!t || !/^\d{4}-\d{2}-\d{2}$/.test(q.get("day") ?? "")) { location.hash = "#/"; return; }
     app.innerHTML = placeView(t, q.get("day")); app.querySelector("[name=where]").focus(); return;
   }
-  if (parts[0] === "new") { app.innerHTML = tripForm(null, (q.get("items") ?? "").split(",").filter(Boolean)); tagPicker(); return; }
+  if (parts[0] === "new") {
+    const picked = (q.get("items") ?? "").split(",").filter(Boolean);
+    // ticked bookings: the trip they make, named and dated as Kos would (planTrips), as one trip
+    const items = picked.map((id) => data.unassigned.find((i) => i.id === Number(id))).filter(Boolean);
+    const groups = items.length ? planTrips(items, [], airports).make : [];
+    const pre = groups.length ? { ...groups[0], start_date: groups.map((g) => g.start_date).sort()[0], end_date: groups.map((g) => g.end_date).sort().at(-1) } : null;
+    app.innerHTML = tripForm(null, picked, pre); tagPicker(); return;
+  }
   if (parts[0] === "data") { app.innerHTML = dataView(); return; }
   if (parts[0] === "bills" && store.bills) { app.innerHTML = billsView(); if (gmail.config() && !lastBills) checkBills(false); return; }
   if (parts[0] === "gmail") {
@@ -1226,6 +1278,7 @@ async function render() {
   app.innerHTML = home();
   applyPhotos();
   if (store.bills && gmail.config()) quietBills();               // Bills by email: at most every 30 minutes
+  autoTrips();                                                   // waiting bookings into trips (docs/trips.md §26)
   if (document.getElementById("backupNote")) setTimeout(() => { const n = document.getElementById("backupNote"); if (n) { n.classList.add("leaving"); setTimeout(() => n.remove(), 400); lsSet(SNOOZE, Date.now() + 3 * 864e5); } }, 15000);
   setupTabs();
   lockOffer();
@@ -1259,6 +1312,18 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-auto-ok]")) { lastAuto = null; document.getElementById("autoNote")?.remove(); return; }
+    if (at("[data-auto-undo]")) {
+      const a = lastAuto; lastAuto = null;
+      try {
+        for (const t of a.made) await store.deleteTrip(t.id);                 // its bookings wait again
+        for (const m of a.moved) await store.saveItem(m.id, { ...m.item, trip_id: null });
+        const skip = autoSkip();
+        for (const id of [...a.made.flatMap((t) => t.items), ...a.moved.map((m) => m.id)]) skip.add(id);
+        lsSet(AUTO_SKIP, JSON.stringify([...skip].slice(-500)));
+      } catch (e2) { alert(e2.message); }
+      data = null; await render(); return;
+    }
     if (at("[data-bills-check]")) { lastBills = null; await checkBills(false); return; }
     if (at("[data-bill-undo]")) {
       const id = Number(at("[data-bill-undo]").dataset.billUndo);

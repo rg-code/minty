@@ -1063,3 +1063,23 @@ journal shows a few of each day's photos. Kos on its own has no server, so no Im
 **Reads:** `GET /trips/{id}/photos` reads the trip by its key and the picks by `(trip, pick)` (budget in
 `test/reads.test.ts`); a thumbnail reads one row by the primary key.
 
+## 26. Kos pools waiting bookings into trips (owner, 2026-11-20)
+
+"The idea was for Kos to figure out and pool bookings towards a trip that it automatically creates."
+When the trip list opens with bookings waiting for a trip, Kos files them by itself (`planTrips` in
+`store.js`, pure and tested):
+- **Into a trip they fall in:** a booking whose date is inside one existing trip (or the day before it
+  starts) goes in it, as `tripFor` decides for a new booking (§21.1).
+- **Else new trips, grouped by date:** sorted by start; a booking within 2 days of a group's end joins
+  it. A group that starts with a flight stays open, up to 30 days, until a flight lands back where it
+  left from, so the flight home belongs to the trip.
+- **Each new trip:** named for where it goes (its stay's town from the address, else the city the
+  first day's flights end in, from airports.json, else the stay's name), with its place and the
+  bookings' first to last day, and every person as a traveller.
+- **Kos says so:** "Kos put 3 waiting bookings in 2 new trips: …", with links, **Undo** and OK. Undo
+  deletes the new trips (their bookings wait again) and takes the moved ones back out; those bookings
+  aren't pooled again on this device (`kos-auto-skip`). Undated bookings, and the sample's, wait, and so
+  does a group with no travel in it (no flight, stay, train, bus or car): a dinner isn't a trip.
+- **By hand still works:** "Make a trip from the ticked ones" opens the trip form filled in the same
+  way (name, dates, place), listing the bookings going in.
+
