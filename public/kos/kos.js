@@ -733,7 +733,7 @@ function itemForm(i, tripId) {
   const v = (k) => esc(i?.[k] ?? "");
   const kind = i?.kind ?? "flight";
   const trips = data.trips.filter((t) => t.end_date >= addDays(localDay(), -365));
-  return `<form class="card" id="itemForm" data-id="${i?.id ?? ""}" data-source="${esc(i?.source ?? "typed")}" data-sha="${esc(i?.source_sha256 ?? "")}" data-lat="${i?.lat ?? ""}" data-lon="${i?.lon ?? ""}"
+  return `<form class="card" id="itemForm" data-id="${i?.id ?? ""}" data-source="${esc(i?.source ?? "typed")}" data-sha="${esc(i?.source_sha256 ?? "")}" data-booked="${esc(i?.booked_on ?? "")}" data-lat="${i?.lat ?? ""}" data-lon="${i?.lon ?? ""}"
       data-start-off="${esc(offsetOf(i?.start_at))}" data-end-off="${esc(offsetOf(i?.end_at))}"><div class="form">
     <label>Kind<select name="kind">${Object.entries(KIND).map(([k, l]) => `<option value="${k}"${kind === k ? " selected" : ""}>${l}</option>`).join("")}</select></label>
     <label>Trip<select name="trip_id"><option value="">No trip yet</option>${trips.map((t) => `<option value="${t.id}"${(i?.trip_id ?? tripId) === t.id ? " selected" : ""}>${esc(t.name)}</option>`).join("")}</select></label>
@@ -865,7 +865,7 @@ async function itemBody(f) {
     notes: e.notes.value, lat: Number.isFinite(lat) ? lat : null, lon: Number.isFinite(lon) ? lon : null,
     airline: flight ? e.airline.value : null, flight_number: flight ? e.flight_number.value : null, dep_airport: flight ? e.dep_airport.value : null, arr_airport: flight ? e.arr_airport.value : null,
     dep_terminal: flight ? e.dep_terminal.value : null, dep_gate: flight ? e.dep_gate.value : null, seat: flight ? e.seat.value : null,
-    source: f.dataset.source || "typed", ...(f.dataset.sha ? { source_sha256: f.dataset.sha } : {}),
+    source: f.dataset.source || "typed", ...(f.dataset.sha ? { source_sha256: f.dataset.sha } : {}), ...(f.dataset.booked ? { booked_on: f.dataset.booked } : {}),
     ...(e.card_last4 ? { card_last4: /^\d{4}$/.test(e.card_last4.value.trim()) ? e.card_last4.value.trim() : null, card_network: e.card_network.value || null } : {}),
   };
 }
@@ -1514,7 +1514,8 @@ app.addEventListener("click", async (ev) => {
     }
     if (at("[data-use]")) {
       const b = found[Number(at("[data-use]").dataset.use)], tripId = b.tripId ?? (Number(app.querySelector("[name=trip_id]")?.value) || tripGuess(b));
-      draft = { ...asItem(b, tripId), source: foundFrom === "paste" ? "paste" : foundFrom, source_sha256: b.sha256 ?? null };
+      // a booking from Gmail is an email's ("gmail" isn't a source Minty takes: it refused the form)
+      draft = { ...asItem(b, tripId), source: foundFrom === "gmail" ? "email" : foundFrom === "paste" ? "paste" : foundFrom, source_sha256: b.sha256 ?? null };
       document.getElementById("formBox").innerHTML = itemForm(draft, tripId);
       loadPrograms();
       document.getElementById("formBox").scrollIntoView({ behavior: "smooth" });

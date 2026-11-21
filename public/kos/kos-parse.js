@@ -567,7 +567,8 @@ const W = "['ʻ‘’]?[A-ZÀ-Ý][\\wÀ-ÿ'ʻ’&.-]*";
  * line naming a hotel, an inn, a resort… */
 function stayName(text, subject) {
   const lab = valueAfter(text, /\b(?:hotel|property|accommodation|listing|hotel name|your hotel|place to stay)\b\s*:|\b(?:your stay at|staying at|you're staying at|your reservation at|your booking at)\b\s*:?/i);
-  if (lab && lab.length <= 80 && !dates(lab).length) return lab;
+  // "Due at Property: $0.00" is money, not the hotel's name
+  if (lab && lab.length <= 80 && !dates(lab).length && /[A-Za-zÀ-ÿ]{3}/.test(lab) && !/[$€£¥]|\b(?:USD|EUR|GBP|JPY)\b|^\W*\d[\d.,\s]*$/.test(lab)) return lab;
   const s = /\b(?:at|for|to|:)\s+([^|·:]{3,80}?)(?:\s+(?:is|has been)\s+confirmed|\s+[-–|·]|\s+on\s|\s+from\s|\s+for\s|\s*\(|$)/i.exec(String(subject).replace(/^(?:fwd?|fw|re):\s*/i, ""));
   if (s && /[A-Z]/.test(s[1]) && !/\b(reservation|booking|trip|confirmation|stay|order)\b/i.test(s[1]) && !dates(s[1]).length && !/\d{4,}/.test(s[1])) return s[1].trim();
   for (const m of text.matchAll(new RegExp(`(${W}(?: ${W}){0,5} (?:Hotel|Inn|Resort|Suites|Hostel|Ostello|Ryokan|Lodge|Villas|Apartments?|Residences?|B&B|Guesthouse|Penzion|Pension)(?: ${W}){0,4}|(?:Hotel|The|Club|Casa|Ostello|Penzion|Hostal|Albergo|Hyatt|Hilton|Marriott|Sheraton|Westin|Andaz|Park Hyatt|Crowne Plaza|Holiday Inn|Hampton Inn|Best Western|Courtyard|Fairfield|Residence Inn|InterContinental|Kimpton) ${W}(?: ${W}){0,5})`, "g"))) {
