@@ -1086,6 +1086,18 @@ When the trip list opens with bookings waiting for a trip, Kos files them by its
   does a group with no travel in it (no flight, stay, train, bus or car): a dinner isn't a trip.
 - **By hand still works:** "Make a trip from the ticked ones" opens the trip form filled in the same
   way (name, dates, place), listing the bookings going in.
+- **A trip's dates follow its bookings** (owner, 2026-11-21): a trip made from the first emails can end
+  before a booking added later. Then the trip page says "1 booking is outside this trip's dates" with
+  **Update the dates to …** (`tripSpan` in `store.js`): the earliest start to the latest end of its
+  bookings, never narrower than the trip already is (planned free days stay).
+- **Read again** (a booking deleted by mistake): Kos skips emails it read before, so a deleted booking
+  wouldn't come back by itself. "Deleted one? Read again" on the Gmail tab asks the script without the
+  skip list and offers only the bookings no longer in Kos: matched by the email's SHA-256 with the
+  booking's kind, day and airport, or by confirmation, kind and day for one typed in. (Forwarding the
+  email again also works: it's a new email.)
+- **Check Gmail from anywhere:** a magnifier in Kos's header opens Add booking with Gmail's results (on a
+  trip, for that trip), turning while it checks; on a Minty it checks for bills too. Before Gmail is set
+  up, it opens the set-up page. The demo has none.
 - **A connection is one booking** (`journeys` in `store.js`): flights with the same confirmation, each
   leaving within a day of the last landing, show and count as one ("UA 100 · SFO → ORD → BOS, 1
   connection") in the waiting list, the found-bookings count and Kos's note. Each leg stays its own item

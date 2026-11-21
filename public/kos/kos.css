@@ -416,3 +416,10 @@ a.photo-credit:hover { color: #fff; text-decoration: underline; }
 /* Bills from Gmail (docs/bills.md): each bill's email or PDF under it */
 .bill-src { display: block; font-size: 13px; }
 .auto-note { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; border-color: var(--accent); }
+.fit-note { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 12px 0; border-color: var(--accent); }
+
+/* the header's Check Gmail (a magnifier), in the accent colour; it turns while checking */
+.icon-btn.mail-check { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--hairline)); }
+.icon-btn.mail-check.busy svg { animation: kos-spin 1s linear infinite; }
+@keyframes kos-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .icon-btn.mail-check.busy svg { animation: none; opacity: .5; } }
