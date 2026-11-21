@@ -121,6 +121,7 @@ const editKos = (file, what, from, to, count = 1) => {
 editKos("index.html", "title", "<title>Kos</title>", "<title>Kos demo</title>");
 editKos("index.html", "demo script first", /^<head>$/m, `<head>\n<meta name="robots" content="noindex" />\n<script src="../demo.js"></script>`);
 editKos("index.html", "no manifest", /<link rel="manifest"[^>]*>\n/, "");
+editKos("index.html", "no Gmail button (the demo has no Gmail)", /\n\s*<button type="button" class="icon-btn mail-check" id="gmailBtn"[^\n]*<\/button>/, "");
 editKos("index.html", "no device lock", '<link rel="stylesheet" href="/lock.css" />\n<script src="/lock.js"></script>\n', "");
 editKos("index.html", "the map library from the demo", /"\/vendor\/maplibre\//g, '"../vendor/maplibre/', 2);
 editKos("index.html", "Kos's own files, relative", /"\/kos\//g, '"', "some");

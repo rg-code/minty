@@ -6,7 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports } from "./map.js";
-import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, journeys, planTrips, shiftSample, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
+import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, journeys, planTrips, shiftSample, tripSpan, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 import { parseWhere } from "./where.js";
@@ -307,6 +307,9 @@ function tripView(t, tab) {
       <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div>
       ${t.travellers.length ? `<div class="avatars">${t.travellers.map((k) => `<span title="${esc(label(k))}">${esc(label(k).slice(0, 1).toUpperCase())}</span>`).join("")}</div>` : ""}
       ${tagChips(tripTags(t))}</div></section>
+    ${(() => { const s = tripSpan(t); return s.outside ? `<div class="card fit-note"><span class="grow"><b>${s.outside} booking${s.outside === 1 ? " is" : "s are"} outside this trip's dates.</b>
+      <span class="muted">Bookings added later can run past the days Kos first gave the trip.</span></span>
+      <button type="button" class="btn small primary" data-fit-trip="${t.id}" data-goatcounter-click="kos-fit-trip">Update the dates to ${esc(fmtDay(s.start_date))} – ${esc(fmtDay(s.end_date))}</button></div>` : ""; })()}
     ${summaryHtml(t)}
     <div class="trip"><div class="plan">
       <div class="tabs"><div class="seg" role="group">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${(tab || "") === k}">${l}</button>`).join("")}</div></div>
@@ -1276,6 +1279,8 @@ async function render() {
     const tid = scan?.trip ?? tripId;
     if (scan?.text !== undefined) source = "shot";
     if (q.get("shared") !== null) source = "type";
+    const pullNow = q.get("pull") !== null;                       // the header's Check Gmail button
+    if (pullNow) { source = "gmail"; history.replaceState(null, "", tid ? `#/add?trip=${tid}` : "#/add"); }
     if (KIND[q.get("kind")]) { draft = { ...(draft ?? {}), kind: q.get("kind") }; source = "type"; }   // from the trip's summary strip
     app.innerHTML = addView(tid, source);
     loadPrograms();
@@ -1283,6 +1288,13 @@ async function render() {
     if (q.get("shared") === "1") await readShared();
     if (q.get("shared") === "0") document.getElementById("suggestBox").innerHTML = `<div class="suggest err">The shared file couldn't be kept on this device.</div>`;
     const box = document.getElementById("suggestBox"), plain = !scan?.text && q.get("shared") === null;
+    if (pullNow && gmail.config()) {
+      const btn = document.getElementById("gmailBtn");
+      btn?.classList.add("busy");
+      try { await gmailPull(box); } catch (e) { box.innerHTML = `<div class="suggest err">${esc(e.message)}</div>`; }
+      finally { btn?.classList.remove("busy"); }
+      return;
+    }
     if (tabSwitch) { if (foundFrom === "gmail" && found.length && plain) box.innerHTML = suggestionsHtml(found, "gmail"); }   // kept across the tabs
     // opening the page: Gmail is checked by itself
     else if (gmail.config() && plain) { if (foundFrom === "gmail") found = []; gmailPull(box, true).catch(() => { /* quiet: "Check Gmail" says why */ }); }
@@ -1325,6 +1337,15 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-fit-trip]")) {                                  // a trip's dates widened to its bookings (tripSpan)
+      const t = tripById(Number(at("[data-fit-trip]").dataset.fitTrip)), s = tripSpan(t);
+      try {
+        await store.saveTrip(t.id, { name: t.name, start_date: s.start_date, end_date: s.end_date, place: t.place ?? "", lat: t.lat ?? null, lon: t.lon ?? null,
+          notes: t.notes ?? "", travellers: t.travellers ?? [], ...(store.spending ? { tags: t.tags ?? [] } : {}) });
+        data = null; await render();
+      } catch (e2) { alert(e2.message); }
+      return;
+    }
     if (at("[data-auto-ok]")) { lastAuto = null; document.getElementById("autoNote")?.remove(); return; }
     if (at("[data-auto-undo]")) {
       const a = lastAuto; lastAuto = null;
@@ -1563,6 +1584,14 @@ app.addEventListener("submit", async (ev) => {
   } catch (e) { err(e.message); }
 });
 window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
+// The header's Check Gmail: from anywhere, the Add page's Gmail results (and, on a Minty, a bills check)
+document.getElementById("gmailBtn")?.addEventListener("click", async () => {
+  if (!gmail.config()) { location.hash = "#/gmail"; return; }
+  if (store.bills) checkBills(true).catch(() => {});
+  const tid = route().parts[0] === "trip" && route().parts[1] ? Number(route().parts[1]) : null;
+  const next = tid ? `#/add?trip=${tid}&pull=1` : "#/add?pull=1";
+  if (location.hash === next) await render(); else location.hash = next;
+});
 document.getElementById("themeBtn").addEventListener("click", () => {
   const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
   document.documentElement.dataset.theme = next;

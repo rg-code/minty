@@ -172,6 +172,15 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
     // a dinner on its own isn't a trip: it waits
     expect(planTrips([{ id: 7, kind: "restaurant", name: "Harvest Example", start_at: "2027-01-10T19:00" }], [], airports)).toEqual({ into: [], make: [] });
   });
+  it("a trip's dates widen to cover its bookings, never narrow (tripSpan)", async () => {
+    const { tripSpan } = await import("../public/kos/store.js");
+    const t = { start_date: "2027-03-11", end_date: "2027-03-14", items: [
+      { start_at: "2027-03-11T07:00", end_at: "2027-03-11T13:00" }, { start_at: "2027-03-11T16:00", end_at: "2027-03-14T10:00" },
+      { start_at: "2027-03-16T12:00", end_at: "2027-03-17T12:00" }, { start_at: null }] };
+    expect(tripSpan(t)).toEqual({ start_date: "2027-03-11", end_date: "2027-03-17", outside: 1 });
+    expect(tripSpan({ ...t, items: [t.items[0]] })).toEqual({ start_date: "2027-03-11", end_date: "2027-03-14", outside: 0 });   // free days stay
+    expect(tripSpan({ ...t, items: [{ start_at: "2027-03-09T20:00", end_at: "2027-03-10T06:00" }] })).toEqual({ start_date: "2027-03-09", end_date: "2027-03-14", outside: 1 });
+  });
   it("a connection's legs are one booking; other bookings, and legs of different bookings, their own (journeys)", async () => {
     const { journeys } = await import("../public/kos/store.js");
     const leg = (id: number, from: string, to: string, at: string, end: string, conf = "QZ7XKM") => ({ id, kind: "flight", dep_airport: from, arr_airport: to, start_at: at, end_at: end, confirmation: conf });

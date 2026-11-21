@@ -584,3 +584,19 @@ export function journeys(items) {
   return out;
 }
 
+/** A trip's dates widened to cover its bookings (docs/trips.md §26): the earliest start and the latest end
+ * of its dated bookings, never narrower than the trip already is (free days planned stay). Returns
+ * { start_date, end_date, outside } where `outside` counts the bookings beyond the trip's dates. Pure. */
+export function tripSpan(t) {
+  const day = (s) => (typeof s === "string" && /^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : null);
+  let start = t.start_date, end = t.end_date, outside = 0;
+  for (const i of t.items ?? []) {
+    const a = day(i.start_at), b = day(i.end_at) ?? a;
+    if (!a) continue;
+    if (a < t.start_date || b > t.end_date) outside++;
+    if (a < start) start = a;
+    if (b > end) end = b;
+  }
+  return { start_date: start, end_date: end, outside };
+}
+
