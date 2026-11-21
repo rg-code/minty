@@ -1249,7 +1249,7 @@ pen only; with a mouse, the booking's page has **Open in Google Maps**.
 **Exact places** (owner: LocationIQ, on save plus a backfill, Kos inside Minty only): a booking without
 coordinates is looked up by its name and address (`src/geocode.ts`): the name with the address, the address,
 then the name with its town; a hit naming another postcode is a namesake and skipped; a name alone isn't
-asked. It runs when the booking is saved, and from a quiet catch-up cron run for the rest (3 a run; one that
+asked. It runs each time a booking without coordinates is saved (so Save asks at once, even unchanged), and from a quiet catch-up cron run for the rest (3 a run; one that
 found nothing waits 30 days). Found places are marked `geo_source = 'lookup'` (`0031_trip_item_geo.sql`) and
 are exact on the map; a change to the name or address looks again, and coordinates the household gives are
 never replaced. "Search by LocationIQ.com" (its free plan's wording) links under the map and on the booking. Set-up: a LocationIQ access
