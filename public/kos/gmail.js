@@ -61,18 +61,18 @@ export function script(key, label = "Kos", withBills = false) {
 // as you, hosted by Google. It only reads, and only for a request with the key below:
 // - the emails labelled "${label}", and those sent to a trip's own address (you+<the trip's code>@gmail.com),
 //   from the last 60 days;${withBills ? `
-// - for Minty's Bills (view=bills): the emails labelled "Bills" from the last 90 days, each as its
-//   plain text and its PDF attachments.` : ""}
+// - for Minty's Bills (view=bills): the emails labelled "Bills" or "Bill", or sent to you+bills@ (when
+//   Kos knows your address), from the last 90 days, each as its plain text and its PDF attachments.` : ""}
 // Nothing is changed or sent anywhere else.
 const KEY = "${key}";
 const LABEL = "${label}";${withBills ? `
-const BILLS = "Bills";` : ""}
+const BILLS = ["Bills", "Bill"];` : ""}
 const CODE = /^[2-9a-hjkmnp-z]{10}$/;
 
 function doGet(e) {
   if (!e || !e.parameter || e.parameter.key !== KEY) return out({ error: "forbidden" });
   const skip = String(e.parameter.seen || "").split(",").filter(Boolean);${withBills ? `
-  if (e.parameter.view === "bills") return out({ view: "bills", messages: bills(skip), v: 3 });` : ""}
+  if (e.parameter.view === "bills") return out({ view: "bills", messages: bills(skip, String(e.parameter.address || "").toLowerCase().replace(/[^a-z0-9.@_-]/g, "")), v: 3 });` : ""}
   const codes = String(e.parameter.codes || "").toLowerCase().split(",").filter(function (c) { return CODE.test(c); }).slice(0, 40);
   const addr = String(e.parameter.address || "").toLowerCase().replace(/[^a-z0-9.@_-]/g, "");
   // the label, or a trip's code anywhere in the message (its address), or the address exactly when Kos knows it
@@ -95,8 +95,11 @@ function doGet(e) {
   return out({ label: LABEL, messages: messages, v: 3 });
 }
 ${withBills ? `// Bills: each email's text (for a bill in the email itself) and its PDFs (up to 5, 5 MB each).
-function bills(skip) {
-  const threads = GmailApp.search('newer_than:90d label:"' + BILLS + '"', 0, 30);
+function bills(skip, addr) {
+  // either label (Gmail may not take one of them), or the +bills address exactly when Kos knows it
+  const terms = BILLS.map(function (l) { return 'label:"' + l + '"'; });
+  if (addr.indexOf("@") > 0) { const p = addr.split("@"); terms.push("to:" + p[0] + "+bills@" + p[1]); }
+  const threads = GmailApp.search("newer_than:90d {" + terms.join(" ") + "}", 0, 30);
   const messages = [];
   let size = 0;
   threads.forEach(function (t) {
@@ -170,6 +173,7 @@ export async function pullBills() {
   const u = new URL(c.url);
   u.searchParams.set("key", c.key);
   u.searchParams.set("view", "bills");
+  if (gmailAddress()) u.searchParams.set("address", gmailAddress());   // then mail to you+bills@ is found with no filter
   if (seen.length) u.searchParams.set("seen", seen.join(","));
   let r;
   try { r = await fetch(u, { redirect: "follow", credentials: "omit" }); }
