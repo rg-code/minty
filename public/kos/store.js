@@ -112,10 +112,36 @@ export function tripSummary(t, spending) {
 // --- a trip's city photo (kos.js cityPhoto): which city, and which addresses are Wikimedia's --------
 /** The names to look up for a trip's photo, best first: its place as typed ("Tokyo, Japan"), its first
  * part ("Tokyo"), then the city its first flight lands in (airports: IATA → [name, city, …]). */
+const US_STATES = { AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware",
+  DC: "Washington, D.C.", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky",
+  LA: "Louisiana", ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana",
+  NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota",
+  OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee",
+  TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming", PR: "Puerto Rico" };
+/** The names to ask Wikipedia for a trip's city photo, best first (docs/trips.md §19.1):
+ * - a street address's town, as Wikipedia titles US places ("Town, State"), and the part before a hyphen
+ *   ("Example-north, CO 80000" → "Example-north, Colorado", "Example, Colorado");
+ * - the place as typed and its first part, unless that's a street ("100 Example Road");
+ * - the city the first day's flights end in: the destination, never a connection's stop;
+ * - the trip's name, last ("Weekend" has a Wikipedia article and a photo of its own). */
 export function cityNames(t, airports = {}) {
-  const place = String(t.place ?? "").trim();
-  const flight = (t.items ?? []).filter((i) => i.kind === "flight" && i.arr_airport).sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1))[0];
-  return [...new Set([place, place.split(",")[0].trim(), flight ? airports[flight.arr_airport]?.[1] ?? "" : ""].filter(Boolean))].slice(0, 3);
+  const place = String(t.place ?? "").trim(), out = [];
+  const addr = /,\s*([^,\d]+?),?\s+([A-Z]{2})\s+\d{5}(?:-\d{4})?\b/.exec(place);
+  if (addr) {
+    const town = addr[1].trim(), state = US_STATES[addr[2]];
+    if (state) out.push(`${town}, ${state}`, ...(town.includes("-") ? [`${town.split("-")[0].trim()}, ${state}`] : []));
+    out.push(town);
+  } else if (place) {
+    out.push(place);
+    const first = place.split(",")[0].trim();
+    if (!/\d/.test(first)) out.push(first);
+  }
+  const flights = (t.items ?? []).filter((i) => i.kind === "flight" && i.arr_airport).sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
+  const firstDay = (flights[0]?.start_at ?? "").slice(0, 10);
+  const dest = flights.filter((f) => (f.start_at ?? "").slice(0, 10) === firstDay).at(-1);
+  if (dest && airports[dest.arr_airport]?.[1]) out.push(airports[dest.arr_airport][1]);
+  if (t.name) out.push(String(t.name).trim());              // last: "Weekend" has an article (and a photo) of its own
+  return [...new Set(out.filter(Boolean))].slice(0, 5);
 }
 /** Only Wikimedia's own image hosts, over https (the page's policy allows just these for photos). */
 export const isWikimediaImage = (u) => /^https:\/\/(upload|thumb)\.wikimedia\.org\/[^\s"'()\\]+$/.test(String(u ?? ""));

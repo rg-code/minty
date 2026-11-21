@@ -342,6 +342,14 @@ describe("the trip journal (public/kos/journal.js, map-style.js)", () => {
     expect(cityNames({ place: "Tokyo, Japan", items: [{ kind: "flight", arr_airport: "NRT", start_at: "2027-03-10" }] }, airports)).toEqual(["Tokyo, Japan", "Tokyo"]);
     expect(cityNames({ place: "", items: [{ kind: "flight", arr_airport: "NRT", start_at: "2027-03-10" }] }, airports)).toEqual(["Tokyo"]);
     expect(cityNames({ place: null, items: [] })).toEqual([]);
+    // a street address: its town as Wikipedia titles US places (and before a hyphen), never the street;
+    // the flight's destination, never the connection's stop
+    const legs = [{ kind: "flight", dep_airport: "SFO", arr_airport: "DEN", start_at: "2027-03-11T06:00" }, { kind: "flight", dep_airport: "DEN", arr_airport: "BOS", start_at: "2027-03-11T10:00" },
+                  { kind: "flight", dep_airport: "BOS", arr_airport: "SFO", start_at: "2027-03-15T10:00" }];
+    const aps = { DEN: ["Denver International", "Denver", "US", 0, 0], BOS: ["Logan International", "Boston", "US", 0, 0], SFO: ["San Francisco International", "San Francisco", "US", 0, 0] };
+    expect(cityNames({ name: "Example-north", place: "100 Example Road, Example-north, MA 02100", items: legs }, aps))
+      .toEqual(["Example-north, Massachusetts", "Example, Massachusetts", "Example-north", "Boston"]);
+    expect(cityNames({ name: "Weekend", place: "", items: legs }, aps)).toEqual(["Boston", "Weekend"]);
     expect(isWikimediaImage("https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b2/Shinjuku.jpg/960px-Shinjuku.jpg")).toBe(true);
     expect(isWikimediaImage("https://upload.wikimedia.org/wikipedia/commons/4/41/Lisbon.jpg")).toBe(true);
     for (const bad of ["http://upload.wikimedia.org/x.jpg", "https://upload.wikimedia.org.evil.example/x.jpg", "https://upload.wikimedia.org/x.jpg\") url(https://evil.example", "javascript:alert(1)"])

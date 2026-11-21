@@ -529,7 +529,7 @@ async function spending(t) {
 // --- a city's photo on a trip's cover (docs/trips.md §19.1): Wikipedia's lead image for one of the
 // trip's cities, hotlinked from Wikimedia (a 960 px thumbnail), with its photographer and licence.
 // Each city's answer (or "none") is kept in localStorage, so a list of trips asks once per city.
-const PHOTOS = "kos-photos";
+const PHOTOS = "kos-photos-2";                         // -2: picked by the names cityNames gives since 2026-11-21 (a connection's city could win before)
 const photoCache = () => { try { return JSON.parse(localStorage.getItem(PHOTOS) ?? "{}"); } catch { return {}; } };
 const keepPhoto = (k, v) => { try { const c = photoCache(); c[k] = v; localStorage.setItem(PHOTOS, JSON.stringify(c)); } catch { /* not kept */ } };
 const WIKI = "https://en.wikipedia.org/w/api.php?format=json&origin=*&action=query";
