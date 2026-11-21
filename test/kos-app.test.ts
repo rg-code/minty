@@ -148,12 +148,12 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
   });
   it("waiting bookings: into a trip their dates fall in, else new trips grouped by date and named for where they go (planTrips)", async () => {
     const { planTrips } = await import("../public/kos/store.js");
-    const airports = { LIH: ["Lihue Airport", "Lihue", "United States", 21.976, -159.339], LAX: ["Los Angeles International", "Los Angeles", "United States", 33.94, -118.4] };
+    const airports = { DEN: ["Denver International Airport", "Denver", "United States", 39.856, -104.674], ORD: ["Chicago O'Hare International", "Chicago", "United States", 41.978, -87.905] };
     const waiting = [
-      { id: 1, kind: "flight", name: "United", dep_airport: "SFO", arr_airport: "LAX", start_at: "2027-09-17T07:00", end_at: "2027-09-17T08:30" },
-      { id: 2, kind: "flight", name: "United", dep_airport: "LAX", arr_airport: "LIH", start_at: "2027-09-17T10:00", end_at: "2027-09-17T13:00" },
-      { id: 3, kind: "flight", name: "United", dep_airport: "LIH", arr_airport: "SFO", start_at: "2027-09-21T14:00", end_at: "2027-09-21T22:00" },
-      { id: 4, kind: "lodging", name: "Example Vacation Resort", place: "100 Example Road, Example Town, HI 96700", start_at: "2026-11-26T16:00", end_at: "2026-11-29T10:00" },
+      { id: 1, kind: "flight", name: "United", dep_airport: "SFO", arr_airport: "ORD", start_at: "2027-05-10T07:00", end_at: "2027-05-10T08:30" },
+      { id: 2, kind: "flight", name: "United", dep_airport: "ORD", arr_airport: "DEN", start_at: "2027-05-10T10:00", end_at: "2027-05-10T13:00" },
+      { id: 3, kind: "flight", name: "United", dep_airport: "DEN", arr_airport: "SFO", start_at: "2027-05-14T14:00", end_at: "2027-05-14T22:00" },
+      { id: 4, kind: "lodging", name: "Example Vacation Resort", place: "100 Example Road, Example Town, CO 80000", start_at: "2027-08-20T16:00", end_at: "2027-08-23T10:00" },
       { id: 5, kind: "restaurant", name: "Dinner", start_at: "2027-03-12T19:00" },     // inside Tokyo's dates
       { id: 6, kind: "other", name: "No date" },
     ];
@@ -161,15 +161,25 @@ describe("trip codes and addresses (docs/trips.md §21)", () => {
     const plan = planTrips(waiting, trips, airports);
     expect(plan.into).toEqual([{ trip_id: 9, items: [5] }]);
     expect(plan.make).toEqual([
-      { name: "Example Town", start_date: "2026-11-26", end_date: "2026-11-29", place: "100 Example Road, Example Town, HI 96700", lat: null, lon: null, items: [4] },
+      
       // left SFO by air: the trip runs until the flight back to SFO, 4 days later; named for where the first day's legs end
-      { name: "Lihue", start_date: "2027-09-17", end_date: "2027-09-21", place: "Lihue, United States", lat: 21.976, lon: -159.339, items: [1, 2, 3] },
+      { name: "Denver", start_date: "2027-05-10", end_date: "2027-05-14", place: "Denver, United States", lat: 39.856, lon: -104.674, items: [1, 2, 3] },
+      { name: "Example Town", start_date: "2027-08-20", end_date: "2027-08-23", place: "100 Example Road, Example Town, CO 80000", lat: null, lon: null, items: [4] },
     ]);
     // a one-way flight with nothing after: a trip of its own; a stay 3 days after a flight that never came back still joins (open, under 30 days)
-    expect(planTrips([waiting[0], { ...waiting[3], start_at: "2027-09-20T16:00", end_at: "2027-09-23T10:00" }], [], airports).make.map((g: any) => [g.name, g.start_date, g.end_date, g.items]))
-      .toEqual([["Example Town", "2027-09-17", "2027-09-23", [1, 4]]]);
+    expect(planTrips([waiting[0], { ...waiting[3], start_at: "2027-05-13T16:00", end_at: "2027-05-16T10:00" }], [], airports).make.map((g: any) => [g.name, g.start_date, g.end_date, g.items]))
+      .toEqual([["Example Town", "2027-05-10", "2027-05-16", [1, 4]]]);
     // a dinner on its own isn't a trip: it waits
     expect(planTrips([{ id: 7, kind: "restaurant", name: "Harvest Example", start_at: "2027-01-10T19:00" }], [], airports)).toEqual({ into: [], make: [] });
+  });
+  it("a connection's legs are one booking; other bookings, and legs of different bookings, their own (journeys)", async () => {
+    const { journeys } = await import("../public/kos/store.js");
+    const leg = (id: number, from: string, to: string, at: string, end: string, conf = "QZ7XKM") => ({ id, kind: "flight", dep_airport: from, arr_airport: to, start_at: at, end_at: end, confirmation: conf });
+    const items = [leg(2, "ORD", "BOS", "2027-03-11T10:00", "2027-03-11T13:15"), leg(1, "SFO", "ORD", "2027-03-11T07:00", "2027-03-11T08:30"),
+      { id: 3, kind: "lodging", start_at: "2027-03-11T16:00", end_at: "2027-03-14T10:00", confirmation: "QZ7XKM" },
+      leg(4, "BOS", "SFO", "2027-03-14T14:00", "2027-03-14T22:00"),                // the flight home: days later, its own
+      leg(5, "SFO", "SEA", "2027-04-01T08:00", "2027-04-01T10:00", "OTHER1"), leg(6, "SEA", "YVR", "2027-04-01T12:00", "2027-04-01T13:00", "OTHER2")];
+    expect(journeys(items).map((g: any[]) => g.map((i) => i.id))).toEqual([[1, 2], [3], [4], [5], [6]]);
   });
   it("Bills by email: a complete new bill is added, an incomplete one listed, card statements and known ones left (splitBills)", async () => {
     const { splitBills } = await import("../public/kos/store.js");

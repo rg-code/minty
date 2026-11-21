@@ -20,9 +20,11 @@ export function dates(text, year = new Date().getFullYear()) {
   const add = (i, y, m, d) => { if (m >= 1 && m <= 12 && d >= 1 && d <= 31) out.push({ index: i, date: `${y}-${pad(m)}-${pad(d)}` }); };
   for (const m of text.matchAll(/\b(\d{4})-(\d{2})-(\d{2})\b/g)) add(m.index, +m[1], +m[2], +m[3]);
   // a day is one or two digits not followed by another ("March 2027" isn't March 20)
-  // the year may follow the weekday, or sit on the next line ("NOV 26  THU\n2026", as some emails lay it out)
+  // the year may follow the weekday, or sit on the next line ("MAR 11  THU\n2027", as some emails lay it out)
   for (const m of text.matchAll(/\b(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+(\d{1,2})(?!\d)(?:st|nd|rd|th)?(?:,?\s+(?:(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\.?,?\s+)?(\d{4}))?/gi)) add(m.index, m[3] ? +m[3] : year, MONTHS[m[1].toLowerCase()], +m[2]);
   for (const m of text.matchAll(/\b(\d{1,2})(?!\d)(?:st|nd|rd|th)?\s+(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?(?:,?\s+(\d{4}))?/gi)) add(m.index, m[3] ? +m[3] : year, MONTHS[m[2].toLowerCase()], +m[1]);
+  // "26NOV" or "26NOV26", as some airlines write it (capitals, no space)
+  for (const m of text.matchAll(/\b(\d{1,2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2}(?:\d{2})?)?\b/g)) add(m.index, m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : year, MONTHS[m[2].toLowerCase()], +m[1]);
   return out.sort((a, b) => a.index - b.index);
 }
 
@@ -63,7 +65,10 @@ export function programIn(text) {
 /** @param {string} raw @param {{ year?: number, isAirport?: (code: string) => boolean }} [opts] */
 export function parseBookings(raw, { year, isAirport = () => true } = {}) {
   const text = tidy(raw);
-  const all = { dates: dates(text, year), times: times(text) };
+  // dates that aren't the trip's: a forwarded email's header ("Date: Thu, Sep 17, 2026 at 3:14 PM") and
+  // when it was booked or issued ("Issue date", "Booked on", "Purchased"): left out
+  const notTrip = [...text.matchAll(/^[>\s]*(?:date|sent|issued?(?: on)?|issue date|date of issue|booking date|booked(?: on)?|purchased?(?: on)?|purchase date|ticket issue date|order date)\b[^\n]*/gim)].map((m) => [m.index, m.index + m[0].length]);
+  const all = { dates: dates(text, year).filter((d) => !notTrip.some(([a, b]) => d.index >= a && d.index < b)), times: times(text) };
   const bookings = [];
   const conf = [...text.matchAll(CONF)].map((m) => m[1]).find(isCode) ?? null;
   const total = TOTAL.exec(text);
@@ -82,7 +87,11 @@ export function parseBookings(raw, { year, isAirport = () => true } = {}) {
     if (seen.has(key)) continue;
     seen.add(key);
     // its date and times: the first ones after the airports (else the last date before)
-    const d = after(all.dates, m.index) ?? [...all.dates].reverse().find((x) => x.index < m.index), t1 = after(all.times, m.index), t2 = t1 ? after(all.times, t1.index + 1) : null;
+    // its date: the nearest one, before or after the airports (an itinerary heads a day's legs with
+    // its date; a short line puts it after); a later section's date (a receipt's) is further away
+    const prev = [...all.dates].reverse().find((x) => x.index < m.index), next = after(all.dates, m.index);
+    const d = !prev ? next : !next ? prev : (m.index - prev.index) < (next.index - m.index) ? prev : next;
+    const t1 = after(all.times, m.index), t2 = t1 ? after(all.times, t1.index + 1) : null;
     const sentence = text.slice(Math.max(0, m.index - 60), m.index + m[0].length + 60).trim();
     bookings.push({ kind: "flight", airline: fn?.[1] ?? null, flight_number: fn?.[2] ?? null, dep_airport: from, arr_airport: to,
       start_at: d ? (t1 ? `${d.date}T${t1.time}` : d.date) : null, end_at: d && t2 ? `${d.date}T${t2.time}` : null,
@@ -94,18 +103,18 @@ export function parseBookings(raw, { year, isAirport = () => true } = {}) {
   const nights = Number(/\b(\d{1,2})\s*nights?\b|\b(\d{1,2})\s*night\(s\)/i.exec(text)?.slice(1).find(Boolean) ?? 0);
   if ((ci && co) || nights) {
     let din = ci ? after(all.dates, ci.index) : null, dout = co ? after(all.dates, co.index) : null;
-    // some emails put the dates above the labels ("NOV 26 … NOV 29 … Check-In 4:00 p.m."): then the first
+    // some emails put the dates above the labels ("MAR 11 … MAR 14 … Check-In 4:00 p.m."): then the first
     // two dates that are the stay's nights apart (or, with no count, the first pair 1 to 60 days apart)
     if (!din || !dout || dout.date < din.date) {
       const gap = (x, y) => Math.round((Date.parse(y.date) - Date.parse(x.date)) / 864e5);
       const pair = all.dates.map((x, i) => [x, all.dates[i + 1]]).find(([x, y]) => y && (nights ? gap(x, y) === nights : gap(x, y) >= 1 && gap(x, y) <= 60));
       [din, dout] = pair ?? [null, null];
     }
-    const W = "['ʻ‘’]?[A-Z][\\w'ʻ’&-]*";                         // a capitalised word (a full stop ends the name; Hawaiian ʻokina too)
+    const W = "['ʻ‘’]?[A-Z][\\w'ʻ’&-]*";                         // a capitalised word (a full stop ends the name; ʻokina too)
     const name = new RegExp(`(${W}(?: ${W}){0,5} (?:Hotel|Inn|Resort|Suites|Hostel|Ryokan|Lodge|Villas)(?: ${W}){0,3}|(?:Hotel|The|Club) ${W}(?: ${W}){0,4})`).exec(text)?.[1] ?? null;
     // the check-in and check-out times, when they follow their labels ("Check-In 4:00 p.m.")
     const at = (label) => { if (!label) return null; const t = after(all.times, label.index); return t && t.index - label.index < 40 ? t.time : null; };
-    // the street address, as a US or similar address line gives it ("100 Example Road, Town, HI 96700")
+    // the street address, as a US or similar address line gives it ("100 Example Road, Town, CO 80000")
     const place = /^(\d{1,6} [^\n]{3,80}?\b[A-Z]{2} \d{5}(?:-\d{4})?)\b/m.exec(text)?.[1] ?? null;
     if (din && dout && dout.date >= din.date) {
       const tin = at(ci), tout = at(co);
@@ -113,7 +122,7 @@ export function parseBookings(raw, { year, isAirport = () => true } = {}) {
         ...(place ? { place } : {}), confirmation: conf, quote: text.slice(ci?.index ?? din.index, Math.min(text.length, (co?.index ?? dout.index) + 40)).trim() });
     }
   }
-  // paid in points or miles ("Total for Stay 90,000 Pts.", "Total: 35,000 miles"), and which program's
+  // paid in points or miles ("Total for Stay 45,000 Pts.", "Total: 35,000 miles"), and which program's
   // (BAM's ids, src/points/programs.ts): the program named nearest the amount, else anywhere in the text
   const pts = /\btotal\b[^\n\d]{0,30}([\d,]{3,})\s*(?:pts|points|miles|avios)\b/i.exec(text);
   if (bookings.length === 1 && pts && !price.price_cents) {

@@ -52,15 +52,15 @@ describe("parseBookings", () => {
 Member: XXXXXX123A
 Your Reservation Is Confirmed, Alex!
 
-Club Example Ka 'Ula Kai
-100 Example Road, Example Town, HI 96700 US (808) 555-0100
+Club Example 'Alpine Lodge
+100 Example Road, Example Town, CO 80000 US (303) 555-0100
 Confirmation Number: 12345EF000001
 See Trip Details
-NOV 26     THU
-2026
+MAR 11     THU
+2027
 
-NOV 29     SUN
-2026
+MAR 14     SUN
+2027
 Hotel Details
 Reservation Details
 1 Room(s) / 3 Night(s)
@@ -69,19 +69,40 @@ Check-In
 4:00 p.m.     Checkout
 10:00 a.m.
 Rate Details
-Free Night     90,000 Pts.
+Free Night     45,000 Pts.
 Taxes & Fees     0
-Total for Stay     90,000 Pts.
+Total for Stay     45,000 Pts.
     10% Points Discount
 Cancellation Policy
 Cancel 72 Hours prior to 4pm day of arrival.`;
     const { bookings } = parseBookings(t, { year: 2025 });                     // the year written wins over the one given
     expect(bookings).toHaveLength(1);
-    expect(bookings[0]).toMatchObject({ kind: "lodging", name: "Club Example Ka 'Ula Kai", start_at: "2026-11-26T16:00", end_at: "2026-11-29T10:00",
-      place: "100 Example Road, Example Town, HI 96700", confirmation: "12345EF000001", points: 90000, points_program: null });
+    expect(bookings[0]).toMatchObject({ kind: "lodging", name: "Club Example 'Alpine Lodge", start_at: "2027-03-11T16:00", end_at: "2027-03-14T10:00",
+      place: "100 Example Road, Example Town, CO 80000", confirmation: "12345EF000001", points: 45000, points_program: null });
     // with its program named, as such emails do ("Wyndham Rewards Redemption Guarantee"): BAM's id
     const named = parseBookings(t.replace("Cancellation Policy", "Deposit Policy\nWyndham Rewards Redemption Guarantee\nCancellation Policy"), { year: 2025 });
-    expect(named.bookings[0]).toMatchObject({ points: 90000, points_program: "wyndham" });
+    expect(named.bookings[0]).toMatchObject({ points: 45000, points_program: "wyndham" });
+  });
+
+  it("a forwarded eTicket: the flight's date, not the forwarded header's or when it was booked (made-up copy)", () => {
+    const t = `---------- Forwarded message ---------
+From: Example Air <noreply@example.com>
+Date: Tue, Jan 5, 2027 at 3:14 PM
+Subject: eTicket Itinerary and Receipt for Confirmation QZ7XKM
+
+Confirmation #: QZ7XKM
+Thu, Mar 11, 2027
+Flight UA 100 SFO → ORD Depart 7:00 AM Arrive 8:30 AM
+Flight UA 200 ORD → BOS Depart 10:00 AM Arrive 1:15 PM
+Passenger: ALEX EXAMPLE
+Receipt
+Issue date: Jan 5, 2027`;
+    expect(parseBookings(t, { year: 2027 }).bookings.map((b) => [b.dep_airport, b.arr_airport, b.start_at, b.end_at, b.confirmation])).toEqual([
+      ["SFO", "ORD", "2027-03-11T07:00", "2027-03-11T08:30", "QZ7XKM"], ["ORD", "BOS", "2027-03-11T10:00", "2027-03-11T13:15", "QZ7XKM"]]);
+  });
+
+  it("an itinerary's 26NOV dates", () => {
+    expect(dates("DEPART 11MAR SFO, RETURN 15MAR27 BOS", 2027).map((d) => d.date)).toEqual(["2027-03-11", "2027-03-15"]);
   });
 
   it("an award flight's miles and its program", () => {
@@ -90,6 +111,6 @@ Cancel 72 Hours prior to 4pm day of arrival.`;
   });
 
   it("dates with the weekday before the year, or the year on the next line", () => {
-    expect(dates("NOV 26 THU\n2026, Mar 3, Wed, 2027 and Apr 9 2027", 2020).map((d) => d.date)).toEqual(["2026-11-26", "2027-03-03", "2027-04-09"]);
+    expect(dates("MAR 11 THU\n2027, Mar 3, Wed, 2027 and Apr 9 2027", 2020).map((d) => d.date)).toEqual(["2027-03-11", "2027-03-03", "2027-04-09"]);
   });
 });

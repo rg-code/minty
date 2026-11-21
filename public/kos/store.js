@@ -568,3 +568,19 @@ export function planTrips(waiting, trips, airports = {}) {
   return { into: [...into].map(([trip_id, items]) => ({ trip_id, items })), make };
 }
 
+/** Bookings as the person thinks of them: a connection's legs (flights with the same confirmation, each
+ * leaving within a day of the last one landing) are one booking; everything else is its own. The legs
+ * stay separate items underneath (each leg has its own times, gate and seat). Returns arrays, in order. */
+export function journeys(items) {
+  const sorted = [...items].sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : (a.start_at ?? "") > (b.start_at ?? "") ? 1 : a.id - b.id));
+  const out = [];
+  for (const i of sorted) {
+    const g = out.at(-1), last = g?.at(-1);
+    const joins = last && i.kind === "flight" && last.kind === "flight" && i.confirmation && i.confirmation === last.confirmation
+      && last.arr_airport && last.arr_airport === i.dep_airport && i.start_at && (last.end_at ?? last.start_at)
+      && Date.parse(i.start_at.slice(0, 16)) - Date.parse((last.end_at ?? last.start_at).slice(0, 16)) <= 864e5;
+    if (joins) g.push(i); else out.push([i]);
+  }
+  return out;
+}
+
