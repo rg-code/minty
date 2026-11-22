@@ -3,6 +3,7 @@ import type { Env } from "../env";
 import { type Config, isConfigured } from "../config";
 import { HttpError, dateParam, intParam, json, jsonBody, unprocessable } from "../http";
 import { bankHealth, bankRows, syncHealth } from "../health";
+import { stripFlights } from "../flights";
 import { RESERVED } from "./link";
 import { ACCOUNT_NAME, LEFT_OUT, PLAID_ITEM } from "../accounts";
 import { IN_NET_WORTH, markIfLeftOutTags } from "../audit/totals";
@@ -51,7 +52,8 @@ export async function health(env: Env, config: Config): Promise<Response> {
   const banks = rows.map((r) => ({ id: r.id, owner: r.owner, institution_name: r.institution_name, health: bankHealth(env, config, r, now) }))
     .filter((b) => b.health.level)
     .sort((a, b) => rank[a.health.level!] - rank[b.health.level!] || a.id - b.id);
-  return json({ sync: syncHealth(env, config, rows, now), banks });
+  // Kos's flights FlightAware is following, leaving within a day or in the air (docs/trips.md §32)
+  return json({ sync: syncHealth(env, config, rows, now), banks, flights: await stripFlights(env, now) });
 }
 
 export async function accounts(env: Env, url: URL): Promise<Response> {

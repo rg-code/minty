@@ -213,6 +213,17 @@ async function loadHealth() {
   const shown = healthOpen ? problems : problems.slice(0, HEALTH_SHOWN);
   let html = shown.map(line).join("");
   if (problems.length > shown.length) html += `<button type="button" class="more" id="healthMore">Show ${problems.length - shown.length} more</button>`;
+  // Kos's flights leaving within a day, in the air or just landed, from FlightAware (docs/trips.md §32)
+  const hhmm = (iso, tz) => { const t = Date.parse(iso ?? ""); if (!Number.isFinite(t)) return ""; try { return new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", ...(tz ? { timeZone: tz } : {}) }).format(t); } catch { return ""; } };
+  const agoMin = iso => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 6e4)); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+  for (const f of h.flights ?? []) {
+    const say = { scheduled: "on time", delayed: `delayed ${f.delay_min} min`, departed: "in the air", landed: "landed", cancelled: "cancelled", diverted: "diverted" }[f.state] ?? f.state;
+    const when = f.state === "departed" ? `lands ${hhmm(f.arr, f.arr_tz)}` : f.state === "landed" ? (f.baggage ? `belt ${f.baggage}` : "") : f.state === "cancelled" ? "" : `leaves ${hhmm(f.dep, f.dep_tz)}`;
+    const msg = [`${f.flight}${f.to ? ` to ${f.to}` : ""}`, say, when, f.state === "scheduled" || f.state === "delayed" ? (f.gate ? `gate ${f.gate}` : "") : ""].filter(Boolean).join(" · ");
+    const what = [f.terminal ? `Terminal ${f.terminal}` : "", f.checked_at ? `as of ${agoMin(f.checked_at)}` : "", "FlightAware"].filter(Boolean).join(" · ");
+    const level = ["delayed", "cancelled", "diverted"].includes(f.state) ? "warn" : "info";
+    html += `<div class="hl ${level}" role="status"><span class="mark" aria-hidden="true">✈</span><span class="msg">${escapeHtml(msg)}</span>${f.trip_id ? `<a class="act" href="/kos/#/trip/${f.trip_id}">Trip</a>` : ""}<span class="what">${escapeHtml(what)}</span></div>`;
+  }
   if (downloads.length) {
     html += `<div class="hl info" role="status"><span class="mark" aria-hidden="true">↓</span><span class="msg">Downloading history: ${
       downloads.map(b => escapeHtml(b.health.message.replace(/: downloading its history \((.*)\)\.$/, " ($1)")) + escapeHtml(who(b))).join(", ")

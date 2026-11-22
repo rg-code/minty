@@ -50,7 +50,8 @@ describe("a flight's status from FlightAware's answer", () => {
     const landed = toStatus(flight({ actual_out: "2027-04-05T16:05:00Z", actual_in: "2027-04-05T21:20:00Z" }));
     expect(nextCheck(landed, Date.parse("2027-04-05T21:25:00Z"))).toBe("2027-04-05T21:50:00.000Z");
     expect(nextCheck(landed, Date.parse("2027-04-05T22:00:00Z"))).toBeNull();
-    expect(nextCheck(toStatus(flight({ cancelled: true })), out - H)).toBeNull();
+    expect(nextCheck(toStatus(flight({ cancelled: true })), out - H)).toBe("2027-04-05T16:00:00.000Z");   // once more at its time (on the strip till then)
+    expect(nextCheck(toStatus(flight({ cancelled: true })), out + H)).toBeNull();
   });
   it("picks the leg by its airports and the departure nearest its day", () => {
     const other = flight({ fa_flight_id: "next-day", scheduled_out: "2027-04-06T16:00:00Z" });
@@ -131,6 +132,22 @@ describe("the cron, and Look up", () => {
     expect((await ask({ airline: "UA", flight_number: "1234", date: today }, {})).status).toBe(404);   // no key
     expect((await ask({ airline: "UA", flight_number: "x", date: today })).status).toBe(422);
     expect((await ask({ airline: "UA", flight_number: "1234", date: today }, { ...KEY, FLIGHT_STATUS_CALLS_PER_DAY: "1" })).status).toBe(503);   // used up
+  });
+
+  it("Minty's status strip (/health) shows legs leaving within a day, in the air or just landed; not one far off, nor a stale one", async () => {
+    const now = Date.now(), iso = (h: number) => new Date(now + h * 3_600_000).toISOString();
+    const st = (o: Partial<AeroFlight>) => JSON.stringify(toStatus(flight({ scheduled_out: iso(5), estimated_out: iso(5.75), departure_delay: 45 * 60, scheduled_in: iso(10), estimated_in: iso(10.5), ...o })));
+    const set = (id: number, json: string, checked: string, next: string | null) =>
+      db.prepare("UPDATE trip_items SET flight_status = ?, status_checked_at = ?, status_next_at = ? WHERE id = ?").bind(json, checked, next, id).run();
+    const soon = await leg({ start_at: iso(5).slice(0, 16) }), air = await leg({ flight_number: "88", start_at: iso(-2).slice(0, 16) });
+    const far = await leg({ flight_number: "77", start_at: iso(60).slice(0, 16) }), stale = await leg({ flight_number: "66", start_at: iso(4).slice(0, 16) });
+    await set(soon, st({}), iso(-0.05), iso(0.1));
+    await set(air, st({ scheduled_out: iso(-2), estimated_out: iso(-2), actual_out: iso(-2), departure_delay: 0 }), iso(-0.2), iso(0.3));
+    await set(far, st({ scheduled_out: iso(60), estimated_out: iso(60), departure_delay: 0 }), iso(-1), iso(54));
+    await set(stale, st({ scheduled_out: iso(4), estimated_out: iso(4), departure_delay: 0 }), iso(-20), iso(1));
+    const h = (await getJson<any>("/health")).body;
+    expect(h.flights.map((f: any) => [f.flight, f.state])).toEqual([["UA 88", "departed"], ["UA 1234", "delayed"]]);
+    expect(h.flights[1]).toMatchObject({ to: "KOA", delay_min: 45, gate: "F12", terminal: "3", dep_tz: "America/Los_Angeles" });
   });
 
   it("a leg's status starts afresh when its number, day or airports change, and stays otherwise", async () => {
