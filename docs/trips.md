@@ -1287,4 +1287,12 @@ default and the only one yet). Off without the key, and in Kos on its own.
   ahead).
 - **The cap:** `FLIGHT_STATUS_CALLS_PER_DAY` (default 50) for the cron and Look up together, per UTC day in
   `app_state`; past it the cron stops for the day and Look up says so. Setup checks show today's count.
-- **Not yet:** Minty's status strip for a flight within 24 hours (§14), push notifications (later), AirLabs.
+- **Minty's status strip** (owner, 2026-11-21): `GET /health` also returns the legs the cron is still following
+  (`status_next_at` set, by its partial index) that leave within 24 hours, are in the air or just landed, asked in
+  the last 12 hours (`stripFlights`). The dashboard shows each as a line: "✈ UA 1234 to KOA · delayed 45 min ·
+  leaves 09:45 · gate F12", amber when delayed, cancelled or diverted, with "Terminal 3 · as of 3 min ago ·
+  FlightAware" and a **Trip** button to Kos. A cancelled leg stays until its departure time (one more check then).
+- **Checked with the household's key** (T0 check 5, 2026-11-21): AeroAPI answered with the fields this reads
+  (status, scheduled/estimated/actual times, gates, terminals, baggage_claim, delays in seconds, aircraft_type,
+  cancelled, diverted); a flight number alone lists every day's flight, so Kos always asks a window and picks the leg.
+- **Not yet:** push notifications (later), AirLabs.

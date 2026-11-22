@@ -62,9 +62,10 @@ export function toStatus(f: AeroFlight): FlightStatus {
 const at = (iso: string | null) => (iso ? Date.parse(iso) : NaN);
 /** When to ask about this leg next (docs/trips.md §14), or null when there's nothing more to learn. */
 export function nextCheck(st: FlightStatus, now: number): string | null {
-  if (st.state === "cancelled") return null;
   const out = at(st.dep.est ?? st.dep.sched), landed = at(st.arr.act);
   const iso = (t: number) => new Date(Math.max(t, now + MIN)).toISOString();
+  // cancelled: once more at its departure time (it stays on Minty's status strip until then), then done
+  if (st.state === "cancelled") return Number.isFinite(out) && out > now ? iso(out) : null;
   if (Number.isFinite(landed)) return now < landed + 30 * MIN ? iso(landed + 30 * MIN) : null;   // once after it lands
   if (st.dep.act) {                                                                          // in the air: every 30 minutes
     const inAt = at(st.arr.est ?? st.arr.sched);
@@ -182,4 +183,30 @@ export async function lookUp(env: Env, airline: string, number: string, day: str
   const [tzDep, tzArr] = [dep ? await airportZone(env, dep, fetchFn, now) : null, arr ? await airportZone(env, arr, fetchFn, now) : null];
   return { airline, flight_number: number, dep_airport: dep, arr_airport: arr, start_at: localTime(f.scheduled_out ?? null, tzDep), end_at: localTime(f.scheduled_in ?? null, tzArr),
            dep_terminal: null, aircraft: s(f.aircraft_type) };
+}
+
+// --- Minty's status strip (GET /health): flights FlightAware is following ------------------------------
+export type StripFlight = { trip_id: number | null; flight: string; to: string | null; state: FlightStatus["state"]; delay_min: number | null;
+  gate: string | null; terminal: string | null; baggage: string | null; dep: string | null; dep_tz: string | null; arr: string | null; arr_tz: string | null; checked_at: string | null };
+/** Legs leaving within 24 hours, in the air, or just landed or cancelled, from the legs the cron is still
+ * following (status_next_at set: the partial index, a handful of rows). Times in UTC with each airport's
+ * zone; the page writes them out. */
+export async function stripFlights(env: Env, now = Date.now()): Promise<StripFlight[]> {
+  const rows = (await env.DB.prepare(
+    `SELECT trip_id, airline, flight_number, arr_airport, flight_status, status_checked_at FROM trip_items INDEXED BY idx_trip_items_flight_due
+     WHERE kind = 'flight' AND status_next_at IS NOT NULL AND flight_status IS NOT NULL`)
+    .all<{ trip_id: number | null; airline: string | null; flight_number: string | null; arr_airport: string | null; flight_status: string; status_checked_at: string | null }>()).results;
+  const out: (StripFlight & { at: number })[] = [];
+  for (const r of rows) {
+    let st: FlightStatus;
+    try { st = JSON.parse(r.flight_status) as FlightStatus; } catch { continue; }
+    if (!r.status_checked_at || now - Date.parse(r.status_checked_at) > 12 * HOUR) continue;   // stale (the key was taken away)
+    const leaves = at(st.dep.act ?? st.dep.est ?? st.dep.sched);
+    const soon = Number.isFinite(leaves) && leaves - now <= 24 * HOUR && leaves - now > -2 * HOUR;
+    if (!(soon || st.state === "departed" || st.state === "diverted" || st.state === "landed")) continue;
+    out.push({ at: Number.isFinite(leaves) ? leaves : now, trip_id: r.trip_id, flight: [r.airline, r.flight_number].filter(Boolean).join(" "), to: r.arr_airport,
+      state: st.state, delay_min: st.delay_min, gate: st.dep.gate, terminal: st.dep.terminal, baggage: st.baggage,
+      dep: st.dep.act ?? st.dep.est ?? st.dep.sched, dep_tz: st.dep.tz, arr: st.arr.act ?? st.arr.est ?? st.arr.sched, arr_tz: st.arr.tz, checked_at: r.status_checked_at });
+  }
+  return out.sort((a, b) => a.at - b.at).map(({ at: _at, ...f }) => f);
 }

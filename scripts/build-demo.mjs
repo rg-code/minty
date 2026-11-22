@@ -77,7 +77,7 @@ const og = ogImage ? `
 edit("demo script first", /^<head>$/m, `<head>\n<meta name="robots" content="noindex" />${og}\n<script src="demo.js"></script>`);
 edit("no manifest", /<link rel="manifest"[^>]*>\n?/, "");
 edit("Kos in the demo", `<a href="/kos/" title=`, `<a href="kos/" data-goatcounter-click="minty-demo-kos" title=`);   // Kos runs on the demo's data too (below)
-editIn("app.js", "a trip opens the demo's Kos", "/kos/#/trip/", "kos/#/trip/");
+editIn("app.js", "a trip opens the demo's Kos (a transaction's trip, and a flight on the status strip)", "/kos/#/trip/", "kos/#/trip/", 2);
 edit("no device lock", '<link rel="stylesheet" href="/lock.css" />\n<script src="/lock.js"></script>\n', "");   // demo visitors are never asked for Face ID
 editIn("app.js", "no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});`, "// the demo registers no service worker");
 // SUB's screenshot reader is its own page with Tesseract (7 MB), which the demo leaves out: paste and PDFs still work.
