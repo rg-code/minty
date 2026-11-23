@@ -77,6 +77,17 @@ describe("trips and bookings", () => {
 });
 
 describe("reading an email file", () => {
+  it("POST /trips/read-email sends an attached PDF back for the page to read", async () => {
+    const pdf = btoa("%PDF-1.4\n" + "x".repeat(200) + "\n%%EOF\n");
+    const eml = ["From: Example Air <res@example.com>", "Subject: Your itinerary", "Date: Fri, 15 Jan 2027 09:12:00 -1000", "MIME-Version: 1.0", 'Content-Type: multipart/mixed; boundary="b"', "",
+      "--b", "Content-Type: text/plain", "", "Attached.", "--b", 'Content-Type: application/pdf; name="itinerary.pdf"', "Content-Transfer-Encoding: base64", "", pdf, "--b--", ""].join("\r\n");
+    const r = await call("/trips/read-email", { method: "POST", body: eml, headers: { "content-type": "message/rfc822" } });
+    expect(r.status).toBe(200);
+    const body = await r.json() as any;
+    expect(body.pdfs).toEqual([{ filename: "itinerary.pdf", data: pdf }]);
+    expect(body.bookings).toEqual([]);
+  });
+
   it("POST /trips/read-email: bookings from its schema.org markup, nothing stored", async () => {
     const html = `<script type="application/ld+json">{"@type":"FoodEstablishmentReservation","reservationNumber":"R9","startTime":"2027-03-12T19:30:00+09:00","reservationFor":{"@type":"Restaurant","name":"Sushi Example","address":"2-2 Example, Tokyo"}}</script>`;
     const eml = ["From: Alex <alex@example.com>", "To: ourminty+mintytrips@gmail.com", "Subject: Your reservation", "Content-Type: text/html; charset=utf-8", "", html, ""].join("\r\n");

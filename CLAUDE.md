@@ -180,7 +180,7 @@ Design history and decisions: `docs/serverless-plan.md`.
   service worker; each SW deletes only its own `minty-…` / `kos-…` caches), on Minty's Worker, Access
   and D1. Sync never writes `trips`, `trip_items` or `trip_transactions`. `POST /trips/read-email`
   is the one route past the 16 KiB body cap (2 MB), reads an `.eml` with `src/kos/` and stores
-  nothing. The map is vendored MapLibre (CSP build) on OpenFreeMap's tiles: only `/kos/*` and
+  nothing (an attached PDF goes back to the page, read there with pdf.js, §34). The map is vendored MapLibre (CSP build) on OpenFreeMap's tiles: only `/kos/*` and
   `/vendor/maplibre/*` may reach `tiles.openfreemap.org`; only `/kos/*` may reach `en.wikipedia.org` and
   `upload.wikimedia.org` / `thumb.wikimedia.org` (a trip's city photo, §19). Its look follows Flighty (flights, theme,
   map) and Wanderlog (trips). Gmail pull (§17.1, `public/kos/gmail.js`) asks the person's own

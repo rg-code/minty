@@ -3,7 +3,7 @@ import type { Config } from "../config";
 import { HttpError, json, jsonBody, unprocessable } from "../http";
 import { ACCOUNT_NAME } from "../accounts";
 import { PROGRAM_BY_ID } from "../points/programs";
-import { attachedMessage, emailText, readMessage, viewOf } from "../kos/mime";
+import { attachedMessage, emailPdfs, emailText, readMessage, viewOf } from "../kos/mime";
 import { MAX_TAGS_PER_TXN, MAX_TAG_LENGTH, normaliseTags } from "./data";
 import { markIfLeftOutTags } from "../audit/totals";
 import { reservations } from "../kos/reservations";
@@ -296,7 +296,8 @@ export async function readEmail(env: Env, request: Request): Promise<Response> {
   const m = attachedMessage(raw) ?? outer;                    // forwarded as an attachment: the original, with its markup
   const sha = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((b) => b.toString(16).padStart(2, "0")).join("");
   return json({ subject: m.subject, from: m.from, date: m.date, view: viewOf(outer), sha256: sha, bookings: reservations(m.html),
-                text: (emailText(m) ?? "").slice(0, 20000) || null, attachments: m.attachments.map((a) => ({ filename: a.filename, content_type: a.contentType, size: a.size })) });
+                text: (emailText(m) ?? "").slice(0, 20000) || null, attachments: m.attachments.map((a) => ({ filename: a.filename, content_type: a.contentType, size: a.size })),
+                pdfs: emailPdfs(m, m === outer ? null : outer) });                 // read in the page, with pdf.js (§34)
 }
 
 // --- a trip's transactions ----------------------------------------------------------------------
