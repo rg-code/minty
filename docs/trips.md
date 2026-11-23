@@ -1298,3 +1298,17 @@ default and the only one yet). Off without the key, and in Kos on its own.
   (status, scheduled/estimated/actual times, gates, terminals, baggage_claim, delays in seconds, aircraft_type,
   cancelled, diverted); a flight number alone lists every day's flight, so Kos always asks a window and picks the leg.
 - **Not yet:** push notifications (later), AirLabs.
+
+## 33. A charter's itinerary: a route written with towns (owner, 2026-11-23)
+
+A small airline's PDF itinerary wrote its routes as towns with an arrow, its flight numbers after "FLIGHT:" with no
+airline code, a check-in time before each route, and notes below. Kos read a note's "AT THE …" as an airport (THE
+is one) and a connection's "TO …" as the route, and missed the return.
+
+- **Towns with an arrow** ("Bozeman -> Billings") are a route when a flight number or "flight" is near (a bus's
+  "Prague → Berlin" isn't): each town by its airport's name, else its city where one airport has it
+  (`airportCities`), trying the words nearest the arrow first ("… -> Billings FLIGHT: 510" is Billings).
+- **Bare codes** that are everyday words (THE, AND, FOR, ETD…) aren't airports, and codes on a connection's or a
+  transfer's line ("ground transportation to your connecting flight … to DEN") aren't the booking's route.
+- **"FLIGHT: 510"** is a flight number (not before a month, a time, or "of").
+- The check-in time before a route is left out: the times come from the row after it, departure then arrival.
