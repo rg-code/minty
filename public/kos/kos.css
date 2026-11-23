@@ -107,7 +107,7 @@ textarea.paste { width: 100%; min-height: 140px; resize: vertical; }
 .countdown { font-size: 13px; font-weight: 700; color: var(--accent); }
 
 /* Wanderlog: trips */
-.trips { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.trips { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); gap: 18px; }   /* big cards (owner, 2026-11-23); one a row on a phone */
 .trip-card { border-radius: 22px; overflow: hidden; background: var(--surface); border: 1px solid var(--hairline); text-decoration: none; color: var(--ink); display: flex; flex-direction: column; }
 .trip-card:hover { border-color: var(--hairline-2); transform: translateY(-1px); transition: transform .15s; }
 .cover { position: relative; min-height: 120px; padding: 14px 16px; display: flex; flex-direction: column; justify-content: flex-end; color: #fff;
@@ -116,7 +116,11 @@ textarea.paste { width: 100%; min-height: 140px; resize: vertical; }
 .cover > * { position: relative; z-index: 1; }
 .cover h3 { font-size: 22px; font-weight: 800; text-shadow: 0 1px 8px rgba(0, 0, 0, .25); }
 .cover .when { font-size: 13px; font-weight: 600; opacity: .92; }
-.trip-card .meta { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 14px; }
+.trip-card .meta { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 18px 16px; }
+.trip-card .cover { min-height: 200px; padding: 18px 20px; }
+.trip-card .cover h3 { font-size: 27px; }
+.trip-card .cover .when { font-size: 14px; }
+@media (max-width: 480px) { .trip-card .cover { min-height: 180px; } .trip-card .cover h3 { font-size: 24px; } }
 .trip-head .cover { min-height: 180px; border-radius: 24px; padding: 20px; }
 .trip-head .cover h1 { font-size: 30px; font-weight: 850; text-shadow: 0 2px 12px rgba(0, 0, 0, .3); }
 .avatars { display: flex; margin-top: 10px; }

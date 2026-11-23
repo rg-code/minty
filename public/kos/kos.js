@@ -168,7 +168,7 @@ const alsoFromHtml = () => `<p>Also from rg-code: <a href="https://milesmaximize
         the <a href="https://milesmaximizer.com/museum_problem/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-museums">museum finder</a>, for free museum entry;
         <a href="https://graze.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-graze">GRAZE</a>, for free EV charging;
         and <a href="https://minty.milesmaximizer.com/?utm_source=kos" target="_blank" rel="noopener" data-goatcounter-click="kos-to-minty">Minty</a>, for private money tracking.
-        On a Minty, Kos also shows what each trip cost, and live flight tracking like Flighty's, with gate, delay and landing updates, is on its way.</p>`;
+        On a Minty, Kos also shows what each trip cost, and live flight tracking like Flighty's, with gate, delay and landing updates.</p>`;
 const copyHtml = () => `<p class="w-copy">© rg-code, ${new Date().getFullYear()}</p>`;
 
 function welcome() {
