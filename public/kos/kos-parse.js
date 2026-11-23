@@ -18,6 +18,9 @@ const pad = (n) => String(n).padStart(2, "0");
  * usual misreads next to digits ("16:3O" → "16:30", "l8:16" → "18:16", "2O27" → "2027", "0ct" → "Oct"). */
 export function tidy(text) {
   return String(text ?? "").normalize("NFKC")
+    // Gmail's plain text of a forward: images as "[image: Hotel Icon]", links as "<https://…>", bold as "*…*"
+    .replace(/\[image:[^\]\n]{0,120}\]/gi, " ").replace(/<https?:\/\/[^>\s]{1,500}>/g, " ")
+    .replace(/(^|[\s(:#])\*([^*\s](?:[^*\n]{0,118}[^*\s])?)\*(?=[\s).,:;!?]|$)/gm, "$1$2")
     .replace(/\b(f[fil]{1,2}) (?=[a-z]{2})/g, "$1").replace(/[‒-―]/g, "-").replace(/[ \t ]+/g, " ")
     // inside number-like tokens only ("16:3O", "2O27", "¥28,34O", "l8:16"), never in a code with letters
     // ("K2OXYZ") or a name ("O2 Arena")
