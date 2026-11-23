@@ -175,6 +175,8 @@ there, gitignored here). If that folder exists, read it too.
      status (AeroAPI Personal), and a timeline from bookings, photos' metadata and transactions (§15).
      Street map: OpenFreeMap's tiles; push notifications later. The Gmail script's security change is
      approved (security-plan §6).
+   - **Set aside (designed 2026-11-23, not built):** price watching for flights and hotels (trips §37) and Kos's
+     AI tools for MCP and the in-app agent ([agent-plan.md](agent-plan.md) §13). Each lists the owner's decisions.
 10. **Landing page and demo upkeep:** after dashboard changes, rebuild and publish the landing
    page so the demo follows. A dashboard change the demo can't follow stops the build, by
    design. Other landing-page to-dos: `docs/private/STATUS.md`.
