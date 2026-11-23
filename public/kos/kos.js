@@ -10,6 +10,7 @@ import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, cityOf, exportFile, 
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
 import { parseWhere } from "./where.js";
+import { checkBooking, checkLegs } from "./kos-parse.js";
 
 const app = document.getElementById("app");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -102,6 +103,7 @@ function flightCard(f, { compact = false, countdown = false } = {}) {
       <div class="track"><span class="done" style="width:${Math.round(st.progress * 100)}%"></span><span style="position:absolute;left:${Math.round(Math.max(0, Math.min(1, st.progress)) * 100)}%;top:50%">${PLANE}</span>${dur ? `<span class="dur">${dur}</span>` : ""}</div>
       <div class="end arr"><div class="code">${esc(f.arr_airport ?? "—")}</div><div class="city">${esc(arr?.city || arr?.name || "")}</div><div class="time">${esc(timeOf(f.end_at) || "—")}${plusDays ? `<small>+${plusDays}</small>` : ""}</div></div>
     </div>
+    ${checkBooking(f, airports).length ? `<div class="live-line check-dates">Check the dates: ${esc(checkBooking(f, airports)[0])}. Edit it to fix the times.</div>` : ""}
     ${(() => { const ls = live(f); if (!ls) return "";
       const was = zoneTime(ls.dep.sched, ls.dep.tz), now = zoneTime(ls.dep.act ?? ls.dep.est, ls.dep.tz), lands = zoneTime(ls.arr.act ?? ls.arr.est, ls.arr.tz);
       const bits = [now && was && now !== was ? `${ls.dep.act ? "Left" : "Leaves"} ${now} (was ${was})` : "", ls.state === "departed" || ls.state === "landed" ? (lands ? `${ls.arr.act ? "Landed" : "Lands"} ${lands}` : "") : "",
@@ -276,7 +278,7 @@ function entryHtml(e) {
   const where = [i.place, i.confirmation ? `Conf. ${i.confirmation}` : ""].filter(Boolean).join(" · ");
   return `<div class="stop"><span class="marker">${e.n ?? "·"}</span><button type="button" class="item" data-item="${i.id}">
     <div class="row1"><span class="what"><span class="kind">${esc(e.role || KIND[i.kind])}</span> ${esc(i.name || KIND[i.kind])}</span><span class="at">${esc(e.at)}</span></div>
-    ${where ? `<div class="sub">${esc(where)}</div>` : ""}${!e.repeat && (i.price_cents || i.points) ? `<div class="sub">${i.points ? `${ptsText(i)}` : money(i.price_cents, i.currency)}</div>` : ""}</button></div>`;
+    ${where ? `<div class="sub">${esc(where)}</div>` : ""}${!e.repeat && checkBooking(i, airports).length ? `<div class="sub check-dates">Check the dates: ${esc(checkBooking(i, airports)[0])}</div>` : ""}${!e.repeat && (i.price_cents || i.points) ? `<div class="sub">${i.points ? `${ptsText(i)}` : money(i.price_cents, i.currency)}</div>` : ""}</button></div>`;
 }
 // --- the trip's summary strip (Wanderlog's "Reservations" and "Budgeting"): a count per kind of
 // booking, each a way to add one, and what the trip cost. Icons: Material Icons (Apache 2.0).
@@ -898,9 +900,16 @@ function standing(b) {
   if (!m.item) return { kind: "new" };
   return m.same ? { kind: "same", item: m.item } : { kind: "change", item: m.item, changes: m.changes };
 }
+/** What can't be true of each suggestion (docs/trips.md §36): its own checks, and a connection's order. */
+function problemsFor(list) {
+  const items = list.map((b, k) => ({ ...asItem(b, null), id: k })), out = list.map(() => []);
+  for (const g of journeys(items)) checkLegs(g, airports).forEach((p, j) => { out[g[j].id] = p; });
+  return out;
+}
+const checkPill = (p) => `<span class="pill warn" title="Kos read times that can't be right: open it and check">Check: ${esc(p[0])}</span>`;
 function suggestionsHtml(list, from) {
   if (!list.length) return `<div class="suggest muted">${from === "gmail" ? "No new bookings in your Kos label." : "Nothing recognisable there: fill the form in yourself."}</div>`;
-  const groups = journeys(list.map((b, k) => ({ ...asItem(b, null), id: k }))), n = groups.length;
+  const groups = journeys(list.map((b, k) => ({ ...asItem(b, null), id: k }))), n = groups.length, probs = problemsFor(list);
   const fromEmail = from === "email" || from === "gmail";
   // from an email, a connection is one row and one Add (each leg is still saved as its own booking)
   const legsOf = new Map(fromEmail ? groups.filter((g) => g.length > 1).map((g) => [g[0].id, g.map((x) => x.id)]) : []);
@@ -909,8 +918,9 @@ function suggestionsHtml(list, from) {
     const legs = ids.map((k) => list[k]), it = legs.map((b) => asItem(b, null)), st = legs.map(standing);
     const route = [...it.map((x) => x.dep_airport ?? "?"), it.at(-1).arr_airport ?? "?"].join(" → ");
     const nums = it.map((x) => [x.airline, x.flight_number].filter(Boolean).join(" ")).filter(Boolean).join(", ");
-    const have = st.filter((s) => s.kind === "same").length;
+    const have = st.filter((s) => s.kind === "same").length, bad = ids.find((k) => probs[k].length);
     const action = have === legs.length ? `<span class="pill good">Already in Kos</span>`
+      : bad !== undefined ? `${checkPill(probs[bad])}<button type="button" class="btn small" data-use="${bad}">Check &amp; use</button>`
       : `${have ? `<span class="pill info">${have} of ${legs.length} legs in Kos</span>` : ""}<button type="button" class="btn small primary" data-add-now="${ids.join(",")}">${have ? "Add the rest" : st.some((s) => s.kind === "change") ? "Add / update" : "Add"}</button>`;
     return `<div class="row"><span class="grow"><b>${esc(route)}</b>
       <span class="muted">Flight · ${legs.length} legs${nums ? ` (${esc(nums)})` : ""} · ${esc(fmtDay(dateOf(it[0].start_at)) || "no date")}${it[0].confirmation ? ` · ${esc(it[0].confirmation)}` : ""}${suggestTrip(legs[0]) ? ` · <b>→ ${esc(suggestTrip(legs[0]).name)}</b>` : ""}</span>${legs[0].quote ? `<q>${esc(legs[0].quote)}</q>` : ""}</span>${action}</div>`;
@@ -922,6 +932,7 @@ function suggestionsHtml(list, from) {
         if (s.kind === "cancel") return `<span class="pill warn">Cancelled</span><button type="button" class="btn small danger" data-del-match="${s.item.id}">Delete from Kos</button>`;
         if (s.kind === "cancelled-gone") return `<span class="pill dim">Cancelled · not in Kos</span>`;
         if (s.kind === "same") return `<span class="pill good">Already in Kos</span>`;
+        if (probs[n].length && s.kind !== "same") return `${checkPill(probs[n])}<button type="button" class="btn small" data-use="${n}">Check &amp; use</button>`;
         const add = from === "email" || from === "gmail" || from === "paste" || from === "pdf" || from === "screenshot";
         if (s.kind === "change") return `<span class="pill info">In Kos · new ${esc([...new Set(s.changes.map((k) => CHANGE_WORD[k] ?? k))].join(", "))}</span>${add ? `<button type="button" class="btn small primary" data-add-now="${n}">Update</button>` : ""}`;
         return `<button type="button" class="btn small" data-use="${n}">Use</button>${from === "email" || from === "gmail" ? `<button type="button" class="btn small primary" data-add-now="${n}">Add</button>` : ""}`;
@@ -1646,7 +1657,9 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at("[data-add-now]") || at("[data-add-all]")) {
-      const list = at("[data-add-all]") ? found : at("[data-add-now]").dataset.addNow.split(",").map((k) => found[Number(k)]).filter(Boolean);
+      // Add all leaves out what can't be right (§36): those wait for "Check & use"
+      const probs = problemsFor(found);
+      const list = at("[data-add-all]") ? found.filter((b, k) => !probs[k].length) : at("[data-add-now]").dataset.addNow.split(",").map((k) => found[Number(k)]).filter(Boolean);
       // a booking sent to a trip's own address goes in that trip; the rest in the trip being added to, else the
       // one its dates fall in. One Kos already has: updated with what changed (its trip stays), or left as is;
       // a cancellation is never added (its Delete button is beside it)

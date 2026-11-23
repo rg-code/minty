@@ -1340,3 +1340,24 @@ came out all on Thursday. The six travellers (§27) had overnights only with "+1
 - **A connection** leaving before the leg before it lands, from the airport that leg lands at and under the same
   printed date, is a day on.
 - **"WN #2222"** reads as a flight number.
+
+## 36. Sanity checks, and the first-principles cases (owner, 2026-11-23)
+
+The six travellers (§27) were written from memory of each sender's layout and scored against their own answers;
+nothing checked them against what a trip aggregator must get right, and nothing in Kos noticed an impossible
+result (a red-eye landing 16 hours before it took off, §35).
+
+- **Sanity checks** (`checkBooking`, `checkLegs` in `kos-parse.js`, pure): a flight lands after it takes off
+  and spends under 21 hours in the air (its hours from the clocks less the zones crossed, by longitude, with
+  slack); a train or bus arrives after it leaves; a stay checks out after the day it checks in, within 60 nights; a
+  connection leaves after the leg before it lands. A suggestion that fails shows "Check: …" and **Check & use**
+  (the form) instead of Add; **Add all** leaves it out. A saved booking that fails says "Check the dates" on its
+  card. The reader never guesses its way past one: an overnight rolls only to a flight that can be (20 hours or
+  less), so a garbled time stays and is flagged.
+- **The first-principles cases** (`test/kos-edge.test.ts`, made-up values, run with the tests): a red-eye with a
+  connection under one date, a red-eye marked "+1", the date line westbound (its own arrival date) and eastbound
+  (landing "earlier" the same day, Tokyo and Sydney), a hop that lands "earlier" across a zone line, a daytime
+  connection, a round trip, a night train, a night bus, a late check-in; each read field by field and through the
+  sanity checks. Writing them found four more gaps, now fixed: "AS 1234" alone on a line (Alaska), an arrival on
+  its own line after the airports, night trains by name (Nightjet, EuroNight, "Hbf", "sleeper"), and overnight
+  trains and buses arriving the next day. A new case goes here first.

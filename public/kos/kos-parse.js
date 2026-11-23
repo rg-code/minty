@@ -294,7 +294,8 @@ const NOT_AIRLINE = new Set(["AM", "PM", "NO", "OF", "TO", "IN", "ON", "AT", "BY
 function flightNumbers(text) {
   const out = [];
   for (const m of text.matchAll(/\b([A-Z]{2}|[A-Z]\d|\d[A-Z])\s?(?:#\s?)?(\d{1,4})\b(?![:\d%])/g)) {   // "UA 837", "UA837", "WN #2222"
-    if (NOT_AIRLINE.has(m[1]) && !/flight|flug|vol|volo|vuelo/i.test(text.slice(Math.max(0, m.index - 12), m.index))) continue;
+    // "AS 1234" alone on its line is Alaska's flight, whatever "as" means elsewhere
+    if (NOT_AIRLINE.has(m[1]) && !/flight|flug|vol|volo|vuelo/i.test(text.slice(Math.max(0, m.index - 12), m.index)) && lineOf(text, m.index).trim() !== m[0].trim()) continue;
     if (/\b(airbus|boeing|embraer|bombardier|aircraft|equipment|plane|seat|car|coach|gate|terminal|row)\s*$/i.test(text.slice(Math.max(0, m.index - 14), m.index)) || /^A3\d\d$/.test(m[0].replace(/\s/g, ""))) continue;
     if (/^\d/.test(m[1]) && !/[A-Z]/.test(m[1])) continue;
     out.push({ index: m.index, airline: m[1], number: String(+m[2]) });
@@ -434,7 +435,15 @@ export function parseBookings(raw, opts = {}) {
     const blockLo = fn && fn.index < c.depAt ? fn.index : null;
     const bd = blockLo !== null ? all.dates.filter((x) => x.index > blockLo && x.index < c.depAt) : [];
     const bt = blockLo !== null ? all.times.filter((x) => x.index > blockLo && x.index < c.depAt) : [];
-    if (bd.length && bt.length >= 1) { [d1, d2] = [bd[0], bd[1] ?? bd[0]]; [t1, t2] = [bt[0], bt[1] ?? null]; }
+    if (bd.length && bt.length >= 1) {
+      [d1, d2] = [bd[0], bd[1] ?? bd[0]]; [t1, t2] = [bt[0], bt[1] ?? null];
+      // the arrival on its own line after the airports ("Arrival: Wed, Apr 7, 2027 5:20 AM Tokyo (NRT)"): its time and date
+      if (!t2) {
+        const a0 = text.lastIndexOf("\n", c.arrAt - 1) + 1, b0 = text.indexOf("\n", c.arrAt), b1 = b0 < 0 ? text.length : b0;
+        const onArr = all.times.filter((t) => t.index >= Math.max(a0, c.depAt) && t.index < b1 && t !== t1 && !usedTimes.has(t));
+        if (onArr[0]) { t2 = onArr[0]; const ad = all.dates.find((x) => x.index >= Math.max(a0, c.depAt) && x.index < b1); if (ad) d2 = ad; }
+      }
+    }
     else {
       d1 = nearest(all.dates, c.depAt, { lo: Math.max(0, lo - 400), hi }) ?? nearest(all.dates, c.depAt);
       const sameLine = (i) => { const a = text.lastIndexOf("\n", i - 1) + 1, b = text.indexOf("\n", i); return all.times.filter((t) => t.index >= a && t.index < (b < 0 ? text.length : b)); };
@@ -497,7 +506,7 @@ export function parseBookings(raw, opts = {}) {
       const lon = (c) => { const a = airports?.[c]; return a && Number.isFinite(a[4]) ? a[4] : null; };
       const clock = (minute(l.end_at) - minute(l.start_at)) / 3600e3, z1 = lon(l.from), z2 = lon(l.to);
       const hours = z1 === null || z2 === null ? clock + 1 : clock - (z2 - z1) / 15;   // no airports known: only a gap of over 3 hours
-      if (hours < -2) l.end_at = dayOn(l.end_at);
+      if (hours < -2 && hours + 24 <= 20) l.end_at = dayOn(l.end_at);   // only to a flight that can be (a garbled time stays, and the checks flag it)
     }
     prevLeg = l;
   }
@@ -507,10 +516,10 @@ export function parseBookings(raw, opts = {}) {
   }
 
   // --- trains and buses -----------------------------------------------------------------------------
-  const TRAIN = /\b(Frecciarossa|Frecciargento|Frecciabianca|Italo|TGV(?:\s+INOUI)?|OUIGO|ICE|IC|EC|RJX?|Eurostar|Thalys|Nozomi|Hikari|Kodama|Mizuho|Sakura|Hayabusa|Shinkansen|Alfa Pendular|Intercidades|AVE|Alvia|Acela|Northeast Regional|Texas Eagle|Sunset Limited|Coast Starlight|Cascades|Pacific Surfliner|Empire Builder|Regionale|Railjet|Avanti|Train|Treno|Zug|Comboio)\s*(?:No\.?|Nr\.?|n\.|n°|nº|#|number)?\s*(\d{1,5})\b(?![:\d])/g;
+  const TRAIN = /\b(Nightjet|EuroNight|Frecciarossa|Frecciargento|Frecciabianca|Italo|TGV(?:\s+INOUI)?|OUIGO|ICE|IC|EC|RJX?|Eurostar|Thalys|Nozomi|Hikari|Kodama|Mizuho|Sakura|Hayabusa|Shinkansen|Alfa Pendular|Intercidades|AVE|Alvia|Acela|Northeast Regional|Texas Eagle|Sunset Limited|Coast Starlight|Cascades|Pacific Surfliner|Empire Builder|Regionale|Railjet|Avanti|Train|Treno|Zug|Comboio)\s*(?:No\.?|Nr\.?|n\.|n°|nº|#|number)?\s*(\d{1,5})\b(?![:\d])/g;
   const BUS = /\b(FlixBus|Flixbus|Greyhound|Megabus|BlaBlaCar Bus|Alsa|RegioJet|National Express|Bus|Coach|Line|Linie)\s*(?:No\.?|#|number)?\s*(\d{1,5})\b(?![:\d])/g;
   const ground = [];
-  const isRail = /\b(train|rail|railway|bahn|treno|trenitalia|italo|sncf|renfe|amtrak|eurostar|shinkansen|jr |comboios|station|stazione|gare|bahnhof|platform|coach \d|car \d|carriage|binario)\b/i.test(text);
+  const isRail = /\b(train|rail|railway|bahn|treno|trenitalia|italo|sncf|renfe|amtrak|eurostar|shinkansen|jr |comboios|station|stazione|gare|bahnhof|platform|coach \d|car \d|carriage|binario|hbf|hauptbahnhof|nightjet|euronight|sleeper|couchette|berths?)\b/i.test(text);
   const isBus = /\b(bus|flixbus|greyhound|megabus|coach station|bus station|terminal de autobuses)\b/i.test(text);
   if (isRail) for (const m of text.matchAll(TRAIN)) if (!/^(Train|Treno|Zug|Comboio|IC|EC|RJ|RJX|ICE|AVE)$/i.test(m[1]) || /\b(train|treno|zug|comboio)\b/i.test(text.slice(Math.max(0, m.index - 30), m.index + 30)) || /^(ICE|IC|EC|AVE|RJX?)$/.test(m[1])) ground.push({ kind: "train", index: m.index, name: `${m[1].replace(/\s+/g, " ")} ${+m[2]}` });
   if (isBus) for (const m of text.matchAll(BUS)) if (!/^(Bus|Coach|Line|Linie)$/i.test(m[1]) || isBus) ground.push({ kind: "bus", index: m.index, name: `${/^flixbus$/i.test(m[1]) ? "FlixBus" : m[1]} ${m[2]}` });
@@ -527,7 +536,12 @@ export function parseBookings(raw, opts = {}) {
       ?? /([A-ZÀ-Ý][\wÀ-ÿ.'’()/ -]{2,45}?)\s*(?:→|->|–|—|\s-\s|\s>\s|\bto\b)\s*([A-ZÀ-Ý][\wÀ-ÿ.'’()/ -]{2,45})/.exec(text.slice(Math.max(lo, g.index - 250), g.index));
     const from = valueAfter(region, /\b(?:from|departure station|origin|da|von|de)\s*:/i), to = valueAfter(region, /\b(?:to|arrival station|destination|a|nach|para)\s*:/i);
     const place = route ? `${route[1].trim()} → ${route[2].trim().split(/\s{2,}|\n/)[0]}` : from && to ? `${from} → ${to}` : null;
-    bookings.push({ kind: g.kind, name: g.name, start_at: at(d, t1), end_at: t2 && d ? at(d, t2) : null, ...(place ? { place } : {}), confirmation: conf, quote: region.slice(0, 160).trim() });
+    // an overnight train or bus (a sleeper at 22:15, in at 07:30) arrives the next day
+    let endAt = t2 && d ? at(d, t2) : null;
+    if (endAt && t1 && endAt < at(d, t1) && Date.parse(`${at(d, t1)}:00Z`) - Date.parse(`${endAt}:00Z`) > 3600e3) {
+      const n = new Date(`${d.date}T00:00:00Z`); n.setUTCDate(n.getUTCDate() + 1); endAt = at({ date: n.toISOString().slice(0, 10) }, t2);
+    }
+    bookings.push({ kind: g.kind, name: g.name, start_at: at(d, t1), end_at: endAt, ...(place ? { place } : {}), confirmation: conf, quote: region.slice(0, 160).trim() });
   });
 
   // --- a stay -----------------------------------------------------------------------------------------
@@ -707,3 +721,40 @@ export function readEmailBookings(email, { airports } = {}) {
   return { how: "text", bookings: r.bookings, cancelled: r.cancelled, promotional: r.promotional };
 }
 
+
+// --- sanity checks (docs/trips.md §36): what can't be true of a booking, so Kos asks rather than saving it ---
+const minuteOf = (s) => (s && String(s).length > 10 ? Date.parse(`${String(s).slice(0, 16)}:00Z`) : NaN);
+const dayOf = (s) => (s ? String(s).slice(0, 10) : null);
+/** What's impossible about a booking (in Kos's shape, or the email reader's): a flight landing before it takes
+ * off or over 21 hours in the air (its hours: the clocks' difference less the zones crossed, from each airport's
+ * longitude, with slack for that guess), a train or bus arriving before it leaves, a stay out the day it's in or
+ * over 60 nights. [] when it all holds. */
+export function checkBooking(b, airports) {
+  const out = [];
+  const s = minuteOf(b.start_at ?? b.start), e = minuteOf(b.end_at ?? b.end);
+  if (b.kind === "flight" && Number.isFinite(s) && Number.isFinite(e)) {
+    const lon = (c) => { const a = c ? airports?.[c] : null; return a && Number.isFinite(a[4]) ? a[4] : null; };
+    const z1 = lon(b.dep_airport ?? b.flight?.from), z2 = lon(b.arr_airport ?? b.flight?.to);
+    const hours = (e - s) / 3600e3 - (z1 !== null && z2 !== null ? (z2 - z1) / 15 : 0);
+    if (hours < -0.75) out.push("lands before it takes off");
+    else if (hours > 21) out.push(`over ${Math.floor(hours)} hours in the air`);
+  }
+  if ((b.kind === "train" || b.kind === "bus") && Number.isFinite(s) && Number.isFinite(e) && e < s) out.push("arrives before it leaves");
+  const ds = dayOf(b.start_at ?? b.start), de = dayOf(b.end_at ?? b.end);
+  if (b.kind === "lodging" && ds && de) {
+    const nights = Math.round((Date.parse(`${de}T00:00:00Z`) - Date.parse(`${ds}T00:00:00Z`)) / 864e5);
+    if (nights <= 0) out.push(nights < 0 ? "checks out before it checks in" : "checks out the day it checks in");
+    else if (nights > 60) out.push(`${nights} nights`);
+  }
+  return out;
+}
+/** A journey's legs in order: a connection leaving before the leg before it lands, from where that one lands.
+ * Returns each leg's problems (checkBooking's, and this). */
+export function checkLegs(legs, airports) {
+  return legs.map((l, k) => {
+    const out = checkBooking(l, airports), p = legs[k - 1];
+    const from = l.dep_airport ?? l.flight?.from, prevTo = p ? p.arr_airport ?? p.flight?.to : null;
+    if (p && from && from === prevTo && minuteOf(l.start_at ?? l.start) < minuteOf(p.end_at ?? p.end)) out.push("leaves before the flight before it lands");
+    return out;
+  });
+}
