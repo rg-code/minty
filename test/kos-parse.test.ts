@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dates, parseBookings, pointsIn, times } from "../public/kos/kos-parse.js";
+import { dates, parseBookings, pointsIn, tidy, times } from "../public/kos/kos-parse.js";
 
 // Reading bookings from pasted, PDF or screenshot text (public/kos/kos-parse.js). Made-up texts.
 describe("dates and times", () => {
@@ -237,6 +237,32 @@ Hotel Confirmation #: 5550001112223\nCheck-in: Check-out:\nTuesday, March 9, 202
     expect(bookedOn("-----Original Message-----\nFrom: X\nSent: Monday, January 4, 2027 9:00 AM\nTo: Y", "Fri, 20 Nov 2027 09:00:00 -0800")).toBe("2027-01-04");
     const [b] = parseBookings("Example Car Rental\nPick-up: Mon, Apr 5, 2027 10:00 AM\nReturn: Thu, Apr 8, 2027 10:00 AM\nConfirmation: 12345678US1\nCharged to Visa ending in 2468\nTotal: $300.00", { ref: Date.parse("2027-01-01") }).bookings;
     expect(b).toMatchObject({ kind: "car", card_last4: "2468", card_network: "visa" });
+  });
+  it("Gmail's plain text of a forward: '[image: …]', '<https://…>' and '*bold*' aren't the booking's words", () => {
+    const text = `---------- Forwarded message ---------
+From: Example Travel <travel@example.com>
+Date: Fri, Jan 15, 2027 at 9:12 AM
+Subject: Confirmed: your trip to Example City
+
+Trip to Example City <https://example.com/trip?id=1>
+Mar 9, 2027 - Mar 10, 2027
+[image: Hotel Icon]
+*Tuesday, March 9, 2027*
+*Seaside Resort Kalani* <https://example.com/hotel>
+12 Harbor Road
+Example City
+HI, United States, 96700
+*Hotel Confirmation #:* 5550001112223
+*Check-in:*
+*Tuesday, March 9, 2027*
+03:00 PM
+*Check-out:*
+*Wednesday, March 10, 2027*
+12:00 PM
+*Total Cost:* $1,151.45`;
+    const [b] = parseBookings(text, { ref: Date.parse("2027-01-15") }).bookings;
+    expect(b).toMatchObject({ kind: "lodging", name: "Seaside Resort Kalani", confirmation: "5550001112223", start_at: "2027-03-09T15:00", end_at: "2027-03-10T12:00", price_cents: 115145 });
+    expect(tidy("a *bold* word, 2 * 3 * 4, [image: Logo] and <https://example.com/x>")).toBe("a bold word, 2 * 3 * 4, and");
   });
   it("a charter's itinerary PDF: a route written with towns, a flight number after 'FLIGHT:', check-in times and notes left out", () => {
     const text = `TERMS AND CONDITIONS

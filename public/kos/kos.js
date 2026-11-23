@@ -1280,8 +1280,9 @@ async function gmailPull(box, quiet = false, again = false) {
   // the page moved on, a newer check ran, or (quietly) something else is being suggested: leave it
   if (!box.isConnected || mine !== pullSeq || (quiet && (!got.length || (found.length && foundFrom !== "gmail")))) return;
   found = got; foundFrom = "gmail"; pulled = msgs.map((m) => m.id);
-  if (again && !got.length) { box.innerHTML = `<div class="suggest muted">Everything Kos can read from the last 60 days of your Kos label is already in Kos.</div>`; return; }
-  box.innerHTML = (quiet ? `<div class="suggest-head muted">New in your Gmail</div>` : again ? `<div class="suggest-head muted">From the last 60 days, not in Kos</div>` : "") + suggestionsHtml(found, "gmail") + (empty.length && !again ? `<div class="suggest muted">${empty.length} email${empty.length === 1 ? "" : "s"} with no booking details Kos can read (${empty.slice(0, 3).map((m) => `“${esc(m.subject)}”`).join(", ")}): paste their text instead.</div>` : "")
+  const unread = empty.length ? `<div class="suggest muted">${empty.length} email${empty.length === 1 ? "" : "s"} with no booking details Kos can read (${empty.slice(0, 3).map((m) => `“${esc(m.subject)}”`).join(", ")}): paste their text instead.</div>` : "";
+  if (again && !got.length) { box.innerHTML = `<div class="suggest muted">Everything Kos can read from the last 60 days of your Kos label is already in Kos.</div>${unread}`; return; }
+  box.innerHTML = (quiet ? `<div class="suggest-head muted">New in your Gmail</div>` : again ? `<div class="suggest-head muted">From the last 60 days, not in Kos</div>` : "") + suggestionsHtml(found, "gmail") + unread
     + `<div class="actions">${msgs.length && !again ? `<button type="button" class="btn ghost" data-gmail-skip>Don't show these again</button>` : ""}<button type="button" class="btn ghost" data-gmail-again title="Kos skips emails it read before: this looks again, and offers only bookings no longer in Kos">Deleted one? Read again</button></div>`
     + (gmail.oldScript ? `<div class="suggest muted">Your Gmail script reads only the Kos label. To use each trip's own address, copy the script from <a href="#/gmail">the set-up page</a> into Apps Script again and deploy a new version.</div>` : "");
 }
