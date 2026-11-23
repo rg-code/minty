@@ -192,5 +192,8 @@ describe("an email's attached PDFs (an itinerary 'see attached', docs/trips.md Â
     const outer = readMessage(fwd), inner = attachedMessage(fwd);
     expect(emailPdfs(inner, outer).map((p) => p.filename)).toEqual(["itinerary.pdf"]);
     expect(emailPdfs(readMessage("From: a@example.com\r\nSubject: x\r\n\r\nno attachments"))).toEqual([]);
+    // labelled octet-stream, with no .pdf name: a PDF by its first bytes
+    const odd = withPdf("Your itinerary").replace('Content-Type: application/pdf; name="itinerary.pdf"', "Content-Type: application/octet-stream").replace('Content-Disposition: attachment; filename="itinerary.pdf"', "Content-Disposition: attachment");
+    expect(emailPdfs(readMessage(odd))).toEqual([{ filename: "attachment.pdf", data: b64 }]);
   });
 });
