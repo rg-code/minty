@@ -175,3 +175,22 @@ describe("microdata, and a stub text part (an agency's hotel email, docs/trips.m
     expect(r.bookings[0]).toMatchObject({ price_cents: 123050, currency: "USD" });
   });
 });
+
+describe("an email's attached PDFs (an itinerary 'see attached', docs/trips.md §34)", () => {
+  const pdf = "%PDF-1.4\n" + "x".repeat(200) + "\n%%EOF\n";
+  const b64 = btoa(pdf);
+  const withPdf = (subject: string) => ["From: Example Air <res@example.com>", "To: someone@example.com", `Subject: ${subject}`, "Date: Fri, 15 Jan 2027 09:12:00 -1000",
+    "MIME-Version: 1.0", 'Content-Type: multipart/mixed; boundary="in"', "", "--in", "Content-Type: text/plain; charset=UTF-8", "", "Your itinerary is attached.",
+    "--in", 'Content-Type: application/pdf; name="itinerary.pdf"', 'Content-Disposition: attachment; filename="itinerary.pdf"', "Content-Transfer-Encoding: base64", "", b64,
+    "--in", 'Content-Type: image/png; name="logo.png"', 'Content-Disposition: attachment; filename="logo.png"', "Content-Transfer-Encoding: base64", "", btoa("\x89PNG" + "y".repeat(100)),
+    "--in--", ""].join("\r\n");
+  it("gives the PDFs, not the images, from the email or the original attached to a forward", async () => {
+    const { attachedMessage, emailPdfs } = await import("../src/kos/mime");
+    expect(emailPdfs(readMessage(withPdf("Your itinerary")))).toEqual([{ filename: "itinerary.pdf", data: b64 }]);
+    const fwd = ["From: Someone <someone@example.com>", "To: kos@example.com", "Subject: Fwd: Your itinerary", "MIME-Version: 1.0", 'Content-Type: multipart/mixed; boundary="mix"', "",
+      "--mix", "Content-Type: text/plain", "", "", "--mix", "Content-Type: message/rfc822", "", withPdf("Your itinerary"), "--mix--", ""].join("\r\n");
+    const outer = readMessage(fwd), inner = attachedMessage(fwd);
+    expect(emailPdfs(inner, outer).map((p) => p.filename)).toEqual(["itinerary.pdf"]);
+    expect(emailPdfs(readMessage("From: a@example.com\r\nSubject: x\r\n\r\nno attachments"))).toEqual([]);
+  });
+});

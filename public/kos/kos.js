@@ -1240,7 +1240,15 @@ function billsView() {
 async function emailBookings(r) {
   // markup first (with the points from the text), else the text: kos-parse.js, shared with the real-data check
   const { readEmailBookings } = await import("./kos-parse.js");
-  return readEmailBookings({ markup: r.bookings, text: r.text, date: r.date, subject: r.subject }, { airports }).bookings;
+  const found = readEmailBookings({ markup: r.bookings, text: r.text, date: r.date, subject: r.subject }, { airports }).bookings;
+  if (found.length || !r.pdfs?.length) return found;
+  // nothing in the email itself: its attached PDFs ("your itinerary is attached"), read here with pdf.js, dated
+  // by the email (docs/trips.md §34)
+  const { readPdfs } = await import("/pdf-read.js");
+  const files = r.pdfs.map((p) => { const bin = atob(p.data), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new File([bytes], p.filename || "attachment.pdf", { type: "application/pdf", lastModified: Date.now() }); });
+  const { rows } = await readPdfs(files, { view: "kos", known: async () => [], parse: (text) => ({ text }), max: 3 });
+  return rows.filter((x) => x.text && !x.error).flatMap((x) => readEmailBookings({ markup: [], text: x.text, date: r.date, subject: r.subject }, { airports }).bookings);
 }
 /** New emails from the Kos label, each read with the email reader, as suggestions. quiet: the
  * Add page's own check when it opens; it shows only bookings, never "nothing new" or an error. */

@@ -182,3 +182,22 @@ export function viewOf(m: Message): "trips" | "bills" | null {
   }
   return null;
 }
+
+/** The PDFs attached to an email (an itinerary "see attached"), base64, for the page to read with pdf.js
+ * (docs/trips.md §34): the original's first, then a forward's own; at most 3, each at most 1.5 MB. */
+export function emailPdfs(...messages: (Message | null | undefined)[]): { filename: string; data: string }[] {
+  const out: { filename: string; data: string }[] = [];
+  const seen = new Set<string>();
+  for (const m of messages) for (const a of m?.attachments ?? []) {
+    if (out.length >= 3 || a.content.length > 1_500_000 || a.content.length < 64) continue;
+    if (!(/pdf/i.test(a.contentType) || /\.pdf$/i.test(a.filename ?? ""))) continue;
+    let bin = "";
+    for (let i = 0; i < a.content.length; i += 0x8000) bin += String.fromCharCode(...a.content.subarray(i, i + 0x8000));
+    if (!bin.startsWith("%PDF")) continue;
+    const key = `${a.content.length}:${bin.slice(0, 64)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ filename: (a.filename ?? "attachment.pdf").slice(0, 120), data: btoa(bin) });
+  }
+  return out;
+}

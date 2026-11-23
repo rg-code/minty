@@ -1312,3 +1312,18 @@ is one) and a connection's "TO …" as the route, and missed the return.
   transfer's line ("ground transportation to your connecting flight … to DEN") aren't the booking's route.
 - **"FLIGHT: 510"** is a flight number (not before a month, a time, or "of").
 - The check-in time before a route is left out: the times come from the row after it, departure then arrival.
+
+## 34. A booking in an email's attached PDF (owner, 2026-11-23)
+
+The owner forwarded an airline's confirmation whose booking was only in its attached PDF ("your itinerary is
+attached"); Kos read the email's words and markup, found nothing, and never looked at the PDF.
+
+- **The PDFs come with the email:** `emailPdfs` (`src/kos/mime.ts`) gives an email's attached PDFs, base64 (the
+  original's first when it was forwarded as an attachment, then the forward's own; at most 3, each at most
+  1.5 MB). Inside Minty, `POST /trips/read-email` returns them as `pdfs`; Kos on its own reads the email in the
+  browser and gets them the same way. Nothing is stored.
+- **Read in the page:** when the email's markup and words give no booking, Kos reads its PDFs with pdf.js
+  (`public/pdf-read.js`, as the PDF tab) and their text with the same reader, dated by the email
+  (`emailBookings` in `kos.js`). Gmail pull and an email file both go this way. The Gmail script already sends
+  the whole email (attachments included, up to 1.5 MB).
+- **Not yet:** the real-data check script (`scripts/kos-t0/parse.ts`) reads an email's words, not its PDFs.

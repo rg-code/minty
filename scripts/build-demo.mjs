@@ -132,7 +132,7 @@ if (/(href|src)="\/[a-z]/.test(kosFiles["index.html"])) throw new Error(`build-d
 editKos("kos.js", "no service worker", `if ("serviceWorker" in navigator) navigator.serviceWorker.register("/kos/sw.js", { scope: "/kos/" }).catch(() => {});`, "// the demo registers no service worker");
 editKos("kos.js", "no Gmail tab", `["gmail", "Gmail"], `, "");
 editKos("kos.js", "no screenshot tab", `["shot", "Screenshot"], `, "");
-editKos("kos.js", "pdf.js from the demo", `import("/pdf-read.js")`, `import("../pdf-read.js")`, 3);
+editKos("kos.js", "pdf.js from the demo (the PDF tab, bills, shared PDFs, an email's attached PDFs)", `import("/pdf-read.js")`, `import("../pdf-read.js")`, 4);
 editKos("kos.js", "the bill reader from the demo", `import("/bill-parse.js"), import("/points-parse.js")`, `import("../bill-parse.js"), import("../points-parse.js")`);
 editKos("kos.js", "Open in Minty: the demo's dashboard", `href="/?trip=`, `href="../?trip=`);
 editKos("map.js", "airports, relative", `"/kos/airports.json"`, `"airports.json"`);
