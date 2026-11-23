@@ -293,7 +293,7 @@ const NOT_AIRLINE = new Set(["AM", "PM", "NO", "OF", "TO", "IN", "ON", "AT", "BY
 /** Flight numbers in the text: "UA 837", "UA837", "Flight FR 1234", "Delta 1387", "EZY4873". */
 function flightNumbers(text) {
   const out = [];
-  for (const m of text.matchAll(/\b([A-Z]{2}|[A-Z]\d|\d[A-Z])\s?(\d{1,4})\b(?![:\d%])/g)) {
+  for (const m of text.matchAll(/\b([A-Z]{2}|[A-Z]\d|\d[A-Z])\s?(?:#\s?)?(\d{1,4})\b(?![:\d%])/g)) {   // "UA 837", "UA837", "WN #2222"
     if (NOT_AIRLINE.has(m[1]) && !/flight|flug|vol|volo|vuelo/i.test(text.slice(Math.max(0, m.index - 12), m.index))) continue;
     if (/\b(airbus|boeing|embraer|bombardier|aircraft|equipment|plane|seat|car|coach|gate|terminal|row)\s*$/i.test(text.slice(Math.max(0, m.index - 14), m.index)) || /^A3\d\d$/.test(m[0].replace(/\s/g, ""))) continue;
     if (/^\d/.test(m[1]) && !/[A-Z]/.test(m[1])) continue;
@@ -456,7 +456,7 @@ export function parseBookings(raw, opts = {}) {
     }
     if (t1) usedTimes.add(t1);
     if (t2) usedTimes.add(t2);
-    legs.push({ ...c, fn, start_at: at(d1, t1), end_at: t2 ? at(d2, t2) : null, region: [lo, hi] });
+    legs.push({ ...c, fn, start_at: at(d1, t1), end_at: t2 ? at(d2, t2) : null, region: [lo, hi], dateTok: d1, arrDated: Boolean(d2 && d2 !== d1) });
   });
   // the same leg twice (a summary, a receipt's fare lines, a seat list): once, keeping the fullest
   const score = (l) => (l.fn ? 4 : 0) + (l.start_at?.length > 10 ? 2 : 0) + (l.end_at ? 1 : 0);
@@ -480,6 +480,27 @@ export function parseBookings(raw, opts = {}) {
     if (!l.fn && !(l.start_at?.length > 10) && kept.some((k) => k.fn)) return false;
     return true;
   });
+  // overnight (owner, 2026-11-23: a red-eye printed under one date): a leg landing well before it left the same
+  // day lands the next day; a connection leaving before the last leg landed, on that leg's date, is a day on
+  const dayOn = (s) => { const d = new Date(`${s.slice(0, 10)}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10) + s.slice(10); };
+  const minute = (s) => (s && s.length > 10 ? Date.parse(`${s.slice(0, 16)}:00Z`) : NaN);
+  let prevLeg = null;
+  for (const l of [...real].sort((a, b) => a.depAt - b.depAt)) {
+    // only where the email printed one date for both (an arrival with its own date, as across the date line, stays)
+    if (prevLeg?.end_at && prevLeg.to === l.from && l.start_at?.length > 10 && l.dateTok && l.dateTok === prevLeg.dateTok && minute(l.start_at) < minute(prevLeg.end_at)) {
+      l.start_at = dayOn(l.start_at);
+      if (l.end_at?.length > 10 && !l.arrDated) l.end_at = dayOn(l.end_at);
+    }
+    // its hours in the air: the clocks' difference less the zones crossed (each airport's longitude / 15, close
+    // enough to tell a red-eye, -19 h, from a flight across the date line, +11 h, or a hop across a zone line)
+    if (!l.arrDated && l.end_at?.length > 10 && l.start_at?.length > 10 && l.end_at.slice(0, 10) === l.start_at.slice(0, 10)) {
+      const lon = (c) => { const a = airports?.[c]; return a && Number.isFinite(a[4]) ? a[4] : null; };
+      const clock = (minute(l.end_at) - minute(l.start_at)) / 3600e3, z1 = lon(l.from), z2 = lon(l.to);
+      const hours = z1 === null || z2 === null ? clock + 1 : clock - (z2 - z1) / 15;   // no airports known: only a gap of over 3 hours
+      if (hours < -2) l.end_at = dayOn(l.end_at);
+    }
+    prevLeg = l;
+  }
   for (const l of real) {
     bookings.push({ kind: "flight", airline: l.fn?.airline ?? null, flight_number: l.fn?.number ?? null, dep_airport: l.from, arr_airport: l.to,
       start_at: l.start_at, end_at: l.end_at, confirmation: conf, quote: text.slice(Math.max(0, l.depAt - 60), l.arrAt + 60).trim() });

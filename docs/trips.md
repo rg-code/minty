@@ -1327,3 +1327,16 @@ attached"); Kos read the email's words and markup, found nothing, and never look
   (`emailBookings` in `kos.js`). Gmail pull and an email file both go this way. The Gmail script already sends
   the whole email (attachments included, up to 1.5 MB).
 - **Not yet:** the real-data check script (`scripts/kos-t0/parse.ts`) reads an email's words, not its PDFs.
+
+## 35. Overnight flights (owner, 2026-11-23)
+
+A red-eye with a connection, printed under one date ("Thursday": 9:25 PM → 5:05 AM, then 6:20 AM → 7:50 AM),
+came out all on Thursday. The six travellers (§27) had overnights only with "+1" or an arrival date printed.
+
+- **Its time in the air** decides: the clocks' difference less the zones crossed, estimated from each airport's
+  longitude (/15). Under -2 hours, it lands the next day: a red-eye (about -19 h) does, a flight across the date
+  line (+11 h, landing "earlier" the same day) and a short hop across a zone line don't. Without the airports'
+  places, only a gap of over 3 hours rolls. Never when the arrival has its own printed date.
+- **A connection** leaving before the leg before it lands, from the airport that leg lands at and under the same
+  printed date, is a day on.
+- **"WN #2222"** reads as a flight number.

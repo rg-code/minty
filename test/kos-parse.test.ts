@@ -264,6 +264,38 @@ HI, United States, 96700
     expect(b).toMatchObject({ kind: "lodging", name: "Seaside Resort Kalani", confirmation: "5550001112223", start_at: "2027-03-09T15:00", end_at: "2027-03-10T12:00", price_cents: 115145 });
     expect(tidy("a *bold* word, 2 * 3 * 4, [image: Logo] and <https://example.com/x>")).toBe("a bold word, 2 * 3 * 4, and");
   });
+  it("a red-eye with a connection under one date: the landing and the connection are the next day", () => {
+    const text = `Flight:
+Thursday, 03/11/2027
+Est. Travel Time: 12h 50m
+Basic
+FLIGHT
+WN #2222
+DEPARTS
+PDX 09:40PM
+Portland
+ARRIVES
+PHX 01:05AM
+Phoenix
+- Stop: Change planes
+FLIGHT
+WN #3333
+DEPARTS
+PHX 05:50AM
+Phoenix
+ARRIVES
+BWI 01:30PM`;
+    const airports = { PDX: ["Portland International Airport", "Portland", "US", 45.59, -122.6], PHX: ["Phoenix Sky Harbor International Airport", "Phoenix", "US", 33.43, -112.01],
+      BWI: ["Baltimore/Washington International Airport", "Baltimore", "US", 39.18, -76.67], DTW: ["Detroit Metropolitan Wayne County Airport", "Detroit", "US", 42.21, -83.35],
+      ORD: ["O'Hare International Airport", "Chicago", "US", 41.98, -87.9], NRT: ["Narita International Airport", "Tokyo", "JP", 35.77, 140.39], LAX: ["Los Angeles International Airport", "Los Angeles", "US", 33.94, -118.41] };
+    const legs = parseBookings(text, { ref: Date.parse("2027-01-15"), airports }).bookings.map((b) => [b.flight_number, b.dep_airport, b.arr_airport, b.start_at, b.end_at]);
+    expect(legs).toEqual([["2222", "PDX", "PHX", "2027-03-11T21:40", "2027-03-12T01:05"], ["3333", "PHX", "BWI", "2027-03-12T05:50", "2027-03-12T13:30"]]);
+    // a short hop that lands "earlier" across a time zone, and a flight across the date line, stay on their day
+    const hop = parseBookings("Flight UA 1234\nMon, Apr 5, 2027\nDepart DTW 10:00 AM\nArrive ORD 9:55 AM", { ref: Date.parse("2027-01-15"), airports }).bookings[0];
+    expect(hop).toMatchObject({ start_at: "2027-04-05T10:00", end_at: "2027-04-05T09:55" });
+    const dateLine = parseBookings("Flight NH 6\nSat, Apr 10, 2027\nDepart NRT 5:05 PM\nArrive LAX 10:35 AM", { ref: Date.parse("2027-01-15"), airports }).bookings[0];
+    expect(dateLine).toMatchObject({ start_at: "2027-04-10T17:05", end_at: "2027-04-10T10:35" });
+  });
   it("a charter's itinerary PDF: a route written with towns, a flight number after 'FLIGHT:', check-in times and notes left out", () => {
     const text = `TERMS AND CONDITIONS
 Example Air is a charter air service. All reservations are booked and ticketed by Example Resorts LLC.
