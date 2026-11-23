@@ -260,6 +260,24 @@ function airportWords(airports) {
   return idx;
 }
 
+/** Airports by their city ("bozeman", "salt lake city"), only where one airport has that city: a route written
+ * with towns ("Bozeman -> Billings") reads by them. */
+const cityIndex = new WeakMap();
+function airportCities(airports) {
+  if (!airports) return null;
+  if (cityIndex.has(airports)) return cityIndex.get(airports);
+  const seen = new Map();
+  for (const [code, a] of Object.entries(airports)) {
+    const city = String(a?.[1] ?? "").split(",")[0].trim().toLowerCase();
+    if (city.length >= 3) seen.set(city, seen.has(city) && seen.get(city) !== code ? null : code);
+  }
+  const idx = new Map([...seen].filter(([, c]) => c));
+  cityIndex.set(airports, idx);
+  return idx;
+}
+// three capitals that are airport codes and everyday words or abbreviations: a bare one isn't an airport
+const WORD_CODES = new Set("THE AND FOR ARE YOU ALL ANY BUT CAN HAS HAD HOW MAY NOT NOW OFF ONE OUR OUT OWN PER SEE TOO TWO USE WAS WAY WHO WHY YES YET ETD ETA AGO AIR BUS CAR DAY END GET LET NET OLD PAY PUT RUN SET TOP TRY VIA BAG BOX MAN MEN BIG FEW LOW TEN SIX HOT ICE SUN MON TUE WED THU FRI SAT FAX TEL REF NAM".split(" "));
+
 // airlines by name and by ICAO code, for "Delta 1387", "AEROMEXICO 646", "EZY4873"
 const AIRLINES = { united: "UA", delta: "DL", american: "AA", southwest: "WN", alaska: "AS", jetblue: "B6", hawaiian: "HA", frontier: "F9", spirit: "NK",
   "air canada": "AC", westjet: "WS", "british airways": "BA", lufthansa: "LH", "air france": "AF", klm: "KL", aeromexico: "AM", "aeroméxico": "AM",
@@ -282,7 +300,7 @@ function flightNumbers(text) {
   for (const m of text.matchAll(AIRLINE_NAME_RE)) out.push({ index: m.index, airline: AIRLINES[m[1].toLowerCase().replace(/\s+/g, " ")], number: String(+m[2]) });
   // "Flight # 2316", "Flight 1544": the airline named in the email, if one is
   const named = new RegExp(`\\b(${Object.keys(AIRLINES).sort((a, b) => b.length - a.length).join("|")})\\b`, "i").exec(text)?.[1];
-  for (const m of text.matchAll(/\bflight\s*(?:#|no\.?|number|nr\.?)\s*:?\s*(\d{1,4})\b(?![:\d])/gi)) out.push({ index: m.index, airline: named ? AIRLINES[named.toLowerCase()] : null, number: String(+m[1]) });
+  for (const m of text.matchAll(/\bflight\s*(?:#|no\.?|number|nr\.?|:)\s*:?\s*(\d{1,4})\b(?![:\d])(?!\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|[ap]\.?m\b|of\b))/gi)) out.push({ index: m.index, airline: named ? AIRLINES[named.toLowerCase()] : null, number: String(+m[1]) });
   return out.sort((a, b) => a.index - b.index).filter((f, i, a) => !a.some((g, j) => j < i && Math.abs(g.index - f.index) < 4));
 }
 
@@ -349,6 +367,19 @@ export function parseBookings(raw, opts = {}) {
   const pairRe = /\b([A-Z]{3})\s*(?:→|->|–|—|-|>|\bto\b|✈)\s*([A-Z]{3})\b/g;
   const explicit = [];
   for (const m of text.matchAll(pairRe)) if (m[1] !== m[2] && isAirport(m[1]) && isAirport(m[2])) explicit.push({ from: m[1], to: m[2], index: m.index, end: m.index + m[0].length });
+  // a route written with towns and an arrow ("Bozeman -> Billings", "Salt Lake City → Boise"): each by its airport's name,
+  // else its city where one airport has it
+  const cities = airportCities(airports), TOWN = "([A-Z][A-Za-z'’`.]{2,}(?:[ -][A-Z][A-Za-z'’`.]{2,}){0,2})";
+  const byTown = (s) => { const t = s.toLowerCase().replace(/[`’]/g, "'"); return cities?.get(t) ?? words?.get(t) ?? cities?.get(t.replace(/'/g, "")) ?? words?.get(t.replace(/'/g, "")) ?? null; };
+  // the words nearest the arrow first: "Bozeman -> Billings FLIGHT: 510" is Billings, "Hotel Boise -> Billings" is Boise
+  const nearestTown = (s, fromEnd) => { const w = s.split(/[ ]+/); for (let n = w.length; n >= 1; n--) { const c = byTown((fromEnd ? w.slice(-n) : w.slice(0, n)).join(" ")); if (c) return c; } return null; };
+  if (airports) for (const m of text.matchAll(new RegExp(`${TOWN}[ \\t]*(?:→|->|—|>)[ \\t]*${TOWN}`, "g"))) {
+    const a = nearestTown(m[1], true), b = nearestTown(m[2], false);
+    // only a flight's route: a flight number or "flight" near it (a bus's "Prague → Berlin" isn't one)
+    const near = text.slice(Math.max(0, m.index - 160), m.index + m[0].length + 160);
+    if (!fns.some((f) => Math.abs(f.index - m.index) < 200) && !/\b(flight|flug|vol|vuelo|volo|airline|boarding)\b/i.test(near)) continue;
+    if (a && b && a !== b && !explicit.some((x) => m.index < x.end && m.index + m[0].length > x.index)) explicit.push({ from: a, to: b, index: m.index, end: m.index + m[0].length, towns: true });
+  }
   // "(DEN)", "(ORD - O'HARE)", "(Haneda - HND)"
   for (const m of text.matchAll(/\((?:[^()\n]{1,30}?[-–,]\s*)?([A-Z]{3})(?:\s*[-–,][^()\n]{1,30})?\)/g)) {
     if (!isAirport(m[1]) || explicit.some((x) => m.index < x.end && m.index + m[0].length > x.index)) continue;
@@ -357,7 +388,9 @@ export function parseBookings(raw, opts = {}) {
   }
   // a bare code on a line with a time, or after Depart/Arrive/From/To labels ("SFO 06:00", "Depart: JFK")
   for (const m of text.matchAll(/\b([A-Z]{3})\b/g)) {
-    if (!isAirport(m[1]) || mentions.some((x) => x.index <= m.index && x.end >= m.index + 3) || explicit.some((x) => m.index >= x.index && m.index < x.end)) continue;
+    if (!isAirport(m[1]) || WORD_CODES.has(m[1]) || mentions.some((x) => x.index <= m.index && x.end >= m.index + 3) || explicit.some((x) => m.index >= x.index && m.index < x.end)) continue;
+    // a connection's or a transfer's note ("ground transportation to your connecting flight … to DEN") isn't this booking's route
+    if (/\b(connection|connecting|layover|change (?:of )?planes|stopover|transportation|shuttle|transfer)\b/i.test(lineOf(text, m.index))) continue;
     if (/^ [A-Z]{4,}/.test(text.slice(m.index + 3, m.index + 16))) continue;   // "LOS ANGELES", "SAN FRANCISCO", not "OAK 9:15AM"
     const line = lineOf(text, m.index);
     if (/\d{1,2}[:h]\d{2}|\d\s?[ap]\.?m\b/i.test(line) || /\b(depart|arriv|from|to|origin|destination|departure|arrival|dep|arr)\b/i.test(text.slice(Math.max(0, m.index - 25), m.index)))

@@ -238,6 +238,31 @@ Hotel Confirmation #: 5550001112223\nCheck-in: Check-out:\nTuesday, March 9, 202
     const [b] = parseBookings("Example Car Rental\nPick-up: Mon, Apr 5, 2027 10:00 AM\nReturn: Thu, Apr 8, 2027 10:00 AM\nConfirmation: 12345678US1\nCharged to Visa ending in 2468\nTotal: $300.00", { ref: Date.parse("2027-01-01") }).bookings;
     expect(b).toMatchObject({ kind: "car", card_last4: "2468", card_network: "visa" });
   });
+  it("a charter's itinerary PDF: a route written with towns, a flight number after 'FLIGHT:', check-in times and notes left out", () => {
+    const text = `TERMS AND CONDITIONS
+Example Air is a charter air service. All reservations are booked and ticketed by Example Resorts LLC.
+Passenger Itinerary
+BOOKING NUMBER: 5550123
+DEPARTING PASSENGER NAMES (2)
+• ALEX SAMPLE
+• JAMIE SAMPLE
+ITINERARY
+CHECK IN BY DEPARTURE ARRIVAL DETAILS
+8:00 AM Bozeman -> Billings FLIGHT: 510
+Tue, 9 Mar 2027 9:00 AM Tue, 9 Mar 2027 9:40 AM CLASS: STANDARD (Y)
+12:15_UPON RETURNING YOUR VEHICLE AT THE 4-STORY GARAGE (12:15), TAKE THE ELEVATOR DOWN.
+RETURNING PASSENGER NAMES (2)
+CHECK IN BY DEPARTURE ARRIVAL DETAILS
+3:00 PM Billings -> Bozeman FLIGHT: 733
+Wed, 10 Mar 2027 4:00 PM Wed, 10 Mar 2027 4:40 PM CLASS: STANDARD (Y)
+WE WILL PROVIDE GROUND TRANSPORTATION TO YOUR CONNECTING FLIGHT ON: WN_1111 TO DEN ETD_18:05)`;
+    const airports = { BZN: ["Bozeman Yellowstone International Airport", "Bozeman", "US", 45.8, -111.2], BIL: ["Billings Logan International Airport", "Billings", "US", 45.8, -108.5],
+                       DEN: ["Denver International Airport", "Denver", "US", 39.9, -104.7], THE: ["Teresina Airport", "Teresina", "BR", -5.1, -42.8] };
+    const r = parseBookings(text, { ref: Date.parse("2027-01-15"), airports });
+    expect(r.bookings.map((b) => [b.kind, b.flight_number, b.dep_airport, b.arr_airport, b.start_at, b.end_at, b.confirmation])).toEqual([
+      ["flight", "510", "BZN", "BIL", "2027-03-09T09:00", "2027-03-09T09:40", "5550123"],
+      ["flight", "733", "BIL", "BZN", "2027-03-10T16:00", "2027-03-10T16:40", "5550123"]]);   // never THE (a word) or DEN (a connection's note)
+  });
   it("an email as Kos reads it: markup with the points from its text, else the text with its date and subject (readEmailBookings)", async () => {
     const { readEmailBookings } = await import("../public/kos/kos-parse.js");
     const markup = [{ kind: "lodging", name: "Example Lodge", start: "2027-05-10T15:00:00-06:00", end: "2027-05-13T11:00:00-06:00", confirmation: "EX12345", points: null }];

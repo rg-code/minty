@@ -327,7 +327,7 @@ function tripView(t, tab) {
   else if (kindTab) {
     const list = t.items.filter((i) => i.kind === tab || (tab === "train" && i.kind === "bus")).sort((a, b) => ((a.start_at ?? "") < (b.start_at ?? "") ? -1 : 1));
     body = `<div class="stops kind-list">${list.map((i, n) => entryHtml({ item: i, n: n + 1, at: [fmtDay(dateOf(i.start_at)), timeOf(i.start_at)].filter(Boolean).join(" · ") })).join("")
-      || `<div class="card muted">No ${esc(kindTab[1].toLowerCase())} bookings in this trip yet.</div>`}</div>${addLink(tab, `Add a ${kindTab[1].toLowerCase()} booking`)}`;
+      || `<div class="card muted">No ${tab === "other" ? "other" : esc(kindTab[1].toLowerCase())} bookings in this trip yet.</div>`}</div>${addLink(tab, tab === "other" ? "Add another booking" : `Add ${/^[aeiou]/i.test(kindTab[1]) ? "an" : "a"} ${kindTab[1].toLowerCase()} booking`)}`;
   }
   else if (tab === "spending") body = `<div id="spending"><p class="muted">Loading the trip's spending…</p></div>`;
   else body = `${p.before.length ? dayHtml({ label: "Before the trip", entries: p.before, color: "#8c96ad" }) : ""}
