@@ -1422,7 +1422,13 @@ async function render() {
     if (q.get("shared") !== null) source = "type";
     const pullNow = q.get("pull") !== null;                       // the header's Check Gmail button
     if (pullNow) { source = "gmail"; history.replaceState(null, "", tid ? `#/add?trip=${tid}` : "#/add"); }
-    if (KIND[q.get("kind")]) { draft = { ...(draft ?? {}), kind: q.get("kind") }; source = "type"; }   // from the trip's summary strip
+    // from the trip's summary strip: that kind, typed, once on arrival; then the address forgets it, so the
+    // source tabs (Gmail, Paste, PDF…) switch as usual (a redraw used to put "Type it" back every time)
+    if (KIND[q.get("kind")] && !tabSwitch) {
+      draft = { ...(draft ?? {}), kind: q.get("kind") }; source = "type";
+      const rest = new URLSearchParams(q); rest.delete("kind");
+      history.replaceState(null, "", `#/add${rest.toString() ? `?${rest}` : ""}`);
+    }
     app.innerHTML = addView(tid, source);
     loadPrograms();
     if (scan?.text) await readText(scan.text, "screenshot");
