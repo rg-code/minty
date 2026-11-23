@@ -423,7 +423,7 @@ secret). It's off without one.
 **Polling, from the cron only** (never on a request, like sync). Per flight leg:
 - once 24 hours before, once 6 and once 3 hours before;
 - every 10-minute catch-up run from 2 hours before until it departs;
-- every 30 minutes until it lands, and once after.
+- every hour until it lands (and 10 minutes after its estimated landing, if sooner; owner, 2026-11-23), and once after.
 
 That's about 15–20 calls a leg. `FLIGHT_STATUS_CALLS_PER_DAY` caps them (default 50), so a free tier
 isn't overrun. Past the cap, cards say "status paused until tomorrow".
@@ -1219,7 +1219,9 @@ with one name, the one near the trip's flights), else near the airport the trip 
 Those dots are paler. The Lodging tab's stay cards say a stay is approximate and how to give it its spot (edit
 the booking: a map link, a plus code or coordinates); the map's own line saying so went (owner, 2026-11-21). Pins on one
 spot become one, numbered "2·3", so none hides another at any zoom. The journal's map does the same. On the
-trip's map only airports are named (the numbers match the plan), and the flights are its only lines: the solid
+trip's map only airports are named (the numbers match the plan), and the flights are its only lines. It opens
+zoomed in on the trip's own places, as the journal's map does, leaving out the airports flown from (the Flights
+tab shows the whole route; owner, 2026-11-23): the solid
 line joining the places in order ran beside them once every booking had a dot, so it went (owner, 2026-11-21).
 
 **The summary strip.** A kind with bookings shows them: Flight opens the Flights tab, Lodging the Lodging
@@ -1271,7 +1273,7 @@ default and the only one yet). Off without the key, and in Kos on its own.
   number is first asked once its date is today or tomorrow, by number and a three-day window
   (`/flights/{UA1234}?ident_type=designator`), and picked by its airports and the departure nearest its day.
   Then by FlightAware's own id, when FlightAware's times say: 6 and 3 hours before, every 10 minutes from 2
-  hours before until it leaves, every 30 minutes in the air, once after it lands; never again once cancelled or
+  hours before until it leaves, hourly in the air (and 10 minutes after its estimated landing), once after it lands; never again once cancelled or
   long gone. One FlightAware doesn't list yet is asked again in 6 hours while its day is near.
 - **Kept on the leg** (`0033_flight_status.sql`): the latest answer as JSON (state: scheduled, delayed, departed,
   landed, cancelled, diverted; scheduled, estimated and actual times in UTC with each airport's time zone;

@@ -3,7 +3,8 @@
 // What goes to FlightAware: a flight's number and date, never a person, a confirmation or a price.
 // - Status: only from a quiet catch-up cron run, a few legs a run. A leg is first asked once its date is
 //   today or tomorrow; then FlightAware's own times set the next ask (6 and 3 hours before, every 10
-//   minutes from 2 hours before until it leaves, every 30 minutes in the air, once after it lands).
+//   minutes from 2 hours before until it leaves, hourly in the air (and 10 minutes after its estimated landing),
+//   once after it lands).
 // - Look-up: one ask when someone taps "Look up" on a flight's form (its airports and local times).
 // Both share FLIGHT_STATUS_CALLS_PER_DAY (default 50), counted per UTC day in app_state.
 import type { Env } from "./env";
@@ -67,9 +68,10 @@ export function nextCheck(st: FlightStatus, now: number): string | null {
   // cancelled: once more at its departure time (it stays on Minty's status strip until then), then done
   if (st.state === "cancelled") return Number.isFinite(out) && out > now ? iso(out) : null;
   if (Number.isFinite(landed)) return now < landed + 30 * MIN ? iso(landed + 30 * MIN) : null;   // once after it lands
-  if (st.dep.act) {                                                                          // in the air: every 30 minutes
-    const inAt = at(st.arr.est ?? st.arr.sched);
-    return Number.isFinite(inAt) && now > inAt + 6 * HOUR ? null : iso(now + 30 * MIN);
+  if (st.dep.act) {                                                                          // in the air: hourly (owner, 2026-11-23),
+    const inAt = at(st.arr.est ?? st.arr.sched);                                             // and 10 minutes after it's due to land
+    if (Number.isFinite(inAt) && now > inAt + 6 * HOUR) return null;
+    return iso(Number.isFinite(inAt) && inAt + 10 * MIN > now ? Math.min(now + HOUR, inAt + 10 * MIN) : now + HOUR);
   }
   if (!Number.isFinite(out)) return iso(now + 6 * HOUR);
   if (now > out + 12 * HOUR) return null;                                                    // long gone, never seen leaving

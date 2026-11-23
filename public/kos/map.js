@@ -113,8 +113,12 @@ export function drawTrip(map, { arcs = [], pins = [], paths = [] }, onPick, fit 
   }
   const placed = points.features.map((f) => f.geometry.coordinates);
   const stays = points.features.filter((f) => f.properties.kind === "lodging").map((f) => f.geometry.coordinates);
-  // "lodging" frames the stays (falling back to the places), "pins" the places, "all" the flights too
-  const all = fit === "lodging" && stays.length ? stays : (fit === "pins" || fit === "lodging") && placed.length ? placed : [...lines.features.flatMap((f) => f.geometry.coordinates), ...placed];
+  // "places": the trip's own places, not where its flights leave from (zoomed in, as the journal's map)
+  const ground = points.features.filter((f) => f.properties.kind !== "flight" && f.properties.kind !== "photo").map((f) => f.geometry.coordinates);
+  // "lodging" frames the stays (falling back to the places), "places" the places without the airports flown
+  // from (falling back to every pin), "pins" every pin, "all" the flights too
+  const all = fit === "lodging" && stays.length ? stays : fit === "places" && ground.length ? ground
+    : (fit === "pins" || fit === "lodging" || fit === "places") && placed.length ? placed : [...lines.features.flatMap((f) => f.geometry.coordinates), ...placed];
   if (all.length) {
     const b = all.reduce((bb, c) => bb.extend(c), new gl.LngLatBounds(all[0], all[0]));
     map.fitBounds(b, { padding: 48, maxZoom: all.length === 1 ? 12 : 14, duration: 0 });

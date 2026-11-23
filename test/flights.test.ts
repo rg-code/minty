@@ -40,13 +40,16 @@ describe("a flight's status from FlightAware's answer", () => {
     expect(toStatus(flight({ actual_out: "2027-04-05T16:05:00Z", actual_in: "2027-04-05T21:20:00Z", baggage_claim: "5" }))).toMatchObject({ state: "landed", baggage: "5" });
     expect(toStatus(flight({ cancelled: true })).state).toBe("cancelled");
   });
-  it("asks next 6 and 3 hours before, every 10 minutes from 2 hours before, every 30 in the air, once after landing", () => {
+  it("asks next 6 and 3 hours before, every 10 minutes from 2 hours before, hourly in the air (and just after it's due), once after landing", () => {
     const st = toStatus(flight()), out = Date.parse("2027-04-05T16:00:00Z"), H = 3_600_000;
     expect(nextCheck(st, out - 20 * H)).toBe("2027-04-05T10:00:00.000Z");
     expect(nextCheck(st, out - 5 * H)).toBe("2027-04-05T13:00:00.000Z");
     expect(nextCheck(st, out - 2.5 * H)).toBe("2027-04-05T14:00:00.000Z");
     expect(nextCheck(st, out - 1 * H)).toBe("2027-04-05T15:10:00.000Z");
-    expect(nextCheck(toStatus(flight({ actual_out: "2027-04-05T16:05:00Z" })), out + H)).toBe("2027-04-05T17:30:00.000Z");
+    const flying = toStatus(flight({ actual_out: "2027-04-05T16:05:00Z" }));                 // due in at 21:30
+    expect(nextCheck(flying, out + H)).toBe("2027-04-05T18:00:00.000Z");                     // an hour on
+    expect(nextCheck(flying, Date.parse("2027-04-05T21:00:00Z"))).toBe("2027-04-05T21:40:00.000Z");   // 10 minutes after it's due, sooner than an hour
+    expect(nextCheck(flying, Date.parse("2027-04-05T22:00:00Z"))).toBe("2027-04-05T23:00:00.000Z");   // late: hourly again
     const landed = toStatus(flight({ actual_out: "2027-04-05T16:05:00Z", actual_in: "2027-04-05T21:20:00Z" }));
     expect(nextCheck(landed, Date.parse("2027-04-05T21:25:00Z"))).toBe("2027-04-05T21:50:00.000Z");
     expect(nextCheck(landed, Date.parse("2027-04-05T22:00:00Z"))).toBeNull();

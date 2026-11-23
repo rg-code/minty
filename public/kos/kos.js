@@ -587,7 +587,7 @@ async function showMap(t, tab = "") {
   drawTrip(map, d, (id) => {
     const card = app.querySelector(`[data-item="${CSS.escape(id)}"]`);
     if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); card.animate?.([{ outline: "2px solid var(--accent)" }, { outline: "2px solid transparent" }], 1200); }
-  }, tab === "flights" ? "all" : tab === "lodging" ? "lodging" : "pins", dark);   // Lodging zooms in on the stays
+  }, tab === "flights" ? "all" : tab === "lodging" ? "lodging" : "places", dark);   // zoomed in on the trip's places, as the journal's; Lodging on the stays; Flights the whole route
 }
 
 // --- the trip's spending ----------------------------------------------------------------------
