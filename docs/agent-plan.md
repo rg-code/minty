@@ -610,3 +610,37 @@ come later. It never syncs.
 
 **M4: more of Minty** (each its own PR)
 - [ ] Bills, ABC credits, BAM balances, EGG, each with a read budget.
+
+## 13. Kos and AI: trip tools for MCP and the in-app agent (owner asked 2026-11-23; set aside, not built)
+
+**Status: designed, set aside by the owner on 2026-11-23. Nothing is built.** It extends §12 (MCP) and §11 (the
+in-app agent); the owner mentioned a local AI harness discussed elsewhere, not yet written down here.
+
+**Principle:** the model plans; Kos supplies facts and takes proposals. Nothing an AI suggests enters the
+itinerary until the household accepts it in Kos (as §12's preview-then-apply tagging).
+
+**Tools** (`src/agent/tools/kos.ts`, in this repo, with read budgets and tests):
+
+| Kind | Tools |
+|---|---|
+| Read | `list_trips`, `get_trip` (day by day: bookings, places, free days), `get_booking`, `trip_budget` (Minty spending vs bookings), `flight_status`, `price_watch_status` (trips §37), `journal` |
+| Check | `find_gaps`: nights with no stay, no transport between an airport and a stay, overlapping bookings, the sanity checks' problems (trips §36) |
+| Propose | `propose_booking`, `propose_place`, `propose_trip`, `propose_note`, `set_price_watch`: proposed items (a new status, a small migration), shown in Kos with Accept / Dismiss |
+| Prompts | "Plan my free day 3", "Check this trip for gaps", "Packing list for this trip" |
+| Resource | each trip's itinerary as one readable document |
+
+Planning ("what to do in a city on day 3") is the model's own knowledge plus `get_trip`'s where and when,
+answered through `propose_place` (a suggestion card on that day).
+
+**Who uses it:**
+- **The owner:** the Kos tools join §12's MCP Worker (private `minty-mcp`, Access sign-in), for claude.ai, Desktop
+  and Claude Code. A local AI harness is another MCP client on the same server: the same tools and data, another
+  model. Needs §12's M0 first.
+- **Forks:** §11's in-app panel (A2) in Kos, calling the same tools with the household's chosen model (OpenRouter,
+  Workers AI, or its own key). No MCP server.
+- **Kos on its own:** no server, so no MCP; later perhaps a bring-your-own-key assistant in the page.
+
+**Phases:** K-M1 the read tools and `find_gaps`, here. K-M2 in the owner's MCP Worker (after §12 M0/M2).
+K-M3 proposed items with Accept / Dismiss in Kos. K-M4 the forks' panel.
+
+**Owner decisions waiting:** do §12's M0 now so the Kos tools ride along, or K-M1 first; which local harness.

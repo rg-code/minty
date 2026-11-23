@@ -1361,3 +1361,43 @@ result (a red-eye landing 16 hours before it took off, §35).
   sanity checks. Writing them found four more gaps, now fixed: "AS 1234" alone on a line (Alaska), an arrival on
   its own line after the airports, night trains by name (Nightjet, EuroNight, "Hbf", "sleeper"), and overnight
   trains and buses arriving the next day. A new case goes here first.
+
+## 37. Price watching for flights and hotels (owner asked 2026-11-23; set aside, not built)
+
+**Status: designed, set aside by the owner on 2026-11-23. Nothing is built.** Pick up from here.
+
+**The data (checked 2026-11-23; vendors' claims, re-check before choosing):**
+- Amadeus closed its Self-Service APIs, Flight Offers Search included, on 2026-07-17; only Enterprise access
+  (expecting IATA/ARC accreditation) remains. Google has had no flights API since QPX closed in 2018.
+- What's left are third-party Google Flights / Google Hotels data APIs (SerpApi, SearchApi, FlightPowers;
+  Ignav: 1,000 free requests, then about $2 per 1,000). They return the same Google prices; free tiers are
+  roughly 10–100 requests a month; scraping-based ones carry terms-of-service and stability risk.
+- Hotels: Xotelo (free, donation-funded, TripAdvisor-sourced, no guarantees), Makcorps (30 free calls, then
+  expensive). Award prices: seats.aero's paid partner API for some airlines; nothing for hotel points.
+- Proposal: one provider for both flights and hotels behind an adapter (`PRICE_PROVIDER`, `PRICE_KEY` secret),
+  about $10 a month for a household, with a daily cap.
+
+**A drop means like for like, and actionable:**
+- Flights: the same flight numbers, date, cabin and fare type (Basic vs Main), per passenger (the email's
+  passenger count, or set by hand). Flagged only where the fare allows a change for credit: a small rules list
+  in code with sources and a `CHECKED` date, as ABC's catalog ("Southwest: free change, the difference as credit").
+- Hotels: the same hotel, dates and room type, and only while the rate can still be cancelled (Kos would keep
+  the "cancel by" date it now only skips as a booking date).
+- Points bookings: later, if a source is worth paying for.
+
+**Architecture (Kos inside Minty only, as flight status §32):**
+- `price_watches` (migration): one row per watched booking: what's compared, the baseline paid, the latest and
+  lowest prices, when checked and next due, a short history kept on the row (one write a check).
+- What's watched: "Watch price" on a card (and a swipe action), and "Watch all" per trip.
+- Quiet cron runs only: weekly beyond 60 days out, every 2 days at 15–60, daily inside 15; stops at departure or
+  the cancellation deadline; `PRICE_CHECKS_PER_DAY` cap, a few a run.
+- Shown: "Now $412 (paid $496) · as of today" on the card, "Price dropped" on the trip, a line on Minty's status
+  strip; push later.
+- Only a route and date, or a hotel and dates, go to the provider (a new security-plan section; no CSP change).
+  Kos on its own: off.
+
+**Phases:** P1 cash flights and hotels, one provider, card lines. P2 the actionable rules, cancel-by dates, the
+strip and the trip badge. P3 award prices.
+
+**Owner decisions waiting:** the provider and budget (or free with tiny caps); watching off by default with a
+per-booking toggle, or "Watch all" on for upcoming trips.
