@@ -133,9 +133,11 @@ token, the service token and the API key to yourself: paste back only the output
    - a page from `cloudflareaccess.com`: the policy isn't **Service Auth**, or the token is wrong;
    - a Cloudflare challenge page: Bot Fight Mode is on for the domain; add a WAF skip rule for the hostname;
    - 502 or error 1033: the tunnel can't reach Immich; check the service URL in 3.
-6. **The Immich key** (Account Settings → API Keys): edit the "Minty" key to add **`asset.view`**
-   (the journal's thumbnails). Then run check 4's script through the tunnel with `--k2` (any past trip's
-   dates; it makes and deletes nothing):
+6. **The Immich key** (Account Settings → API Keys → New API key): name it `Minty`, with **`asset.read`,
+   `asset.view`** (the journal's thumbnails), **`album.read`, `album.create`, `albumAsset.create`**, and
+   `user.read` for this check only (remove it afterwards). If you have a key named Minty already, edit it to
+   have these. Then run check 4's script through the tunnel with `--k2` (any past trip's dates; it makes and
+   deletes nothing):
    ```
    IMMICH_URL=https://immich-api.<your domain> IMMICH_API_KEY=<the Minty key> \
    IMMICH_ACCESS_CLIENT_ID=$CFID IMMICH_ACCESS_CLIENT_SECRET=$CFSECRET \
@@ -145,7 +147,13 @@ token, the service token and the API key to yourself: paste back only the output
    key.
 8. **Then Minty's Worker settings** (Workers & Pages → minty → Settings → Variables and secrets):
    variables `IMMICH_URL` = `https://immich-api.<your domain>` and `IMMICH_LINK_URL` = where you open
-   Immich in a browser (its tailnet address), for the album links; secrets `IMMICH_API_KEY`,
+   Immich in a browser (its tailnet address), for the album links; secrets `IMMICH_API_KEY` (the key from 6),
    `IMMICH_ACCESS_CLIENT_ID`, `IMMICH_ACCESS_CLIENT_SECRET`. Within about 10 minutes, Setup says whether
    the key works and has what Kos needs.
 
+
+**This hostname is Minty's only.** Its Service Auth policy turns away browsers and the Immich app, by design. To
+open Immich away from home without Tailscale, add a second hostname on the same tunnel (e.g. `photos.<your
+domain>`) with its own Access application and an Allow policy for your email; never loosen `immich-api`'s. Phone
+backups and long videos are better over Tailscale: Cloudflare's free plan caps an upload at 100 MB, and its terms
+discourage serving mostly large media through it.
