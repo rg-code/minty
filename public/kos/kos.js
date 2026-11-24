@@ -124,7 +124,7 @@ function home() {
   const upcoming = data.trips.filter((t) => t.end_date >= today).sort((a, b) => (a.start_date < b.start_date ? -1 : 1));
   const past = data.trips.filter((t) => t.end_date < today);
   const tripCard = (t) => `<a class="trip-card" href="#/trip/${t.id}">
-    <div class="cover" style="--h:${hue(t.name)}" data-photo="${t.id}"><h3>${esc(t.name)}</h3><div class="when">${esc(fmtShort(t.start_date))} – ${esc(fmtShort(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div></div>
+    <div class="cover" style="--h:${hue(t.name)}" data-photo="${t.id}"><h3>${esc(t.name)}</h3><div class="when">${esc(fmtShort(t.start_date))} – ${esc(fmtShort(t.end_date))}, ${t.end_date.slice(0, 4)}</div></div>
     <div class="meta">${t.start_date > today ? `<span class="pill info">in ${Math.round((asDay(t.start_date) - asDay(today)) / 864e5)} days</span>` : t.end_date >= today ? `<span class="pill good">On now</span>` : ""}
       ${["flight", "lodging"].map((k) => { const n = t.items.filter((i) => i.kind === k).length; return n ? `<span class="pill dim">${n} ${k === "flight" ? (n === 1 ? "flight" : "flights") : (n === 1 ? "stay" : "stays")}</span>` : ""; }).join("")}
       ${t.transactions ? `<span class="pill dim">${money(t.spent_cents)} spent</span>` : ""}</div></a>`;
@@ -338,7 +338,7 @@ function tripView(t, tab) {
     ${p.unscheduled.length ? dayHtml({ label: "No date yet", entries: p.unscheduled, color: "#8c96ad" }) : ""}`;
   return `<section class="trip-head"><div class="cover" style="--h:${hue(t.name)}" data-photo="${t.id}" data-photo-link>
       <div class="cover-actions"><a class="btn small" href="#/trip/${t.id}/share" data-goatcounter-click="kos-share-trip">Share</a><a class="btn small" href="#/trip/${t.id}/journal">Journal</a><a class="btn small" href="#/trip/${t.id}/edit">Edit</a><a class="btn small" href="#/add?trip=${t.id}">Add booking</a></div>
-      <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div>
+      <h1 class="trip-name">${esc(t.name)}<button type="button" class="rename-btn" data-rename-trip="${t.id}" aria-label="Rename the trip" title="Rename the trip">✎</button></h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}</div>
       ${t.travellers.length ? `<div class="avatars">${t.travellers.map((k) => `<span title="${esc(label(k))}">${esc(label(k).slice(0, 1).toUpperCase())}</span>`).join("")}</div>` : ""}
       ${tagChips(tripTags(t))}</div></section>
     ${(() => { const s = tripSpan(t); return s.outside ? `<div class="card fit-note"><span class="grow"><b>${s.outside} booking${s.outside === 1 ? " is" : "s are"} outside this trip's dates.</b>
@@ -441,7 +441,7 @@ function importView(f) {
   return `<div class="card share-bar"><div class="grow"><b>Someone shared a trip with you.</b> <span class="muted">Look through it: nothing is added until you choose.</span></div>
       <div class="actions"><button type="button" class="btn primary" data-add-shared data-goatcounter-click="kos-add-shared-trip">Add this trip</button><a class="btn ghost" href="#/">Not now</a><span class="err" id="formErr"></span></div></div>
     <section class="trip-head"><div class="cover" style="--h:${hue(t.name)}" data-photo="shared">
-      <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${esc(String(t.end_date).slice(0, 4))}${t.place ? ` · ${esc(t.place)}` : ""}</div></div></section>
+      <h1>${esc(t.name)}</h1><div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${esc(String(t.end_date).slice(0, 4))}</div></div></section>
     <p class="muted share-count">${t.items.length} booking${t.items.length === 1 ? "" : "s"}${Object.keys(kinds).length ? `: ${Object.entries(kinds).map(([k, n]) => `${n} ${esc((KIND[k] ?? k).toLowerCase())}`).join(", ")}` : ""}.</p>
     <div class="trip preview"><div class="plan">${days}</div>
       <div class="mapwrap"><div class="map" id="map"></div><div class="map-note" id="mapNote" hidden></div></div></div>`;
@@ -674,7 +674,7 @@ function journalView(t) {
   };
   return `<article class="journal">
     <header class="j-hero" style="--h:${hue(t.name)}"><div class="j-kicker">Trip journal</div><h1>${esc(t.name)}</h1>
-      <div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}${t.place ? ` · ${esc(t.place)}` : ""}</div>
+      <div class="when">${esc(fmtDay(t.start_date))} – ${esc(fmtDay(t.end_date))}, ${t.end_date.slice(0, 4)}</div>
       <div class="j-stats">${stat(st.days, st.days === 1 ? "day" : "days")}${st.flights ? stat(st.flights, st.flights === 1 ? "flight" : "flights") : ""}${st.km ? stat(st.km.toLocaleString(), "km flown") : ""}${st.countries > 1 ? stat(st.countries, "countries") : ""}${st.places ? stat(st.places, st.places === 1 ? "place" : "places") : ""}<span id="jSpent"></span></div>
       <div class="j-actions"><a class="btn small" href="#/trip/${t.id}">Back to the trip</a><button type="button" class="btn small" data-print>Print or save as PDF</button></div></header>
     ${note("trip", "How was it? A few lines to remember it by.")}
@@ -1504,6 +1504,14 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-rename-trip]")) {                               // the trip's name, edited where it shows
+      const t = tripById(Number(at("[data-rename-trip]").dataset.renameTrip)), h = at("[data-rename-trip]").closest("h1");
+      h.outerHTML = `<form class="rename-form" data-rename-form="${t.id}"><input name="name" maxlength="100" value="${esc(t.name)}" aria-label="Trip name" required />
+        <button class="btn small primary" type="submit">Save</button><button class="btn small" type="button" data-rename-cancel>Cancel</button><span class="err" id="formErr"></span></form>`;
+      const input = app.querySelector("[data-rename-form] input"); input.focus(); input.select();
+      return;
+    }
+    if (at("[data-rename-cancel]")) { await render(); return; }
     if (at("[data-fit-trip]")) {                                  // a trip's dates widened to its bookings (tripSpan)
       const t = tripById(Number(at("[data-fit-trip]").dataset.fitTrip)), s = tripSpan(t);
       try {
@@ -1791,6 +1799,13 @@ app.addEventListener("submit", async (ev) => {
   ev.preventDefault();
   const f = ev.target, err = (m) => { f.querySelector("#formErr").textContent = m; };
   try {
+    if (f.dataset.renameForm) {                                    // a trip renamed on its page: everything else as it is
+      const t = tripById(Number(f.dataset.renameForm)), name = f.elements.name.value.trim();
+      if (!name) { err("Give the trip a name"); return; }
+      await store.saveTrip(t.id, { name, start_date: t.start_date, end_date: t.end_date, place: t.place ?? "", lat: t.lat ?? null, lon: t.lon ?? null,
+        notes: t.notes ?? "", travellers: t.travellers ?? [], ...(store.spending ? { tags: t.tags ?? [] } : {}) });
+      data = null; await render(); return;
+    }
     if (f.id === "tripForm") {
       const e = f.elements;
       const body = { name: e.name.value, start_date: e.start_date.value, end_date: e.end_date.value, place: e.place.value, notes: e.notes.value,
