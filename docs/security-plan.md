@@ -439,3 +439,16 @@ first service it calls that the household runs itself, and the first photo it se
   taps it (rate-limited like every API call). At most `FLIGHT_STATUS_CALLS_PER_DAY` (default 50) a day in all, so
   the key's free monthly use isn't overrun.
 - **Privacy:** FlightAware learns that the household's account looked up those flights. Nothing else.
+
+## 12. Kos: attachments in R2 (owner, 2026-11-24)
+
+- **What:** files a household attaches to a booking: boarding passes (names, barcodes), tickets, confirmations,
+  Wallet passes, emails. Personal, so never public: R2 has no public bucket or custom domain for them; the only
+  way in is `GET /trips/files/{id}`, behind Access and `ALLOWED_LOGINS` like every API path. Every admitted login
+  can open every file (the trust model, §2).
+- **Uploads:** at most 10 MB, 10 a booking; the type is read from the bytes (no HTML, script or archive other than a
+  Wallet pass), the name cleaned; responses carry `nosniff` and `no-store`; an email is sent as an attachment,
+  never rendered.
+- **On devices:** a copy on a device only when the household asks, or when the file was added there; it goes with
+  the file or 30 days after the trip. Kos on its own keeps files only on the device.
+- **Retention:** removed `ATTACHMENTS_KEEP_DAYS` (30) after the trip, or with the booking.

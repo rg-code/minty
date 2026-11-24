@@ -9,12 +9,13 @@ import { DEFAULT_READ_BUDGET, LIMITERS, readBudget, readsToday } from "../limits
 import { tokenKeys } from "../token-key";
 import { IMMICH_PERMISSIONS, immichCheck } from "../immich";
 import { callsToday, flightsOn } from "../flights";
+import { keepDays } from "../files";
 
 /** GET /status: setup checks for the household, shown on the /add-user page. Behind Access like
  * every API route; reports only whether things are set, never values. */
 
 /** Must list every file in d1/migrations (a test checks this). */
-export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql", "0010_card_statements.sql", "0011_bills.sql", "0012_point_balances.sql", "0013_audit.sql", "0014_audit_views.sql", "0015_investments.sql", "0016_statement_marks.sql", "0017_account_names.sql", "0018_statement_estimated.sql", "0019_analytics_exclusions.sql", "0020_txn_category_index.sql", "0021_authorized_date.sql", "0022_benefit_credit_periods.sql", "0023_manual_accounts.sql", "0024_sub.sql", "0025_jet.sql", "0026_trip_tags.sql", "0027_trip_journal.sql", "0028_trip_codes.sql", "0029_trip_photos.sql", "0030_trip_item_card.sql", "0031_trip_item_geo.sql", "0032_trip_item_geo_redo.sql", "0033_flight_status.sql"];
+export const EXPECTED_MIGRATIONS = ["0001_init.sql", "0002_sync_pages.sql", "0003_account_owner.sql", "0004_sync_restart.sql", "0005_bank_health.sql", "0006_card_benefits.sql", "0007_read_indexes.sql", "0008_app_state.sql", "0009_link_sessions.sql", "0010_card_statements.sql", "0011_bills.sql", "0012_point_balances.sql", "0013_audit.sql", "0014_audit_views.sql", "0015_investments.sql", "0016_statement_marks.sql", "0017_account_names.sql", "0018_statement_estimated.sql", "0019_analytics_exclusions.sql", "0020_txn_category_index.sql", "0021_authorized_date.sql", "0022_benefit_credit_periods.sql", "0023_manual_accounts.sql", "0024_sub.sql", "0025_jet.sql", "0026_trip_tags.sql", "0027_trip_journal.sql", "0028_trip_codes.sql", "0029_trip_photos.sql", "0030_trip_item_card.sql", "0031_trip_item_geo.sql", "0032_trip_item_geo_redo.sql", "0033_flight_status.sql", "0034_trip_files.sql"];
 
 interface Check { id: string; ok: boolean; level: "error" | "warn"; message: string; fix?: string }
 
@@ -264,6 +265,14 @@ export async function status(env: Env, config: Config, email: string): Promise<R
   }
   if (sync) add({ id: "sync", level: "warn", ...sync });
 
+  // Kos: attachments (docs/trips.md §38): in R2 when it's bound; else each device keeps its own
+  {
+    const n = await env.DB.prepare("SELECT count(*) AS n, coalesce(sum(size), 0) AS bytes FROM trip_files").first<{ n: number; bytes: number }>().catch(() => null);
+    const days = keepDays(env), keep = days ? `removed ${days} days after their trip ends` : "kept until deleted (ATTACHMENTS_KEEP_DAYS is 0)";
+    checks.push(env.FILES
+      ? { id: "attachments", ok: true, level: "warn", message: `Kos's attachments are in R2: ${n?.n ?? 0} file${n?.n === 1 ? "" : "s"}, ${((n?.bytes ?? 0) / 1048576).toFixed(1)} MB (10 GB free), ${keep}.` }
+      : { id: "attachments", ok: true, level: "warn", message: "Kos keeps attachments on each device only: R2 isn't switched on for this Minty.", fix: "Cloudflare dashboard → R2 → turn it on (it asks for a card; 10 GB a month is free), then redeploy: the next deploy makes the minty-files bucket." });
+  }
   // Kos: live flight status (docs/trips.md §32), only when the key is set; this page never calls FlightAware
   if (env.FLIGHT_STATUS_KEY) {
     const on = flightsOn(env), used = on ? await callsToday(env) : 0;

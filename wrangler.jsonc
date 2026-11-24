@@ -30,6 +30,8 @@
 //       FLIGHT_STATUS_PROVIDER "aeroapi"           Kos's live flight status and flight look-up (docs/trips.md
 //                                                  §32), with the secret FLIGHT_STATUS_KEY. Unset key = off
 //       FLIGHT_STATUS_CALLS_PER_DAY "50"           calls to it a UTC day at most (status and look-ups)
+//       ATTACHMENTS_KEEP_DAYS "30"                 days after a trip ends that Kos keeps its attachments (in R2,
+//                                                  the minty-files bucket below); "0" = until deleted
 //   * rate limits (the "ratelimits" bindings below) are the same for everyone: 120 API requests a
 //     minute per login, 30 searches / ABC loads, 10 bank-linking calls. Their namespace ids are
 //     fixed numbers, unusual so they don't share counters with another Worker on your account.
@@ -103,6 +105,12 @@
       "migrations_dir": "d1/migrations"
     }
   ],
+  // r2-begin: Kos's attachments (docs/trips.md §38). Made by the first deploy once R2 is switched on for the
+  // account (it asks for a card; 10 GB a month is free); scripts/deploy.mjs deploys without it until then.
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "minty-files" }
+  ],
+  // r2-end
 
   // Sync (UTC), the only way it runs: no HTTP endpoint. Hourly for every bank, off the top of
   // the hour; plus every 10 minutes for banks partway through a download (src/sync.ts

@@ -9,6 +9,7 @@ import { markIfLeftOutTags } from "../audit/totals";
 import { reservations } from "../kos/reservations";
 import { locateItem } from "../geocode";
 import { flightsOn, lookUp } from "../flights";
+import { deleteBookingFiles, fileRows, filesOn, keepDays } from "../files";
 
 /** Kos, trips (docs/trips.md): trips, their bookings, and the transactions in them. The household
  * writes these; sync never does. The Kos app (public/kos/) is the page; the dashboard filters by a
@@ -175,7 +176,10 @@ export async function listTrips(env: Env): Promise<Response> {
                     WHERE tl.state = 'confirmed' GROUP BY trip_id`),
     env.DB.prepare("SELECT value FROM analytics_exclusions WHERE kind = 'tag'"),     // CFA's left-out tags, to say so on a trip
   ]);
-  const I = items.results as { trip_id: number | null }[];
+  // each booking's attachments (§38), by booking
+  const F = new Map<number, unknown[]>();
+  for (const f of await fileRows(env)) F.set(f.item_id, [...(F.get(f.item_id) ?? []), f]);
+  const I = (items.results as { id: number; trip_id: number | null }[]).map((i) => (F.has(i.id) ? { ...i, files: F.get(i.id) } : i));
   const C = new Map((counts.results as { trip_id: number; n: number; cents: number }[]).map((c) => [c.trip_id, c]));
   return json({
     trips: (trips.results as TripRow[]).map((t) => ({ ...t, travellers: JSON.parse(t.travellers), tags: JSON.parse(t.tags), items: I.filter((i) => i.trip_id === t.id),
@@ -183,6 +187,7 @@ export async function listTrips(env: Env): Promise<Response> {
     unassigned: I.filter((i) => i.trip_id === null),
     left_out_tags: (off.results as { value: string }[]).map((r) => r.value),
     flights_live: flightsOn(env),                       // live flight status and "Look up" are set up (src/flights.ts)
+    files_on: filesOn(env), files_keep_days: keepDays(env),   // attachments in R2, and how long after a trip (src/files.ts)
   });
 }
 
@@ -264,6 +269,7 @@ export async function saveItem(env: Env, request: Request, id?: number): Promise
 }
 
 export async function deleteItem(env: Env, id: number): Promise<Response> {
+  await deleteBookingFiles(env, id);                         // its attachments, from R2 (their rows go with it)
   const r = await env.DB.prepare("DELETE FROM trip_items WHERE id = ? RETURNING id").bind(id).first();
   if (!r) throw new HttpError(404, "booking not found");
   return json({ id, removed: true });

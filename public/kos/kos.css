@@ -183,6 +183,10 @@ button.pill { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-w
 [data-kos-swipe="edit"] { background: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .stop > button.item, .stop > article.flight, .plan > article.flight, .plan > button.item.stay, .kos-swipe > div { transition: none !important; } }
 .check-dates { color: var(--warn); font-weight: 600; }   /* a booking whose times can't be right (§36) */
+.file-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.file-row .grow { flex: 1 1 200px; min-width: 0; }
+.file-row .grow b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.small-check { font-size: 12.5px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
 .live-line { margin: 2px 0 10px; font-size: 12.5px; color: var(--muted); }
 .lookup-cell { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; }
 .lookup-cell .muted { font-size: 12.5px; }
