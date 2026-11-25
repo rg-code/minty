@@ -1402,6 +1402,32 @@ strip and the trip badge. P3 award prices.
 **Owner decisions waiting:** the provider and budget (or free with tiny caps); watching off by default with a
 per-booking toggle, or "Watch all" on for upcoming trips.
 
+## 38. Attachments on a booking (owner, 2026-11-24)
+
+Owner's choices: files in R2 with an offline copy on the device, kept 30 days after the trip, Wallet passes too.
+
+- **Where files live:** R2 (`src/files.ts`), the `FILES` binding to the `minty-files` bucket, private: read only
+  through `GET /trips/files/{id}` behind Access, never a public link. D1 keeps a row per file (`trip_files`,
+  `0034`: name, type, size, SHA-256, its R2 key), never the bytes: D1's free plan is 500 MB a database with 2 MB
+  at most per value, and a full D1 stops writes (bank sync included). R2's free plan is 10 GB; switching R2 on
+  asks for a card.
+- **What's kept:** a file's type is read from its first bytes, never its name: PDF, PNG, JPEG, GIF, WebP, HEIC, an
+  Apple Wallet pass (.pkpass, a zip with that name) or an email (.eml). Up to 10 MB each, 10 a booking
+  (`POST /trips/items/{id}/files`, the one other route past the 16 KiB body cap). Opened inline (a pass opens
+  in Wallet), an email is saved; never cached.
+- **Removal:** with its booking; and the hourly run removes files whose trip ended more than
+  `ATTACHMENTS_KEEP_DAYS` ago (default 30; `0` keeps them; a booking with no trip: its own end), up to 200 a run.
+  The trip's summary says when ("removed Thu, Dec 24 (30 days after the trip)"), and Setup checks show the count
+  and size.
+- **On the page:** a booking's page has Attachments (add several at once, open, delete, "Keep on this device");
+  cards show "📎 2 attached"; a flight card from a day before it leaves until it lands has **Boarding pass** (a
+  Wallet pass first on an iPhone, else the first picture or PDF).
+- **Offline:** a file added from this device is kept on it too, and any can be ("Keep on this device"):
+  `localFiles` in `store.js`, its own browser database (`kos-files`). Opening uses the device's copy first, so
+  it works with no signal. Copies of deleted or expired files go when Kos opens.
+- **Without R2** (a Minty where R2 isn't on, or Kos on its own): the files themselves live on the device, and the
+  page says "Kept on this device only". `scripts/deploy.mjs` deploys without the R2 block when the account can't
+  make the bucket, so no fork's deploy breaks.
 ## 39. The map loads where it can, and says why where it can't (owner, 2026-11-25)
 
 On the owner's desktop the trip map said "The map couldn't load here" while phones were fine. `createMap` gave

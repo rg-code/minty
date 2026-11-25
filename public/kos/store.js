@@ -526,6 +526,73 @@ const deviceStore = {
 
 export const store = MODE === "device" ? deviceStore : mintyStore;
 
+// --- attachments (docs/trips.md §38) -----------------------------------------------------------------------
+// On a Minty with R2: the files are in Minty (POST /trips/items/{id}/files), and "Keep on this device" puts a copy
+// here, so a boarding pass opens with no signal. On Kos on its own, or a Minty without R2: the files themselves
+// live here. Its own database ("kos-files"), so neither store's changes.
+export const MAX_FILE_BYTES = 10 * 1024 * 1024, MAX_FILES_PER_BOOKING = 10;
+export const FILE_ACCEPT = "application/pdf,image/*,.pkpass,application/vnd.apple.pkpass,.eml,message/rfc822";
+const typeOf = (f) => f.type || (/\.pdf$/i.test(f.name) ? "application/pdf" : /\.pkpass$/i.test(f.name) ? "application/vnd.apple.pkpass" : /\.eml$/i.test(f.name) ? "message/rfc822" : "");
+export const fileKind = (t) => (/pdf/.test(t) ? "PDF" : /^image\//.test(t) ? "Picture" : /pkpass/.test(t) ? "Wallet pass" : /rfc822/.test(t) ? "Email" : "File");
+let filesDb = null;
+function fdb() {
+  filesDb ??= new Promise((ok, fail) => {
+    const rq = indexedDB.open("kos-files", 1);
+    rq.onupgradeneeded = () => {
+      rq.result.createObjectStore("files", { keyPath: "id", autoIncrement: true }).createIndex("item_id", "item_id");   // files kept here
+      rq.result.createObjectStore("copies", { keyPath: "id" });                                                        // offline copies of Minty's
+    };
+    rq.onsuccess = () => { rq.result.onversionchange = () => { rq.result.close(); filesDb = null; }; ok(rq.result); };
+    rq.onerror = () => fail(new Error("This browser won't keep files here (private window, or storage turned off)."));
+  });
+  return filesDb;
+}
+async function ftx(name, mode, fn) {
+  const d = await fdb();
+  return new Promise((ok, fail) => {
+    const t = d.transaction(name, mode); let out;
+    Promise.resolve(fn(t.objectStore(name))).then((v) => { out = v; }, fail);
+    t.oncomplete = () => ok(out); t.onerror = () => fail(t.error ?? new Error("couldn't keep the file")); t.onabort = () => fail(t.error ?? new Error("couldn't keep the file"));
+  });
+}
+const rq = (r) => new Promise((ok, fail) => { r.onsuccess = () => ok(r.result); r.onerror = () => fail(r.error); });
+export const localFiles = {
+  /** Files kept on this device, without their bytes; ids are "d1", "d2"… (Minty's are numbers). */
+  async list() {
+    try { return (await ftx("files", "readonly", (s) => rq(s.getAll()))).map(({ blob, id, ...f }) => ({ ...f, id: `d${id}`, local: true })); } catch { return []; }
+  },
+  async add(itemId, file) {
+    if (file.size > MAX_FILE_BYTES) throw new Error("a file can be at most 10 MB");
+    const type = typeOf(file);
+    if (!/^(application\/pdf|image\/|application\/vnd\.apple\.pkpass|message\/rfc822)/.test(type)) throw new Error("Kos keeps PDFs, pictures, Wallet passes (.pkpass) and email files (.eml)");
+    return ftx("files", "readwrite", async (s) => {
+      const n = (await rq(s.index("item_id").getAll(itemId))).length;
+      if (n >= MAX_FILES_PER_BOOKING) throw new Error(`a booking keeps at most ${MAX_FILES_PER_BOOKING} files`);
+      return rq(s.add({ item_id: itemId, name: file.name.slice(0, 120) || "attachment", content_type: type, size: file.size, created_at: new Date().toISOString(), blob: file }));
+    });
+  },
+  async blob(id) { const r = await ftx("files", "readonly", (s) => rq(s.get(Number(String(id).slice(1))))); return r?.blob ?? null; },
+  async remove(id) { await ftx("files", "readwrite", (s) => rq(s.delete(Number(String(id).slice(1))))); },
+  async removeForItem(itemId) { await ftx("files", "readwrite", async (s) => { for (const k of await rq(s.index("item_id").getAllKeys(itemId))) await rq(s.delete(k)); }).catch(() => {}); },
+  /** Offline copies of Minty's files, by their id. */
+  async copyIds() { try { return new Set(await ftx("copies", "readonly", (s) => rq(s.getAllKeys()))); } catch { return new Set(); } },
+  async keep(f, blob) { await ftx("copies", "readwrite", (s) => rq(s.put({ id: f.id, item_id: f.item_id, name: f.name, content_type: f.content_type, blob }))); },
+  async copy(id) { try { return (await ftx("copies", "readonly", (s) => rq(s.get(id))))?.blob ?? null; } catch { return null; } },
+  async drop(id) { await ftx("copies", "readwrite", (s) => rq(s.delete(id))).catch(() => {}); },
+};
+/** Minty's files (R2), when it has them: add, open, remove. */
+export const mintyFiles = {
+  async add(itemId, file) {
+    const r = await fetch(`/trips/items/${itemId}/files?name=${encodeURIComponent(file.name)}`, { method: "POST", headers: { "content-type": typeOf(file) || "application/octet-stream" }, body: file });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.detail || `${r.status}`);
+    return d;
+  },
+  href: (f) => `/trips/files/${f.id}`,
+  async blob(f) { const r = await fetch(`/trips/files/${f.id}`); if (!r.ok) throw new Error(`couldn't fetch the file (${r.status})`); return r.blob(); },
+  remove: (id) => api("DELETE", `/trips/files/${id}`),
+};
+
 /** Asks the browser to keep Kos's trips even when space runs low (device mode). */
 export async function keepData() {
   try { return Boolean(await navigator.storage?.persist?.()); } catch { return false; }

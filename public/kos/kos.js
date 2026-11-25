@@ -6,6 +6,7 @@
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
 import { createMap, drawTrip, focus, loadAirports, mapProblem, mapProblemText } from "./map.js";
+import { FILE_ACCEPT, fileKind, localFiles, mintyFiles } from "./store.js";
 import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, cityOf, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, journeys, matchBooking, planTrips, shiftSample, tripSpan, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
@@ -42,6 +43,51 @@ async function load() {
   const [t, u, a, p] = await Promise.all([store.list(), store.users(), loadAirports(), !programs && MODE === "minty" ? store.programs() : null]);
   data = t; users = Array.isArray(u) ? u : []; airports = a;
   if (p) programs = p;
+  await mergeFiles();
+}
+// --- attachments (docs/trips.md §38): Minty's (R2) come with the bookings; files kept on this device are added to
+// them here, and whichever have outlived their trip by the keeping days, or their booking, go.
+const filesInMinty = () => MODE === "minty" && Boolean(data?.files_on);
+const keepFor = () => data?.files_keep_days ?? 30;
+let copies = new Set();
+async function mergeFiles() {
+  const items = [...data.trips.flatMap((t) => t.items), ...data.unassigned], byId = new Map(items.map((i) => [i.id, i]));
+  const ended = (i) => { const t = data.trips.find((x) => x.id === i.trip_id), end = t?.end_date ?? dateOf(i.end_at ?? i.start_at);
+    return keepFor() > 0 && end && addDays(end, keepFor()) < localDay(); };
+  for (const f of await localFiles.list()) {
+    const i = byId.get(f.item_id);
+    if (!i || ended(i)) { await localFiles.remove(f.id); continue; }
+    i.files = [...(i.files ?? []), f];
+  }
+  copies = await localFiles.copyIds();
+  const live = new Set(items.flatMap((i) => (i.files ?? []).filter((f) => !f.local).map((f) => f.id)));
+  for (const id of copies) if (!live.has(id)) { await localFiles.drop(id); copies.delete(id); }
+}
+const fileSize = (n) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+/** A booking's Attachments, on its page: open, keep on this device, delete; add more. */
+function attachmentsHtml(i) {
+  const list = i.files ?? [], where = filesInMinty() ? "Kept in your Minty" : "Kept on this device only";
+  const rows = list.map((f) => `<div class="row file-row"><span class="grow"><b>${esc(f.name)}</b><span class="muted">${esc(fileKind(f.content_type))} · ${esc(fileSize(f.size))}${f.local ? " · on this device" : ""}</span></span>
+      ${f.local ? "" : `<label class="check small-check" title="A copy on this device opens with no signal"><input type="checkbox" data-keep-file="${f.id}"${copies.has(f.id) ? " checked" : ""} /> Keep on this device</label>`}
+      <button type="button" class="btn small" data-open-file="${esc(String(f.id))}">Open</button><button type="button" class="btn small ghost" data-del-file="${esc(String(f.id))}" aria-label="Delete ${esc(f.name)}">Delete</button></div>`).join("");
+  const t = data.trips.find((x) => x.id === i.trip_id), end = t?.end_date ?? dateOf(i.end_at ?? i.start_at);
+  return `<section class="card attachments" style="margin-top:14px"><div class="section-title" style="margin-top:0"><h2>Attachments</h2><span class="muted">boarding passes, tickets, confirmations</span></div>
+    ${rows ? `<div class="list">${rows}</div>` : `<p class="muted" style="margin:0 0 10px">Nothing attached yet.</p>`}
+    <div class="actions"><label class="btn small primary">Add a file<input type="file" data-attach="${i.id}" accept="${FILE_ACCEPT}" multiple hidden /></label><span class="err" id="fileErr"></span></div>
+    <p class="muted" style="font-size:12.5px;margin:8px 0 0">${where}${keepFor() > 0 && end ? ` · removed ${esc(fmtDay(addDays(end, keepFor())))}, ${keepFor()} days after the trip` : ""}. PDFs, pictures, Wallet passes and email files, up to 10 MB each.</p></section>`;
+}
+/** Opens a file: from this device when it's kept here (with no signal too), else from Minty. */
+async function openFile(id) {
+  const f = [...data.trips.flatMap((t) => t.items), ...data.unassigned].flatMap((i) => i.files ?? []).find((x) => String(x.id) === String(id));
+  if (!f) return;
+  const blob = f.local ? await localFiles.blob(f.id) : copies.has(f.id) ? await localFiles.copy(f.id) : null;
+  if (!blob && !f.local) { window.open(mintyFiles.href(f), "_blank", "noopener"); return; }
+  if (!blob) return;
+  const url = URL.createObjectURL(new File([blob], f.name, { type: f.content_type }));
+  // a picture or a PDF opens in a tab; a Wallet pass or an email is handed to the device (Wallet, Mail)
+  if (/^(image\/|application\/pdf)/.test(f.content_type)) window.open(url, "_blank", "noopener");
+  else { const a = document.createElement("a"); a.href = url; a.download = f.name; document.body.append(a); a.click(); a.remove(); }
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 /** An award booking's points with its program: "45,000 Wyndham Rewards points" (docs/trips.md §7). */
 const ptsText = (i) => { const p = programs?.find((x) => x.id === i.points_program); return `${Number(i.points).toLocaleString()} ${p ? `${p.name} ${p.unit}` : "pts"}`; };
@@ -111,6 +157,11 @@ function flightCard(f, { compact = false, countdown = false } = {}) {
       return `<div class="live-line">${esc(bits.join(" · "))}</div>`; })()}
     <div class="facts"><div><span>Terminal</span><b>${esc(live(f)?.dep.terminal ?? f.dep_terminal ?? "—")}</b></div><div><span>Gate</span><b>${esc(live(f)?.dep.gate ?? f.dep_gate ?? "—")}</b></div>
       <div><span>Seat</span><b>${esc(f.seat ?? "—")}</b></div><div><span>Confirmation</span><b>${esc(f.confirmation ?? "—")}</b></div></div>
+    ${(() => { const loc = (x) => { const v = Date.parse(String(x ?? "").slice(0, 16)); return Number.isFinite(v) ? v : null; };   // a time with no offset: as local
+      const dep0 = instant(f.start_at) ?? loc(f.start_at), arr0 = instant(f.end_at) ?? loc(f.end_at) ?? (dep0 ? dep0 + 6 * 36e5 : null), now = Date.now();
+      if (!f.files?.length || !dep0 || now < dep0 - 864e5 || now > arr0) return f.files?.length ? `<div class="live-line">📎 ${f.files.length} attached</div>` : "";
+      const ios = /iPhone|iPad/.test(navigator.userAgent), pick = (ios && f.files.find((x) => /pkpass/.test(x.content_type))) || f.files.find((x) => /^(image\/|application\/pdf)/.test(x.content_type)) || f.files[0];
+      return `<div class="actions" style="margin:4px 0 8px"><button type="button" class="btn small primary" data-open-file="${esc(String(pick.id))}">Boarding pass</button><span class="muted" style="font-size:12.5px">${esc(pick.name)}</span></div>`; })()}
     <div class="flight-foot">${cd || `<span>${esc(fmtDay(dateOf(f.start_at)))}</span>`}<span>${f.points ? `${ptsText(f)}` : f.price_cents ? money(f.price_cents, f.currency) : ""}
       ${compact ? "" : ` · <button type="button" class="btn small ghost" data-ics="${f.id}">Add to calendar</button>`}</span></div>
   </article>`;
@@ -278,7 +329,7 @@ function entryHtml(e) {
   const where = [i.place, i.confirmation ? `Conf. ${i.confirmation}` : ""].filter(Boolean).join(" · ");
   return `<div class="stop"><span class="marker">${e.n ?? "·"}</span><button type="button" class="item" data-item="${i.id}">
     <div class="row1"><span class="what"><span class="kind">${esc(e.role || KIND[i.kind])}</span> ${esc(i.name || KIND[i.kind])}</span><span class="at">${esc(e.at)}</span></div>
-    ${where ? `<div class="sub">${esc(where)}</div>` : ""}${!e.repeat && checkBooking(i, airports).length ? `<div class="sub check-dates">Check the dates: ${esc(checkBooking(i, airports)[0])}</div>` : ""}${!e.repeat && (i.price_cents || i.points) ? `<div class="sub">${i.points ? `${ptsText(i)}` : money(i.price_cents, i.currency)}</div>` : ""}</button></div>`;
+    ${where ? `<div class="sub">${esc(where)}</div>` : ""}${i.files?.length && !e.repeat ? `<div class="sub">📎 ${i.files.length} attached</div>` : ""}${!e.repeat && checkBooking(i, airports).length ? `<div class="sub check-dates">Check the dates: ${esc(checkBooking(i, airports)[0])}</div>` : ""}${!e.repeat && (i.price_cents || i.points) ? `<div class="sub">${i.points ? `${ptsText(i)}` : money(i.price_cents, i.currency)}</div>` : ""}</button></div>`;
 }
 // --- the trip's summary strip (Wanderlog's "Reservations" and "Budgeting"): a count per kind of
 // booking, each a way to add one, and what the trip cost. Icons: Material Icons (Apache 2.0).
@@ -308,7 +359,9 @@ function summaryHtml(t) {
       <button type="button" class="btn small ghost" data-copy-text="${esc(addr)}" data-goatcounter-click="kos-copy-trip-address">Copy</button>
       ${addr.startsWith("+") ? `<a href="#/gmail">${gmail.config() ? "Add your Gmail address" : "Set up Gmail"}</a>` : ""}
       <p class="sum-mail-note muted">Kos works out which trip a booking belongs to from its dates, so forwarding it to Kos is enough. To file one here for certain (booked for overlapping trips, or with dates Kos can't read), send it to this address.</p></div>` : "";
-  return `<div class="summary"><section class="card sum-res"><h3>Reservations</h3><div class="sum-kinds">${kinds}</div>${mail}</section>
+  const nFiles = t.items.reduce((n, i) => n + (i.files?.length ?? 0), 0);
+  const filesNote = nFiles && keepFor() > 0 ? `<p class="sum-mail-note muted">📎 ${nFiles} attachment${nFiles === 1 ? "" : "s"}, removed ${esc(fmtDay(addDays(t.end_date, keepFor())))} (${keepFor()} days after the trip). Open a booking to keep a copy or delete one sooner.</p>` : "";
+  return `<div class="summary"><section class="card sum-res"><h3>Reservations</h3><div class="sum-kinds">${kinds}</div>${mail}${filesNote}</section>
     <section class="card sum-budget"><h3>Budgeting</h3>${budget}</section></div>`;
 }
 
@@ -1428,7 +1481,7 @@ async function render() {
   }
   if (parts[0] === "item" && parts[1]) {
     const i = itemById(Number(parts[1]));
-    app.innerHTML = i ? `<div class="section-title"><h2>${esc(itemTitle(i))}</h2></div>${i.kind === "flight" ? `<div style="margin-bottom:14px">${flightCard(i)}</div>` : ""}${itemForm(i, i.trip_id)}` : `<p class="pad muted center">That booking isn't here any more.</p>`;
+    app.innerHTML = i ? `<div class="section-title"><h2>${esc(itemTitle(i))}</h2></div>${i.kind === "flight" ? `<div style="margin-bottom:14px">${flightCard(i)}</div>` : ""}${itemForm(i, i.trip_id)}${attachmentsHtml(i)}` : `<p class="pad muted center">That booking isn't here any more.</p>`;
     loadPrograms();
     return;
   }
@@ -1504,6 +1557,13 @@ app.addEventListener("click", async (ev) => {
       return;
     }
     if (at(".flight[data-item]") && !at("button")) { location.hash = `#/item/${at(".flight[data-item]").dataset.item}`; return; }
+    if (at("[data-open-file]")) { await openFile(at("[data-open-file]").dataset.openFile); return; }
+    if (at("[data-del-file]")) {
+      const id = at("[data-del-file]").dataset.delFile;
+      if (!confirm("Delete this attachment?")) return;
+      if (id.startsWith("d")) await localFiles.remove(id); else { await mintyFiles.remove(Number(id)); await localFiles.drop(Number(id)); }
+      data = null; await render(); return;
+    }
     if (at("[data-rename-trip]")) {                               // the trip's name, edited where it shows
       const t = tripById(Number(at("[data-rename-trip]").dataset.renameTrip)), h = at("[data-rename-trip]").closest("h1");
       h.outerHTML = `<form class="rename-form" data-rename-form="${t.id}"><input name="name" maxlength="100" value="${esc(t.name)}" aria-label="Trip name" required />
@@ -1760,6 +1820,24 @@ app.addEventListener("kosaction", (e) => {
 });
 app.addEventListener("change", async (ev) => {
   const t = ev.target;
+  if (t.dataset?.attach && t.files?.length) {                     // files attached to a booking (§38)
+    const itemId = Number(t.dataset.attach), errEl = document.getElementById("fileErr");
+    if (errEl) errEl.textContent = "Saving…";
+    try {
+      for (const file of t.files) {
+        if (filesInMinty()) { const f = await mintyFiles.add(itemId, file); await localFiles.keep(f, file); }   // added here: kept here too
+        else await localFiles.add(itemId, file);
+      }
+      data = null; await render();
+    } catch (e) { if (errEl) errEl.textContent = e.message; }
+    return;
+  }
+  if (t.dataset?.keepFile) {                                      // a copy of Minty's file on this device
+    const id = Number(t.dataset.keepFile), f = [...data.trips.flatMap((x) => x.items), ...data.unassigned].flatMap((i) => i.files ?? []).find((x) => x.id === id);
+    try { if (t.checked) await localFiles.keep(f, await mintyFiles.blob(f)); else await localFiles.drop(id); copies = await localFiles.copyIds(); }
+    catch (e) { t.checked = !t.checked; alert(e.message); }
+    return;
+  }
   if (t.name === "kind" && t.form?.id === "itemForm") {
     const k = t.value, f = t.form;
     f.querySelector("[data-flight]").hidden = k !== "flight";

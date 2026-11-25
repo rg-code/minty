@@ -242,6 +242,11 @@ your settings, secrets and data are untouched.
     asks about once a year; the limits built into Minty are used instead).
   - `SYNC_MAX_BYTES_PER_RUN` / `SYNC_MAX_PAGES_PER_RUN`: how much each hourly sync does. The
     defaults (150000 / 10) fit the free plan's 10 ms CPU limit. On Workers Paid, raise them.
+  - `ATTACHMENTS_KEEP_DAYS`: how long after a trip Kos keeps its attachments (default 30; `0` keeps them).
+- **Kos attachments in R2 (optional).** Files attached to a booking (boarding passes, tickets) live in R2 when
+  it's switched on for your account (Cloudflare dashboard → R2; it asks for a card, and 10 GB a month is free).
+  Your next deploy then makes the `minty-files` bucket. Until then Kos keeps attachments on each device only,
+  and deploys carry on without R2.
 - **Something's wrong?** Check **+ Add user → Setup checks** first. Then look at
   **Workers & Pages → minty → Logs**, which show sync results by item number and never your
   data.
