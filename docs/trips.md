@@ -1428,3 +1428,11 @@ Owner's choices: files in R2 with an offline copy on the device, kept 30 days af
 - **Without R2** (a Minty where R2 isn't on, or Kos on its own): the files themselves live on the device, and the
   page says "Kept on this device only". `scripts/deploy.mjs` deploys without the R2 block when the account can't
   make the bucket, so no fork's deploy breaks.
+## 39. The map loads where it can, and says why where it can't (owner, 2026-11-25)
+
+On the owner's desktop the trip map said "The map couldn't load here" while phones were fine. `createMap` gave
+up on any error before the map's "load", and a tile, a font range or an icon that fails is something MapLibre
+skips; a big desktop map asks for many more of them than a phone's. Now (`public/kos/map.js`):
+- only no WebGL, the map library missing, or OpenFreeMap's style not loading stop the map; a slow load keeps it;
+- the message says which: WebGL off ("Settings → System → Use graphics acceleration" in Chrome or Edge), the tiles
+  blocked or offline (an ad or privacy blocker on tiles.openfreemap.org), or the library.
