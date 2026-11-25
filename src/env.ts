@@ -46,6 +46,10 @@ export interface Env {
   IMMICH_ACCESS_CLIENT_SECRET?: string;
   /** Secret: a LocationIQ access token (src/geocode.ts), for Kos bookings' exact places. Unset: no lookups. */
   LOCATIONIQ_KEY?: string;
+  /** R2: files attached to Kos bookings (src/files.ts), bucket "minty-files". Absent when R2 isn't switched on. */
+  FILES?: R2Bucket;
+  /** Days after a trip ends that its attachments are kept. Default 30; "0" keeps them. */
+  ATTACHMENTS_KEEP_DAYS?: string;
   /** Kos live flight status and flight look-up (src/flights.ts): "aeroapi" (the default; the only one yet). */
   FLIGHT_STATUS_PROVIDER?: string;
   /** Secret: the provider's key (a FlightAware AeroAPI Personal key). Unset: no flight status or look-up. */

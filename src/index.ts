@@ -27,6 +27,7 @@ import { runStatementSync } from "./statements";
 import { requestAlbum, runImmichSync, thumb, tripPhotos } from "./immich";
 import { locateSome } from "./geocode";
 import { pollFlights } from "./flights";
+import * as files from "./files";
 import { rekeyTokens } from "./token-key";
 import { refreshTotals, snapshotBalances } from "./audit/totals";
 import { isPending, markSwept, syncState } from "./routes/syncrequest";
@@ -107,6 +108,10 @@ const ROUTES: Array<[method: string, path: RegExp, handler: Handler]> = [
   ["DELETE", /^\/trips\/items\/(\d+)$/, ({ env, params }) => kos.deleteItem(env, Number(params[0]))],
   ["POST", /^\/trips\/read-email$/, ({ env, request }) => kos.readEmail(env, request)],
   ["POST", /^\/trips\/flight-lookup$/, ({ env, request }) => kos.flightLookup(env, request)],
+  // files attached to a booking (docs/trips.md §38), in R2
+  ["POST", /^\/trips\/items\/(\d+)\/files$/, ({ env, request, params, url }) => files.addFile(env, request, Number(params[0]), url)],
+  ["GET", /^\/trips\/files\/(\d+)$/, ({ env, params }) => files.getFile(env, Number(params[0]))],
+  ["DELETE", /^\/trips\/files\/(\d+)$/, ({ env, params }) => files.deleteFile(env, Number(params[0]))],
   ["GET", /^\/trips\/(\d+)\/suggestions$/, ({ env, params }) => kos.suggestions(env, Number(params[0]))],
   ["POST", /^\/trips\/(\d+)\/transactions$/, ({ env, request, params }) => kos.linkTransactions(env, request, Number(params[0]))],
   ["GET", /^\/trips\/(\d+)\/journal$/, ({ env, params }) => kos.journal(env, Number(params[0]))],
@@ -163,9 +168,12 @@ export default {
     if (await rateLimited(env, auth.email, request.method, url)) {
       return json({ detail: "Too many requests. Wait a minute and try again." }, 429, { "retry-after": "60" });
     }
-    // Bodies are small JSON (16 KiB), except an email file sent to Kos's reader (2 MB, that route only).
-    const bodyLimit = request.method === "POST" && url.pathname === "/trips/read-email" ? kos.MAX_EMAIL_BYTES : MAX_BODY_BYTES;
+    // Bodies are small JSON (16 KiB), except an email file sent to Kos's reader (2 MB) and a file attached to a
+    // booking (10 MB), those routes only.
+    const isFile = request.method === "POST" && /^\/trips\/items\/\d+\/files$/.test(url.pathname);
+    const bodyLimit = request.method === "POST" && url.pathname === "/trips/read-email" ? kos.MAX_EMAIL_BYTES : isFile ? files.MAX_FILE_BYTES : MAX_BODY_BYTES;
     if (Number(request.headers.get("content-length")) > bodyLimit) {
+      if (isFile) return json({ detail: "a file can be at most 10 MB" }, 413);
       if (bodyLimit !== MAX_BODY_BYTES) return json({ detail: "email file too large (at most 2 MB)" }, 413);
       const e = bodyTooLarge();
       return json({ detail: e.detail }, e.status);
@@ -255,6 +263,9 @@ export default {
       // Kos: a trip that has ended gets its journal marked ready (docs/trips.md §20).
       const journals = await kos.markJournalsReady(env).catch((e) => { console.error("journals failed:", e instanceof Error ? e.message : e); return 0; });
       if (journals) console.log("journals ready", journals);
+      // Kos: attachments 30 days (ATTACHMENTS_KEEP_DAYS) after their trip ends, from R2 (docs/trips.md §38)
+      const gone = await files.cleanupFiles(env).catch((e) => { console.error("attachment clean-up failed:", e instanceof Error ? e.message : e); return 0; });
+      if (gone) console.log("attachments removed", gone);
       // The cron reads what it needs whatever the day's read budget says; it only tidies the counters.
       await pruneReadCounts(env.DB).catch((e) => console.error("pruning read counts failed:", e instanceof Error ? e.message : e));
       await link.pruneLinkSessions(env.DB).catch((e) => console.error("pruning Link sessions failed:", e instanceof Error ? e.message : e));
