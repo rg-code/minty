@@ -5,7 +5,7 @@
 // (/sub-scan?for=kos, read on the device) or an email file (POST /trips/read-email, read on the
 // server and not stored). The look: flights, the theme and the map after Flighty; trips after
 // Wanderlog. Hash routes: #/ · #/trip/ID[/flights|/spending] · #/trip/ID/edit · #/new · #/add[?trip=ID] · #/item/ID.
-import { createMap, drawTrip, focus, loadAirports } from "./map.js";
+import { createMap, drawTrip, focus, loadAirports, mapProblem, mapProblemText } from "./map.js";
 import { MODE, SHARE_BASE, SUM_KINDS, backupDue, cityNames, cityOf, exportFile, importFile, isTripCode, isWikimediaImage, keepData, readShare, reportMail, SHARE_RE, shareLink, shareString, journeys, matchBooking, planTrips, shiftSample, tripSpan, splitBills, store, tripAddress, tripFor, tripSummary } from "./store.js";
 import * as gmail from "./gmail.js";
 import { daySpend, lineFor, tripStats } from "./journal.js";
@@ -583,7 +583,7 @@ async function showMap(t, tab = "") {
   if (map) { map.remove(); map = null; }
   map = await createMap(el, { dark });
   mapKey = key;
-  if (!map) { note.hidden = false; note.textContent = "The map couldn't load here (it needs WebGL and OpenFreeMap's tiles). The plan is all here."; return; }
+  if (!map) { note.hidden = false; note.textContent = mapProblemText(mapProblem); return; }
   const d = mapData(t);
   // pins take their day's colour (Wanderlog), flights the accent (Flighty)
   drawTrip(map, d, (id) => {
@@ -755,7 +755,7 @@ async function journalMap(t) {
   const dark = document.documentElement.dataset.theme !== "light";
   map = await createMap(el, { dark, minimal: true });
   if (!document.body.contains(el)) { map?.remove(); map = null; return; }
-  if (!map) { const n = document.getElementById("jmapNote"); n.hidden = false; n.textContent = "The map couldn't load here (it needs WebGL and OpenFreeMap's tiles)."; return; }
+  if (!map) { const n = document.getElementById("jmapNote"); n.hidden = false; n.textContent = mapProblemText(mapProblem); return; }
   // the places, in the order the trip went: numbered 1, 2, 3… across the whole trip, in their day's
   // colour, joined by one line; the map frames them (zoomed in), and the flights draw without widening it
   const stops = [];

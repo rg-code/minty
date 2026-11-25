@@ -46,20 +46,46 @@ const KIND_COLOR = { flight: "#4c6ef5", lodging: "#e8590c", car: "#1098ad", trai
 
 /** A map in `el`, dark or light. Resolves to the map once its style has loaded; null when the map
  * can't load (no WebGL, or the tiles are unreachable), so the page can say so and carry on. */
+/** Why the last map couldn't be made: "webgl" (WebGL is off: graphics acceleration, or a blocked driver),
+ * "tiles" (OpenFreeMap's style or tiles didn't load: offline, or blocked by an ad or privacy blocker), "script"
+ * (the map library didn't load). null when it was made. */
+export let mapProblem = null;
+const hasWebGL = () => { try { const c = document.createElement("canvas"); return Boolean(c.getContext("webgl2") || c.getContext("webgl")); } catch { return false; } };
 export async function createMap(el, { dark, minimal = false }) {
+  mapProblem = null;
   const gl = window.maplibregl;
-  if (!gl) return null;
+  if (!gl) { mapProblem = "script"; return null; }
+  if (!hasWebGL()) { mapProblem = "webgl"; return null; }
+  let style;
   try {
     gl.setWorkerUrl("/vendor/maplibre/maplibre-gl-csp-worker.js");
-    const style = latinLabels(await (await fetch(minimal ? POSITRON_STYLE : LIBERTY_STYLE)).json());
-    const map = new gl.Map({ container: el, style: minimal ? minimalStyle(style, dark) : dark ? nightStyle(quietStyle(style)) : quietStyle(style, false), center: [0, 20], zoom: 1, attributionControl: { compact: true },
-                             cooperativeGestures: matchMedia("(hover: none)").matches });
-    map.addControl(new gl.NavigationControl({ showCompass: false }), "top-right");
-    await new Promise((ok, fail) => { map.once("load", ok); map.once("error", fail); setTimeout(() => fail(new Error("timeout")), 15000); });
-    return map;
-  } catch {
-    return null;
+    const r = await fetch(minimal ? POSITRON_STYLE : LIBERTY_STYLE);
+    if (!r.ok) throw new Error(`style ${r.status}`);
+    style = latinLabels(await r.json());
+  } catch { mapProblem = "tiles"; return null; }
+  let map;
+  try {
+    map = new gl.Map({ container: el, style: minimal ? minimalStyle(style, dark) : dark ? nightStyle(quietStyle(style)) : quietStyle(style, false), center: [0, 20], zoom: 1, attributionControl: { compact: true },
+                       cooperativeGestures: matchMedia("(hover: none)").matches });
+  } catch { mapProblem = "webgl"; return null; }            // no WebGL context after all
+  map.addControl(new gl.NavigationControl({ showCompass: false }), "top-right");
+  // a tile, a font range or an icon that fails is MapLibre's to skip, not a reason to give up the map (a big desktop
+  // map asks for many more than a phone's): wait for "load", and give up only if nothing renders at all
+  const loaded = await new Promise((ok) => {
+    map.once("load", () => ok(true));
+    setTimeout(() => ok(map.isStyleLoaded?.() ?? false), 20000);
+  });
+  if (!loaded && !map.loaded?.()) {
+    // the style is there but still nothing: keep the map (tiles may arrive), unless its canvas never got a context
+    if (!map.getCanvas?.()?.getContext) { map.remove(); mapProblem = "webgl"; return null; }
   }
+  return map;
+}
+/** What to tell someone when the map couldn't load, by why. */
+export function mapProblemText(problem) {
+  return problem === "webgl" ? "The map needs WebGL, which this browser has turned off. In Chrome or Edge: Settings → System → turn on \"Use graphics acceleration\", then restart the browser. The plan is all here."
+    : problem === "tiles" ? "The map's tiles (from tiles.openfreemap.org) didn't load: you may be offline, or an ad or privacy blocker is blocking that site. Allow it for this page and reload. The plan is all here."
+    : "The map couldn't load here. The plan is all here.";
 }
 
 /** Shifts a longitude by whole turns to within half a turn of `ref`, so places either side of the

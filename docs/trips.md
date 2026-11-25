@@ -1401,3 +1401,12 @@ strip and the trip badge. P3 award prices.
 
 **Owner decisions waiting:** the provider and budget (or free with tiny caps); watching off by default with a
 per-booking toggle, or "Watch all" on for upcoming trips.
+
+## 39. The map loads where it can, and says why where it can't (owner, 2026-11-25)
+
+On the owner's desktop the trip map said "The map couldn't load here" while phones were fine. `createMap` gave
+up on any error before the map's "load", and a tile, a font range or an icon that fails is something MapLibre
+skips; a big desktop map asks for many more of them than a phone's. Now (`public/kos/map.js`):
+- only no WebGL, the map library missing, or OpenFreeMap's style not loading stop the map; a slow load keeps it;
+- the message says which: WebGL off ("Settings → System → Use graphics acceleration" in Chrome or Edge), the tiles
+  blocked or offline (an ad or privacy blocker on tiles.openfreemap.org), or the library.
